@@ -57,7 +57,13 @@ class BotApp:
             features.context,
         )
         gateway = OneBotGateway(
-            config.onebot_host, config.onebot_port, config.onebot_token
+            config.onebot_host,
+            config.onebot_port,
+            config.onebot_token,
+            inbound_backlog=config.onebot_inbound_backlog,
+            max_lanes=config.onebot_max_lanes,
+            request_timeout=config.onebot_request_timeout,
+            max_frame_bytes=config.onebot_max_frame_kb * 1024,
         )
         # Handlers under scheduling/handlers/ are discovered here; both config
         # validation and dispatch follow whatever they declare.
@@ -89,6 +95,9 @@ class BotApp:
             AffectionEvaluator(model, people),
             features.media(),
             tuple(features.observers),
+            observation_backlog=config.observer_queue_size,
+            observation_workers=config.observer_workers,
+            observation_dedupe=config.observer_dedupe,
         )
         job_runner = JobRunner(service, handlers)
 
@@ -120,6 +129,10 @@ class BotApp:
                 *self.workers,
             )
         finally:
+            # Drain queued observations *before* closing the database — they
+            # write to it. Skipping this drops in-flight affection/mood updates
+            # on every restart instead of merely on a crash.
+            await self.service.aclose()
             await self.model.close()
             self.database.db.close()
             for close in reversed(self.features.closers):

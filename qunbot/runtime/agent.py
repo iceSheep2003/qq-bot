@@ -92,7 +92,11 @@ class Agent:
             "当前发言人": {
                 "id": event.user_id,
                 "nickname": event.nickname,
-                "affection": profile["affection"],
+                # A bounded, number-free description of where this person
+                # stands. The raw score never reaches the model: a bare integer
+                # invites it to reason about "the number" instead of the tone.
+                # Empty string for a repository that does not model stages.
+                "关系": profile.get("relationship_note", ""),
             },
             "相关记忆": memories,
             "本轮技能": [{"name": s.name, "instructions": s.body} for s in selected],

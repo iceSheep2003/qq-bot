@@ -32,6 +32,7 @@ def parse_message(data: dict) -> MessageEvent | None:
         str(p.get("data", {}).get("qq", "")) for p in parts if p.get("type") == "at"
     )
     sender = data.get("sender") or {}
+    card = str(sender.get("card") or "").strip()
     nickname = str(sender.get("card") or sender.get("nickname") or user)
     return MessageEvent(
         event_id=f"{data.get('self_id')}:{data.get('message_id')}",
@@ -44,4 +45,5 @@ def parse_message(data: dict) -> MessageEvent | None:
         at_bot=str(data.get("self_id")) in at_users,
         at_users=at_users,
         timestamp=int(data.get("time") or 0),
+        card=card,
     )

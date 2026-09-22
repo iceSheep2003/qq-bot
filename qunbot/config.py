@@ -32,6 +32,15 @@ class Config:
     skills_path: Path
     persona_path: Path
     schedules_path: Path
+    # Concurrency and backpressure. These bound the two queues in the system:
+    # the inbound per-group lanes and the post-reply observation queue.
+    observer_queue_size: int = 256
+    observer_workers: int = 1
+    observer_dedupe: int = 4096
+    onebot_inbound_backlog: int = 64
+    onebot_max_lanes: int = 32
+    onebot_request_timeout: float = 20.0
+    onebot_max_frame_kb: int = 1024
     extensions: frozenset[str] = frozenset({"scheduled_chat"})
 
     @classmethod
@@ -68,6 +77,15 @@ class Config:
             schedules_path=Path(
                 os.getenv("BOT_SCHEDULES_PATH", "./config/schedules.json")
             ),
+            observer_queue_size=max(1, integer("BOT_OBSERVER_QUEUE_SIZE", 256)),
+            observer_workers=max(1, integer("BOT_OBSERVER_WORKERS", 1)),
+            observer_dedupe=max(1, integer("BOT_OBSERVER_DEDUPE", 4096)),
+            onebot_inbound_backlog=max(1, integer("BOT_ONEBOT_INBOUND_BACKLOG", 64)),
+            onebot_max_lanes=max(1, integer("BOT_ONEBOT_MAX_LANES", 32)),
+            onebot_request_timeout=max(
+                1.0, float(os.getenv("BOT_ONEBOT_REQUEST_TIMEOUT", "20.0"))
+            ),
+            onebot_max_frame_kb=max(1, integer("BOT_ONEBOT_MAX_FRAME_KB", 1024)),
             extensions=(
                 ids("BOT_EXTENSIONS")
                 if "BOT_EXTENSIONS" in os.environ

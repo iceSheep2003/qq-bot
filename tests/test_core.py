@@ -138,8 +138,15 @@ class CoreTests(unittest.TestCase):
         self.store.change_affection("42", "7", 2, "friendly interaction")
         after = agent.stable_prefix()
         self.assertEqual(before, after)
-        self.assertIn(
-            '"affection": 2', agent.build_messages(event(1, at_bot=True))[-1]["content"]
+        content = agent.build_messages(event(1, at_bot=True))[-1]["content"]
+        # The relationship reaches the model as a bounded, number-free stage
+        # narration — never as the raw score. A bare integer invites the model
+        # to reason about "the number" instead of the tone.
+        self.assertNotIn('"affection"', content)
+        narration = self.store.profile("42", "7")["relationship_note"]
+        self.assertIn(narration, content)
+        self.assertFalse(
+            any(ch.isdigit() for ch in narration), f"narration leaked a score: {narration}"
         )
 
     def test_private_message_is_ignored_when_disabled(self):

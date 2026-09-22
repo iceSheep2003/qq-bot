@@ -28,6 +28,9 @@ log = logging.getLogger(__name__)
 # Frames are capped so a hostile peer cannot make the process allocate without
 # bound; OneBot messages are text and images are passed by URL, not inline.
 DEFAULT_MAX_FRAME_BYTES = 1 << 20
+DEFAULT_REQUEST_TIMEOUT = 20.0
+DEFAULT_INBOUND_BACKLOG = 64
+DEFAULT_MAX_LANES = 32
 
 
 class OneBotError(RuntimeError):
@@ -55,20 +58,8 @@ class OneBotActionError(OneBotError):
 RETRYABLE = (OneBotNotConnected, OneBotTimeout, OneBotDisconnected)
 
 
-def _env_int(name: str, default: int, *, minimum: int = 1, maximum: int = 1_000_000) -> int:
-    try:
-        value = int(os.getenv(name, str(default)))
-    except (TypeError, ValueError):
-        return default
+def _clamp(value: int, *, minimum: int = 1, maximum: int = 1_000_000) -> int:
     return max(minimum, min(maximum, value))
-
-
-def _env_float(name: str, default: float, *, minimum: float = 1.0) -> float:
-    try:
-        value = float(os.getenv(name, str(default)))
-    except (TypeError, ValueError):
-        return default
-    return max(minimum, value)
 
 
 def event_key(data: dict) -> str:
@@ -218,18 +209,16 @@ class OneBotGateway:
         self.connection: ServerConnection | None = None
         self.pending: dict[str, asyncio.Future] = {}
         self.on_event: Callable[[dict], Awaitable[None]] | None = None
-        self.request_timeout = request_timeout or _env_float(
-            "BOT_ONEBOT_REQUEST_TIMEOUT", 20.0
+        # Defaults live here; environment parsing lives in config.Config, which
+        # app.py passes down. The adapter never reads os.environ.
+        self.request_timeout = max(1.0, request_timeout or DEFAULT_REQUEST_TIMEOUT)
+        self.max_frame_bytes = _clamp(
+            max_frame_bytes or DEFAULT_MAX_FRAME_BYTES, maximum=1 << 24
         )
-        self.max_frame_bytes = max_frame_bytes or _env_int(
-            "BOT_ONEBOT_MAX_FRAME_KB", DEFAULT_MAX_FRAME_BYTES >> 10, maximum=1 << 16
-        ) * 1024
         self._dispatcher = SerialDispatcher(
             self._dispatch,
-            backlog=inbound_backlog
-            or _env_int("BOT_ONEBOT_INBOUND_BACKLOG", 64, maximum=100_000),
-            max_keys=max_lanes
-            or _env_int("BOT_ONEBOT_MAX_LANES", 32, maximum=10_000),
+            backlog=_clamp(inbound_backlog or DEFAULT_INBOUND_BACKLOG, maximum=100_000),
+            max_keys=_clamp(max_lanes or DEFAULT_MAX_LANES, maximum=10_000),
             idle_timeout=idle_lane_timeout,
         )
         self.inbound = self._dispatcher.stats

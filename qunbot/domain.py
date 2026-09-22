@@ -25,3 +25,7 @@ class MessageEvent:
     at_bot: bool
     at_users: tuple[str, ...]
     timestamp: int
+    # The group card ("群名片") when the platform supplied one. Distinct from
+    # ``nickname``: a person can set a different card per group, so this is
+    # stored per group and never promoted to the global profile.
+    card: str = ""

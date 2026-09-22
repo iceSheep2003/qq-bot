@@ -53,8 +53,14 @@ def built_in_tools(store: MemoryRepository) -> ToolRegistry:
 
     def recall(args: dict[str, Any], event: MessageEvent) -> str:
         query = str(args.get("query", ""))[:160]
+        # Pass the speaker as the subject: without it this tool returns any
+        # group member's *personal* memories, since they all share the scope.
+        # The store filters to group-visible rows plus the speaker's own.
         return json.dumps(
-            store.search_memories(event.scope, query, 5), ensure_ascii=False
+            store.search_memories(
+                event.scope, query, 5, subject_user_id=event.user_id
+            ),
+            ensure_ascii=False,
         )
 
     registry.register(

@@ -56,6 +56,9 @@ class ConversationRepository(Protocol):
 
 class PeopleRepository(Protocol):
     def observe_user(self, user_id: str, nickname: str) -> None: ...
+    def observe_group_member(
+        self, group_id: str, user_id: str, nickname: str, card: str = ""
+    ) -> None: ...
     def profile(self, group_id: str, user_id: str) -> dict[str, Any]: ...
     def change_affection(
         self, group_id: str, user_id: str, delta: int, reason: str
@@ -64,7 +67,7 @@ class PeopleRepository(Protocol):
 
 class MemoryRepository(Protocol):
     def search_memories(
-        self, scope: str, query: str, limit: int = 5
+        self, scope: str, query: str, limit: int = 5, **kwargs: Any
     ) -> list[dict[str, Any]]: ...
     def remember(
         self,
@@ -76,6 +79,52 @@ class MemoryRepository(Protocol):
         source_event_id: str | None = None,
     ) -> int: ...
     def has_memory(self, scope: str, user_id: str, content: str) -> bool: ...
+
+
+class MemoryIndex(Protocol):
+    """The write and lifecycle surface ``MemoryService`` drives.
+
+    Split from ``MemoryRepository`` on purpose: reading memories is a different
+    capability from managing their lifecycle, and a deployment that only needs
+    the read path can implement the smaller protocol. ``MemoryService`` calls
+    these duck-typed and degrades to lexical-only recall when they are missing.
+    """
+
+    def attach_embedder(self, embedder: Any) -> Any: ...
+    def observe(
+        self,
+        scope: str,
+        subject_user_id: str,
+        content: str,
+        *,
+        fact_type: str = ...,
+        confidence: float = ...,
+        importance: int = ...,
+        source_event_id: str | None = ...,
+        origin_user_id: str | None = ...,
+        visibility: str = ...,
+        expires_at: int | None = ...,
+        supersede: bool = ...,
+        now: int | None = ...,
+        **kwargs: Any,
+    ) -> dict[str, Any]: ...
+    def reinforce(self, memory_ids: Any, now: int | None = None) -> int: ...
+    def similar_candidates(
+        self, scope: str, subject_user_id: str, *, limit: int = 60
+    ) -> list[dict[str, Any]]: ...
+    def candidates(
+        self,
+        scope: str,
+        query: str,
+        *,
+        subject_user_id: str | None = ...,
+        **kwargs: Any,
+    ) -> list[dict[str, Any]]: ...
+    def maintain(self, now: int | None = None) -> dict[str, Any]: ...
+    def forget(self, memory_ids: Any) -> int: ...
+    def forget_subject(self, scope: str, user_id: str) -> int: ...
+    def forget_scope(self, scope: str) -> int: ...
+    def stats(self, scope: str | None = None) -> dict[str, Any]: ...
 
 
 class MemoryCoordinator(Protocol):

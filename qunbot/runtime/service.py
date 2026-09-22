@@ -21,7 +21,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import os
 import time
 from collections import OrderedDict
 from dataclasses import dataclass
@@ -42,13 +41,11 @@ from ..ports import (
 
 log = logging.getLogger(__name__)
 
-
-def _env_int(name: str, default: int, *, minimum: int = 1, maximum: int = 1_000_000) -> int:
-    try:
-        value = int(os.getenv(name, str(default)))
-    except (TypeError, ValueError):
-        return default
-    return max(minimum, min(maximum, value))
+# Bounds on the post-reply observation queue. Overridable per instance; the
+# environment-facing names are parsed in config.Config.
+DEFAULT_OBSERVATION_BACKLOG = 256
+DEFAULT_OBSERVATION_WORKERS = 1
+DEFAULT_OBSERVATION_DEDUPE = 4096
 
 
 @dataclass(frozen=True)
@@ -110,15 +107,11 @@ class ConversationService:
         self.extract_slots = asyncio.Semaphore(2)
         # Bounded, at-most-once post-reply observation queue. Created lazily so
         # a service that never replies never allocates a worker.
-        self._observation_backlog = observation_backlog or _env_int(
-            "BOT_OBSERVER_QUEUE_SIZE", 256, maximum=100_000
-        )
-        self._observation_workers = observation_workers or _env_int(
-            "BOT_OBSERVER_WORKERS", 1, maximum=64
-        )
-        self._dedupe_limit = observation_dedupe or _env_int(
-            "BOT_OBSERVER_DEDUPE", 4096, maximum=1_000_000
-        )
+        # Defaults live here; environment parsing lives in config.Config, which
+        # app.py passes down. This module never reads os.environ.
+        self._observation_backlog = observation_backlog or DEFAULT_OBSERVATION_BACKLOG
+        self._observation_workers = observation_workers or DEFAULT_OBSERVATION_WORKERS
+        self._dedupe_limit = observation_dedupe or DEFAULT_OBSERVATION_DEDUPE
         self._queue: asyncio.Queue | None = None
         self._workers: list[asyncio.Task] = []
         self._seen: OrderedDict[str, None] = OrderedDict()
@@ -204,6 +197,13 @@ class ConversationService:
         ):
             return False
         self.people.observe_user(event.user_id, event.nickname)
+        if event.group_id:
+            # The per-group fact. A person can set a different card in each
+            # group, so it is recorded against the group rather than promoted
+            # to the global nickname.
+            self.people.observe_group_member(
+                event.group_id, event.user_id, event.nickname, event.card
+            )
         self._maybe_extract(event.scope)
         return True
 
