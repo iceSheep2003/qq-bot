@@ -36,6 +36,7 @@ from ..ports import (
     MediaProcessor,
     MessageSender,
     PeopleRepository,
+    ReplyDecisionPolicy,
     ReplyObserver,
 )
 
@@ -90,6 +91,7 @@ class ConversationService:
         media: MediaProcessor | None = None,
         observers: tuple[ReplyObserver, ...] = (),
         *,
+        reply_policy: ReplyDecisionPolicy | None = None,
         observation_backlog: int | None = None,
         observation_workers: int | None = None,
         observation_dedupe: int | None = None,
@@ -101,6 +103,9 @@ class ConversationService:
         self.affection = affection
         self.media = media
         self.observers = observers
+        # None means the built-in "@ me only" rule; an injected policy replaces
+        # it. Advisory only — a failure falls back to the default.
+        self.reply_policy = reply_policy
         self.scope_locks: dict[str, asyncio.Lock] = {}
         self.last_reply: dict[str, float] = {}
         self.extracting: set[str] = set()
@@ -174,7 +179,7 @@ class ConversationService:
         """Full inbound path: ingest, decide, execute. Entry point for app.py."""
         if not await self.ingest(event):
             return
-        if not self.decide_reply(event):
+        if not await self.decide_reply(event):
             return
         await self.execute_turn(event)
 
@@ -209,15 +214,26 @@ class ConversationService:
 
     # --- use case 2: reply decision --------------------------------------
 
-    def decide_reply(self, event: MessageEvent) -> bool:
-        """The reply policy. Today a group message must @ the bot.
+    async def decide_reply(self, event: MessageEvent) -> bool:
+        """The reply policy. Default: a group message must @ the bot.
 
-        Kept as one small decision so a replaceable policy (Group Chat Plus,
-        abstain) can later be injected without touching the turn execution.
+        One small decision, so a replaceable policy (read-the-room, abstain)
+        can be injected without touching turn execution. An injected policy is
+        advisory — a disabled feature simply means the default applies.
         """
-        if event.group_id and not event.at_bot:
-            return False
-        return True
+        if self.reply_policy is None:
+            return not event.group_id or event.at_bot
+        try:
+            return bool(
+                await self.reply_policy.decide(
+                    event, recent=self.conversations.recent(event.scope, 12)
+                )
+            )
+        except Exception:
+            # A broken policy must not cost the bot its manners: fall back to
+            # answering when addressed.
+            log.exception("Reply decision policy failed; using the default")
+            return not event.group_id or event.at_bot
 
     # --- use case 3: turn execution --------------------------------------
 

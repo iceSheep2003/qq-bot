@@ -14,6 +14,20 @@ class ReplyResult(Protocol):
     text: str
 
 
+class ReplyDecisionPolicy(Protocol):
+    """Decides whether a turn warrants a reply at all.
+
+    Async because reading the room may need the model. Returning ``False`` is a
+    decision, not a failure: the message stays in the transcript and simply
+    does not get answered. The default policy is "group messages only when
+    @-ed"; a smarter one can abstain far more often.
+    """
+
+    async def decide(
+        self, event: MessageEvent, *, recent: list[dict[str, Any]]
+    ) -> bool: ...
+
+
 class AgentRunner(Protocol):
     async def reply(
         self, event: MessageEvent, *, proactive: bool = False

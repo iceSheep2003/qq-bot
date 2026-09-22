@@ -95,6 +95,7 @@ class BotApp:
             AffectionEvaluator(model, people),
             features.media(),
             tuple(features.observers),
+            reply_policy=features.reply_policy,
             observation_backlog=config.observer_queue_size,
             observation_workers=config.observer_workers,
             observation_dedupe=config.observer_dedupe,
@@ -118,7 +119,12 @@ class BotApp:
         )
         self.config = config
         self.database = database
-        self.workers = build_workers(config, service, gateway, features)
+        # Feature-declared loops run beside the scheduled-job workers. A feature
+        # loop that raises is caught by the gather below and reports itself
+        # rather than taking the gateway down with it.
+        self.workers = build_workers(config, service, gateway, features) + [
+            worker() for worker in features.workers
+        ]
         self.features = features
 
     async def run(self) -> None:
