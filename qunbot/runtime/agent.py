@@ -3,16 +3,15 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
-import re
 from dataclasses import dataclass
 from pathlib import Path
 
-from .domain import MessageEvent
-from .ports import (
+from ..domain import MessageEvent
+from ..ports import (
     ChatModel,
     ContextProvider,
     ConversationRepository,
-    MemoryRepository,
+    MemoryCoordinator,
     PeopleRepository,
     SkillProvider,
     ToolProvider,
@@ -34,7 +33,7 @@ class Agent:
         model: ChatModel,
         conversations: ConversationRepository,
         people: PeopleRepository,
-        memories: MemoryRepository,
+        memories: MemoryCoordinator,
         skills: SkillProvider,
         tools: ToolProvider,
         persona_path: Path,
@@ -80,7 +79,7 @@ class Agent:
                 }
             )
         profile = self.people.profile(event.group_id or "private", event.user_id)
-        memories = self.memories.search_memories(event.scope, event.text, 4)
+        memories = self.memories.related(event.scope, event.text, 4)
         selected = self.skills.select(
             event.text + (" 群聊" if event.group_id else ""), proactive=proactive
         )
@@ -95,7 +94,7 @@ class Agent:
                 "nickname": event.nickname,
                 "affection": profile["affection"],
             },
-            "相关记忆": [m["content"] for m in memories],
+            "相关记忆": memories,
             "本轮技能": [{"name": s.name, "instructions": s.body} for s in selected],
             "可选扩展上下文": self.context.collect(event) if self.context else {},
         }
@@ -146,41 +145,4 @@ class Agent:
         return Reply("", usage, prefix_hash)
 
     async def extract_memory(self, scope: str) -> None:
-        rows = self.conversations.recent(scope, 20)
-        if not rows:
-            return
-        transcript = "\n".join(
-            f"{r['nickname']}({r['user_id']}): {r['content'][:300]}" for r in rows
-        )
-        result = await self.model.complete(
-            [
-                {
-                    "role": "system",
-                    "content": "从聊天中提取最多3条明确、可长期保留的事实或偏好。不要推断私人敏感信息，不要记临时情绪。仅输出 JSON 数组，每项含 user_id 和 fact。若无则输出 []。",
-                },
-                {"role": "user", "content": transcript},
-            ],
-            temperature=0,
-        )
-        content = result["choices"][0]["message"].get("content") or "[]"
-        match = re.search(r"\[[\s\S]*\]", content)
-        if not match:
-            return
-        try:
-            facts = json.loads(match.group())
-        except json.JSONDecodeError:
-            return
-        known_users = {r["user_id"] for r in rows if r["role"] == "user"}
-        for item in facts[:3] if isinstance(facts, list) else []:
-            if not isinstance(item, dict):
-                continue
-            user_id, fact = (
-                str(item.get("user_id", "")),
-                str(item.get("fact", "")).strip(),
-            )
-            if (
-                user_id in known_users
-                and 5 <= len(fact) <= 300
-                and not self.memories.has_memory(scope, user_id, fact)
-            ):
-                self.memories.remember(scope, user_id, fact)
+        await self.memories.extract(scope)

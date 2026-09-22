@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(.venv/bin/python -m pip install -e . -q)",
+      "Bash(.venv/bin/python -c \"import qunbot.emotion; print\\('ok', qunbot.emotion.__all__\\)\")"
+    ]
+  }
+}

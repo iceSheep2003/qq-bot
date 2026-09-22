@@ -6,8 +6,8 @@ import json
 import logging
 import re
 
-from .domain import MessageEvent
-from .ports import ChatModel, PeopleRepository
+from ..domain import MessageEvent
+from ..ports import ChatModel, PeopleRepository
 
 log = logging.getLogger(__name__)
 

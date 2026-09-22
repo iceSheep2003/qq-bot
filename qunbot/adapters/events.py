@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from .domain import MessageEvent
+from ..domain import MessageEvent
 
 
 def parse_message(data: dict) -> MessageEvent | None:

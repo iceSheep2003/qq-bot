@@ -4,22 +4,28 @@ import asyncio
 import tempfile
 import time
 import unittest
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import httpx
 
-from qunbot.agent import Agent
+from qunbot.runtime.agent import Agent
 from qunbot.domain import JobSkipped, MessageEvent
-from qunbot.events import parse_message
-from qunbot.media import ReplyMediaProcessor
-from qunbot.media_adapters import DashScopeSpeechSource, LocalMemeCatalog
-from qunbot.poster import ExamCountdownPoster
-from qunbot.scheduler import Scheduler, next_occurrence
-from qunbot.service import BotPolicy, ConversationService
-from qunbot.skills import SkillCatalog
-from qunbot.store import Store
-from qunbot.tools import built_in_tools
+from qunbot.adapters.events import parse_message
+from qunbot.extensions.media import ReplyMediaProcessor
+from qunbot.extensions.memes.catalog import LocalMemeCatalog
+from qunbot.extensions.voice.sources import DashScopeSpeechSource
+from qunbot.memory.service import MemoryService
+from qunbot.extensions.exam_poster.job import PosterJobHandler
+from qunbot.extensions.exam_poster.renderer import ExamCountdownPoster
+from qunbot.extensions.scheduled_chat.job import ChatJobHandler
+from qunbot.scheduling import JobHandlerRegistry, Scheduler, next_occurrence
+from qunbot.scheduling.runner import JobRunner
+from qunbot.runtime.service import BotPolicy, ConversationService
+from qunbot.runtime.skills import SkillCatalog
+from support import Store
+from qunbot.runtime.tools import built_in_tools
 
 
 class FakeModel:
@@ -81,7 +87,7 @@ class CoreTests(unittest.TestCase):
             model,
             self.store,
             self.store,
-            self.store,
+            MemoryService(model, self.store, self.store),
             SkillCatalog(self.root / "skills"),
             built_in_tools(self.store),
             self.persona,
@@ -90,8 +96,9 @@ class CoreTests(unittest.TestCase):
             agent,
             self.store,
             self.store,
+            self.store,
             sender,
-            BotPolicy(frozenset({"42"}), 8, False, 180, 2, "Asia/Shanghai", False),
+            BotPolicy(frozenset({"42"}), 8, "Asia/Shanghai", False),
         )
 
         async def run():
@@ -122,7 +129,7 @@ class CoreTests(unittest.TestCase):
             FakeModel(),
             self.store,
             self.store,
-            self.store,
+            MemoryService(FakeModel(), self.store, self.store),
             SkillCatalog(self.root / "skills"),
             built_in_tools(self.store),
             self.persona,
@@ -140,7 +147,7 @@ class CoreTests(unittest.TestCase):
             FakeModel(),
             self.store,
             self.store,
-            self.store,
+            MemoryService(FakeModel(), self.store, self.store),
             SkillCatalog(self.root / "skills"),
             built_in_tools(self.store),
             self.persona,
@@ -150,8 +157,9 @@ class CoreTests(unittest.TestCase):
             agent,
             self.store,
             self.store,
+            self.store,
             sender,
-            BotPolicy(frozenset({"42"}), 8, False, 180, 2, "Asia/Shanghai", False),
+            BotPolicy(frozenset({"42"}), 8, "Asia/Shanghai", False),
         )
         private = MessageEvent(
             "private:1", "private:7", None, "7", "小明", "你好", (), False, (), 0
@@ -274,64 +282,79 @@ class ScheduleTests(unittest.TestCase):
         self.store = Store(self.root / "bot.sqlite3")
         self.persona = self.root / "persona.md"
         self.persona.write_text("固定人格", encoding="utf-8")
+        self.registry = JobHandlerRegistry()
+        self.registry.register(ChatJobHandler())
 
     def tearDown(self):
         self.store.db.close()
         self.temp.cleanup()
 
     def policy(self, **overrides) -> BotPolicy:
-        base = dict(
-            allowed_groups=frozenset({"42"}),
-            memory_extract_every=8,
-            proactive_enabled=False,
-            proactive_interval_minutes=180,
-            proactive_daily_limit=2,
-            timezone="Asia/Shanghai",
-            affection_auto_enabled=False,
-            private_enabled=False,
-            job_daily_limit=6,
+        base = {
+            "allowed_groups": frozenset({"42"}),
+            "memory_extract_every": 8,
+            "timezone": "Asia/Shanghai",
+            "affection_auto_enabled": False,
+            "private_enabled": False,
+            "job_daily_limit": 6,
             # The tests must not depend on the wall clock hour.
-            active_start_hour=0,
-            active_end_hour=24,
-            job_cooldown_minutes=30,
-            job_freshness_minutes=180,
-        )
+            "active_start_hour": 0,
+            "active_end_hour": 24,
+            "job_cooldown_minutes": 30,
+            "job_freshness_minutes": 180,
+        }
         base.update(overrides)
         return BotPolicy(**base)
 
-    def service(self, sender, *, posters=None, policy=None) -> ConversationService:
+    def service(
+        self, sender, *, posters=None, policy=None, handlers=None
+    ) -> ConversationService:
         agent = Agent(
             FakeModel(),
             self.store,
             self.store,
-            self.store,
+            MemoryService(FakeModel(), self.store, self.store),
             SkillCatalog(self.root / "skills"),
             built_in_tools(self.store),
             self.persona,
         )
-        return ConversationService(
+        registry = handlers or self.registry
+        if posters is not None:
+            registry = JobHandlerRegistry()
+            registry.register(ChatJobHandler())
+            registry.register(PosterJobHandler(posters))
+        service = ConversationService(
             agent,
+            self.store,
             self.store,
             self.store,
             sender,
             policy or self.policy(),
             None,
             None,
-            posters,
         )
+        self.job_runner = JobRunner(service, registry)
+        return service
 
     def job(self, **overrides) -> dict:
-        base = {"id": 1, "run_id": 1, "group_id": "42", "action": "chat", "prompt": "接一句"}
+        base = {
+            "id": 1,
+            "run_id": 1,
+            "group_id": "42",
+            "action": "chat",
+            "prompt": "接一句",
+        }
         base.update(overrides)
         return base
 
     def test_poster_job_sends_rendered_image(self):
         sender = FakeSender()
         # A far-future exam date keeps the assertion independent of the clock.
+        today = datetime.now(ZoneInfo("Asia/Shanghai")).date()
         service = self.service(
-            sender, posters=ExamCountdownPoster(date.today() + timedelta(days=365))
+            sender, posters=ExamCountdownPoster(today + timedelta(days=365))
         )
-        asyncio.run(service.run_job(self.job(action="poster", prompt="")))
+        asyncio.run(self.job_runner.run(self.job(action="poster", prompt="")))
         self.assertEqual(len(sender.sent), 1)
         self.assertTrue(sender.sent[0]["image"].startswith("base64://"))
         self.assertTrue(sender.sent[0]["text"])
@@ -342,30 +365,28 @@ class ScheduleTests(unittest.TestCase):
         posters = ExamCountdownPoster(date(2020, 1, 1))
         service = self.service(sender, posters=posters)
         with self.assertRaises(JobSkipped):
-            asyncio.run(service.run_job(self.job(action="poster", prompt="")))
+            asyncio.run(self.job_runner.run(self.job(action="poster", prompt="")))
         self.assertEqual(sender.sent, [])
 
     def test_poster_job_without_renderer_is_skipped(self):
         service = self.service(FakeSender())
         with self.assertRaises(JobSkipped):
-            asyncio.run(service.run_job(self.job(action="poster", prompt="")))
+            asyncio.run(self.job_runner.run(self.job(action="poster", prompt="")))
 
     def test_chat_job_is_skipped_when_group_is_quiet(self):
         sender = FakeSender()
         service = self.service(sender)
         with self.assertRaises(JobSkipped):
-            asyncio.run(service.run_job(self.job()))
+            asyncio.run(self.job_runner.run(self.job()))
         self.assertEqual(sender.sent, [])
 
     def test_chat_job_posts_when_group_is_lively(self):
         self.store.add_message("m1", "group:42", "7", "小明", "user", "今天数学好难")
         sender = FakeSender()
         service = self.service(sender)
-        asyncio.run(service.run_job(self.job()))
+        asyncio.run(self.job_runner.run(self.job()))
         self.assertEqual([m["text"] for m in sender.sent], ["收到。"])
-        self.assertEqual(
-            self.store.proactive_count_since("42", 0, "cron"), 1
-        )
+        self.assertEqual(self.store.proactive_count_since("42", 0, "cron"), 1)
 
     def test_chat_job_respects_cooldown_after_a_reply(self):
         self.store.add_message("m1", "group:42", "7", "小明", "user", "在吗")
@@ -373,7 +394,7 @@ class ScheduleTests(unittest.TestCase):
         service = self.service(sender)
         service.last_reply["group:42"] = time.time()
         with self.assertRaises(JobSkipped):
-            asyncio.run(service.run_job(self.job()))
+            asyncio.run(self.job_runner.run(self.job()))
         self.assertEqual(sender.sent, [])
 
     def test_quota_pools_do_not_starve_each_other(self):
@@ -387,16 +408,203 @@ class ScheduleTests(unittest.TestCase):
         self.store.add_message("m1", "group:42", "7", "小明", "user", "在吗")
         sender = FakeSender()
         service = self.service(sender, policy=self.policy(job_daily_limit=1))
-        asyncio.run(service.run_job(self.job()))
+        asyncio.run(self.job_runner.run(self.job()))
         with self.assertRaises(JobSkipped):
-            asyncio.run(service.run_job(self.job(run_id=2)))
+            asyncio.run(self.job_runner.run(self.job(run_id=2)))
         self.assertEqual(len(sender.sent), 1)
+
+    def test_handlers_are_registered_explicitly(self):
+        registry = JobHandlerRegistry()
+        registry.register(ChatJobHandler())
+        registry.register(PosterJobHandler(ExamCountdownPoster(date(2099, 1, 1))))
+        self.assertEqual(registry.actions(), frozenset({"chat", "poster"}))
+        self.assertEqual(
+            sorted(item.id for _, item in registry.suggested_jobs()),
+            ["kaoyan-daily-poster", "water-night", "water-noon"],
+        )
+
+    def test_a_suggested_job_is_seeded_disabled_and_promoted_by_config(self):
+        """Dropping a handler file must never start posting on its own."""
+        import json
+
+        path = self.root / "schedules.json"
+        path.write_text(json.dumps({"jobs": []}), encoding="utf-8")
+        scheduler = Scheduler(self.store, "Asia/Shanghai")
+        scheduler.sync_config(path, frozenset({"42"}), self.registry.suggested_jobs())
+        seeded = {j["config_key"]: j for j in self.store.list_jobs("42")}
+        self.assertIn("water-noon@42", seeded)
+        self.assertEqual(seeded["water-noon@42"]["enabled"], 0)
+        self.assertEqual(seeded["water-noon@42"]["created_by"], "handler")
+
+        # Writing the same id into schedules.json claims it and turns it on.
+        job = seeded["water-noon@42"]
+        path.write_text(
+            json.dumps(
+                {
+                    "jobs": [
+                        {
+                            "id": "water-noon@42",
+                            "group_id": "42",
+                            "kind": job["schedule_kind"],
+                            "value": job["schedule_value"],
+                            "prompt": "午休闲聊",
+                        }
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+        scheduler.sync_config(path, frozenset({"42"}), self.registry.suggested_jobs())
+        promoted = {j["config_key"]: j for j in self.store.list_jobs("42")}
+        self.assertEqual(promoted["water-noon@42"]["enabled"], 1)
+        self.assertEqual(promoted["water-noon@42"]["created_by"], "config")
+        # Suggestions the operator did not claim stay off.
+        self.assertEqual(promoted["water-night@42"]["enabled"], 0)
+
+    def test_a_suggestion_duplicating_a_running_job_is_not_seeded(self):
+        """Otherwise the operator sees their own schedule offered back to them."""
+        import json
+
+        path = self.root / "schedules.json"
+        path.write_text(
+            json.dumps(
+                {
+                    "jobs": [
+                        {
+                            "id": "my-own-lunch-job",
+                            "group_id": "42",
+                            "kind": "cron",
+                            "value": "30 12 * * *",
+                            "prompt": "午休闲聊",
+                        }
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+        Scheduler(self.store, "Asia/Shanghai").sync_config(
+            path, frozenset({"42"}), self.registry.suggested_jobs()
+        )
+        rows = {j["config_key"]: j for j in self.store.list_jobs("42")}
+        self.assertIn("my-own-lunch-job", rows)
+        # Same group + action + schedule, so the water-noon template is silent.
+        self.assertNotIn("water-noon@42", rows)
+        # A different schedule from the same handler is still offered.
+        self.assertIn("water-night@42", rows)
+        self.assertEqual(rows["water-night@42"]["enabled"], 0)
+
+    def test_removing_a_handler_disables_its_suggestion(self):
+        import json
+
+        path = self.root / "schedules.json"
+        path.write_text(json.dumps({"jobs": []}), encoding="utf-8")
+        scheduler = Scheduler(self.store, "Asia/Shanghai")
+        scheduler.sync_config(path, frozenset({"42"}), self.registry.suggested_jobs())
+        scheduler.sync_config(path, frozenset({"42"}), [])
+        rows = {j["config_key"]: j for j in self.store.list_jobs("42")}
+        self.assertEqual(rows["water-noon@42"]["enabled"], 0)
+
+    def test_a_new_task_type_is_one_class_and_one_decorator(self):
+        """A handler takes effect only after explicit registration."""
+        from qunbot.scheduling import JobHandlerRegistry, suggestion
+
+        class RollCallJob:
+            action = "rollcall"
+
+            def suggested_jobs(self):
+                return [suggestion("daily-rollcall", "0 22 * * *", "提醒打卡")]
+
+            async def run(self, bot, job):
+                await bot.sender.send(
+                    group_id=job["group_id"],
+                    user_id=None,
+                    text=f"打卡第 {job['run_id']} 天",
+                )
+
+        self.assertEqual(
+            [s.id for s in RollCallJob().suggested_jobs()], ["daily-rollcall"]
+        )
+
+        registry = JobHandlerRegistry()
+        registry.register(RollCallJob())
+        sender = FakeSender()
+        service = self.service(sender, handlers=registry)
+        asyncio.run(self.job_runner.run(self.job(action="rollcall")))
+        self.assertEqual([m["text"] for m in sender.sent], ["打卡第 1 天"])
+
+        # Config validation follows the registry, so the new action is accepted
+        # by sync_config only where the handler exists.
+        import json
+
+        path = self.root / "schedules.json"
+        path.write_text(
+            json.dumps(
+                {
+                    "jobs": [
+                        {
+                            "id": "r",
+                            "group_id": "42",
+                            "kind": "cron",
+                            "value": "0 9 * * *",
+                            "action": "rollcall",
+                            "prompt": "打卡",
+                        }
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+        with self.assertRaises(ValueError):
+            Scheduler(self.store, "Asia/Shanghai").sync_config(path, frozenset({"42"}))
+        Scheduler(self.store, "Asia/Shanghai", registry.actions()).sync_config(
+            path, frozenset({"42"})
+        )
+        self.assertEqual(self.store.list_jobs("42")[0]["action"], "rollcall")
+
+    def test_registry_rejects_duplicate_and_skips_unknown_actions(self):
+        from qunbot.scheduling import JobHandlerRegistry
+
+        registry = JobHandlerRegistry()
+        registry.register(ChatJobHandler())
+        with self.assertRaises(ValueError):
+            registry.register(ChatJobHandler())
+        self.assertEqual(registry.actions(), frozenset({"chat"}))
+        with self.assertRaises(JobSkipped):
+            registry.get("nope")
+
+        sender = FakeSender()
+        service = self.service(sender, handlers=self.registry)
+        with self.assertRaises(JobSkipped):
+            asyncio.run(self.job_runner.run(self.job(action="nonexistent")))
+        self.assertEqual(sender.sent, [])
+
+    def test_handler_cannot_escape_the_group_guard(self):
+        """Guards live in one place, so no handler can bypass them."""
+        from qunbot.scheduling import JobHandlerRegistry
+
+        calls = []
+
+        class RudeJob:
+            action = "rude"
+
+            async def run(self, bot, job):
+                calls.append(job["id"])
+
+        registry = JobHandlerRegistry()
+        registry.register(RudeJob())
+        sender = FakeSender()
+        service = self.service(
+            sender,
+            handlers=registry,
+            policy=self.policy(active_start_hour=0, active_end_hour=0),
+        )
+        with self.assertRaises(JobSkipped):
+            asyncio.run(self.job_runner.run(self.job(action="rude")))
+        self.assertEqual(calls, [])
 
     def test_scheduler_records_skipped_separately_from_failed(self):
         scheduler = Scheduler(self.store, "Asia/Shanghai")
-        self.store.replace_config_jobs(
-            [("j", "42", "every", "300", "p", "chat", 0)], 0
-        )
+        self.store.sync_jobs([("j", "42", "every", "300", "p", "chat", 0)], [], 0)
         job = dict(self.store.list_jobs("42")[0])
         run_id = self.store.reserve_job(job, 999, 0)
         job["run_id"] = run_id
@@ -421,13 +629,14 @@ class ScheduleTests(unittest.TestCase):
                 "group_id": "42",
                 "kind": "cron",
                 "value": "0 7 * * *",
-                "prompt": "",
+                # Only a poster may omit its caption prompt; absent means chat.
+                "prompt": "早安" if action != "poster" else "",
             }
             if action:
                 entry["action"] = action
             path.write_text(json.dumps({"jobs": [entry]}), encoding="utf-8")
 
-        scheduler = Scheduler(self.store, "Asia/Shanghai")
+        scheduler = Scheduler(self.store, "Asia/Shanghai", frozenset({"chat", "poster"}))
         write("poster")
         scheduler.sync_config(path, frozenset({"42"}))
         self.assertEqual(scheduler.list("42")[0]["action"], "poster")
@@ -461,9 +670,7 @@ class ScheduleTests(unittest.TestCase):
             encoding="utf-8",
         )
         with self.assertRaises(ValueError):
-            Scheduler(self.store, "Asia/Shanghai").sync_config(
-                path, frozenset({"42"})
-            )
+            Scheduler(self.store, "Asia/Shanghai").sync_config(path, frozenset({"42"}))
 
     def test_poster_renders_every_day_until_the_exam(self):
         poster = ExamCountdownPoster(date(2026, 12, 19))
@@ -471,6 +678,19 @@ class ScheduleTests(unittest.TestCase):
         self.assertEqual(poster.days_left(date(2026, 12, 19) - timedelta(days=88)), 88)
         self.assertTrue(poster.render(date(2026, 12, 19)).startswith("base64://"))
         self.assertIsNone(poster.render(date(2026, 12, 20)))
+
+    def test_poster_survives_a_multiline_model_caption(self):
+        poster = ExamCountdownPoster(date(2026, 12, 19))
+        # A real model caption looked like "坚持就是胜利！\n考研加油！" and the
+        # renderer used to die here on Pillow's length measurement.
+        self.assertTrue(
+            poster.render(
+                date(2026, 9, 22), motto="坚持就是胜利！\n考研加油！"
+            ).startswith("base64://")
+        )
+        self.assertTrue(
+            poster.render(date(2026, 9, 22), motto="   \n  ").startswith("base64://")
+        )
 
 
 if __name__ == "__main__":

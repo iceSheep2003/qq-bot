@@ -1,0 +1,1 @@
+"""Optional periodic group continuation."""

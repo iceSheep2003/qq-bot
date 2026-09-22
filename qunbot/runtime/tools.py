@@ -5,8 +5,8 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
-from .domain import MessageEvent
-from .ports import MemoryRepository
+from ..domain import MessageEvent
+from ..ports import MemoryRepository
 
 
 @dataclass(frozen=True)

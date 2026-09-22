@@ -7,8 +7,10 @@ dependencies = [
     "websockets>=13,<17",
     "httpx>=0.27,<1",
     "croniter>=2,<7",
-    "pillow>=10,<13",
 ]
+
+[project.optional-dependencies]
+exam-poster = ["pillow>=10,<13"]
 
 [project.scripts]
 qunbot = "qunbot.app:main"

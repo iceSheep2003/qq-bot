@@ -5,7 +5,6 @@ No OneBot, SQLite or HTTP client types may appear in this module.
 
 from __future__ import annotations
 
-from datetime import date
 from typing import Any, Protocol
 
 from .domain import MessageEvent
@@ -26,6 +25,21 @@ class AffectionObserver(Protocol):
     async def observe(self, event: MessageEvent, bot_reply: str) -> None: ...
 
 
+class ReplyObserver(Protocol):
+    async def observe(self, event: MessageEvent, bot_reply: str) -> None: ...
+
+
+class MoodObserver(ReplyObserver, Protocol):
+    """The bot's own affect. Implemented by ``qunbot.emotion``.
+
+    ``observe`` is the post-reply assessment; ``permits_proactive`` is the
+    "not in the mood to start a conversation" gate. Scheduled jobs are never
+    gated — those are explicitly requested by the deployer.
+    """
+
+    def permits_proactive(self, scope: str) -> bool: ...
+
+
 class ConversationRepository(Protocol):
     def add_message(
         self,
@@ -41,6 +55,7 @@ class ConversationRepository(Protocol):
 
 
 class PeopleRepository(Protocol):
+    def observe_user(self, user_id: str, nickname: str) -> None: ...
     def profile(self, group_id: str, user_id: str) -> dict[str, Any]: ...
     def change_affection(
         self, group_id: str, user_id: str, delta: int, reason: str
@@ -63,6 +78,11 @@ class MemoryRepository(Protocol):
     def has_memory(self, scope: str, user_id: str, content: str) -> bool: ...
 
 
+class MemoryCoordinator(Protocol):
+    def related(self, scope: str, query: str, limit: int = 4) -> list[str]: ...
+    async def extract(self, scope: str) -> None: ...
+
+
 class ActivityRepository(Protocol):
     def proactive_count_since(
         self, group_id: str, since: int, source: str | None = None
@@ -74,8 +94,11 @@ class ActivityRepository(Protocol):
 
 
 class JobRepository(Protocol):
-    def replace_config_jobs(
-        self, jobs: list[tuple[str, str, str, str, str, str, int]], now: int
+    def sync_jobs(
+        self,
+        configured: list[tuple[str, str, str, str, str, str, int]],
+        suggested: list[tuple[str, str, str, str, str, str, int]],
+        now: int,
     ) -> None: ...
     def list_jobs(self, group_id: str) -> list[dict[str, Any]]: ...
     def disable_job(self, group_id: str, job_id: int) -> bool: ...
@@ -114,11 +137,6 @@ class MessageSender(Protocol):
 
 class MediaProcessor(Protocol):
     async def compose(self, text: str) -> tuple[str, str | None, str | None]: ...
-
-
-class PosterRenderer(Protocol):
-    def days_left(self, today: date) -> int: ...
-    def render(self, today: date, motto: str = "") -> str | None: ...
 
 
 class SkillProvider(Protocol):

@@ -15,8 +15,9 @@ class Skill:
 class SkillCatalog:
     """Instruction-only skills; no arbitrary code execution."""
 
-    def __init__(self, root: Path):
+    def __init__(self, root: Path, enabled_names: frozenset[str] | None = None):
         self.root = root
+        self.enabled_names = enabled_names
         self.skills: list[Skill] = []
         self.reload()
 
@@ -33,6 +34,8 @@ class SkillCatalog:
                     key, value = line.split(":", 1)
                     fields[key.strip()] = value.strip().strip('"')
             name = fields.get("name", path.parent.name)
+            if self.enabled_names is not None and name not in self.enabled_names:
+                continue
             description = fields.get("description", "")
             if not description:
                 continue

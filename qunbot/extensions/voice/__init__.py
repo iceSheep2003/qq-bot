@@ -1,0 +1,1 @@
+"""Optional speech synthesis."""

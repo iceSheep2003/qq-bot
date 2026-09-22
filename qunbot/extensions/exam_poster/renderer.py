@@ -150,10 +150,15 @@ class ExamCountdownPoster:
             font=self._font(44),
             fill=MUTED,
         )
-        draw.line(((WIDTH - 90) / 2, 1005, (WIDTH + 90) / 2, 1005), fill=ACCENT, width=3)
+        draw.line(
+            ((WIDTH - 90) / 2, 1005, (WIDTH + 90) / 2, 1005), fill=ACCENT, width=3
+        )
 
-        line = (motto or FALLBACK_MOTTOS[today.toordinal() % len(FALLBACK_MOTTOS)])[:24]
-        self._centred(draw, line, y=1065, font=self._font(46), fill=PRIMARY)
+        # Model captions arrive with newlines and double spaces, which Pillow
+        # cannot measure. Collapse to one line, then fall back to a stock motto.
+        line = " ".join(motto.split())
+        line = line or FALLBACK_MOTTOS[today.toordinal() % len(FALLBACK_MOTTOS)]
+        self._centred(draw, line[:24], y=1065, font=self._font(46), fill=PRIMARY)
 
         image = Image.alpha_composite(image, overlay).convert("RGB")
         buffer = io.BytesIO()

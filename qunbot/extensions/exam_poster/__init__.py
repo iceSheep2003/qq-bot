@@ -1,0 +1,1 @@
+"""Countdown poster scheduled action."""
