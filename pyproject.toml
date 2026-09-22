@@ -1,0 +1,17 @@
+[project]
+name = "qunbot"
+version = "0.1.0"
+description = "A skill-driven QQ group companion bot for OneBot v11"
+requires-python = ">=3.11"
+dependencies = [
+    "websockets>=13,<17",
+    "httpx>=0.27,<1",
+    "croniter>=2,<7",
+    "pillow>=10,<13",
+]
+
+[project.scripts]
+qunbot = "qunbot.app:main"
+
+[tool.setuptools.packages.find]
+include = ["qunbot*"]
