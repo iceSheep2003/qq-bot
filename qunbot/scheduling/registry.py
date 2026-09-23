@@ -8,9 +8,10 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import date
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
 from ..domain import JobSkipped, MessageEvent
 from ..ports import (
@@ -19,6 +20,7 @@ from ..ports import (
     ConversationRepository,
     MessageSender,
 )
+from .spec import JobSpec
 
 if TYPE_CHECKING:
     from ..runtime.service import BotPolicy
@@ -68,6 +70,7 @@ class JobRuntime(Protocol):
     def today_start(self) -> int: ...
     def local_today(self) -> date: ...
     def job_event(self, job: dict, now: int) -> MessageEvent: ...
+    def job_spec(self, job: dict) -> JobSpec: ...
 
 
 class JobHandler(Protocol):
@@ -75,6 +78,10 @@ class JobHandler(Protocol):
 
     Raise JobSkipped for an expected no-op (quiet hours, nobody talking). The
     scheduler records that as ``skipped``; any other exception is a ``failed``.
+
+    A handler with real parameters declares an optional ``validate_payload``
+    that raises ``ValueError`` for a payload it cannot run with. It is called
+    at startup, so a bad payload names the job instead of failing at 7am.
     """
 
     action: str
@@ -111,4 +118,19 @@ class JobHandlerRegistry:
         for action, instance in self._handlers.items():
             for item in getattr(instance, "suggested_jobs", list)():
                 found.append((action, item))
+        return found
+
+    def payload_validators(
+        self,
+    ) -> dict[str, Callable[[Mapping[str, Any]], None]]:
+        """Per-action payload validation, for the scheduler to call at startup.
+
+        Only handlers that declare ``validate_payload`` appear here; the
+        scheduler validates the JSON envelope for everyone else.
+        """
+        found: dict[str, Callable[[Mapping[str, Any]], None]] = {}
+        for action, instance in self._handlers.items():
+            check = getattr(instance, "validate_payload", None)
+            if callable(check):
+                found[action] = check
         return found

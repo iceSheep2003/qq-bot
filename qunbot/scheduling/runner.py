@@ -6,6 +6,7 @@ from datetime import date
 
 from ..domain import JobSkipped, MessageEvent
 from .registry import DEFAULT_ACTION, JobHandlerRegistry
+from .spec import JobSpec
 
 
 class JobRunner:
@@ -30,6 +31,14 @@ class JobRunner:
 
     def local_today(self) -> date:
         return self.conversation.local_today()
+
+    def job_spec(self, job: dict) -> JobSpec:
+        """The typed view of a job row, payload included.
+
+        A handler with parameters reads them from ``job_spec(job).payload``
+        rather than string-matching them out of ``job["prompt"]``.
+        """
+        return JobSpec.from_row(job)
 
     def job_event(self, job: dict, now: int) -> MessageEvent:
         group_id = job["group_id"]
