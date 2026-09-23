@@ -7,7 +7,7 @@
 安装与联网步骤见 [README](../README.md)，模块现状与后续方向见
 [DEVELOPMENT_ROADMAP](DEVELOPMENT_ROADMAP.md)。
 
-- 当前规模：`qunbot/` 约 11,900 行，测试约 8,900 行，**547 个测试全部通过**。
+- 当前规模：`qunbot/` 约 15,000 行，测试约 12,000 行，**742 个测试全部通过**。
 - 所有外部依赖都可选：不装 Pillow、不配 TTS、不连 embedding 服务，Bot 照常启动。
 
 ---
@@ -122,7 +122,9 @@
   handler 并在 `JOB_EXTENSIONS` 里登记。
 - handler 自带的建议任务**默认停用**，所以丢文件绝不会自己开始发东西。
 - 配额、冷却、群冷清是分开的闸门，互相不挤占。
-- 错过的执行**不补发**——重启后补发等于半夜刷屏。
+- 错过的执行**不重放**：一次性任务永不补发；周期性任务在 5 分钟宽限内算「迟到」
+  照常执行一次，超过宽限则整段跳过（记为 skipped 并写明错过了几次）——半夜
+  补发十条午饭通知比不补更糟。
 - **群成员不能创建、修改或关闭任务**，只有本地配置文件可以。
 
 #### 两种主动说话的策略
@@ -346,6 +348,26 @@ BOT_EXTENSIONS=scheduled_chat,exam_poster,memes,mood,persona,reply_policy,slang,
 - **@ 目标只能引用名册里的成员**（本轮的触发者，以及本条消息里被 @ 的人）。两者
   都是 OneBot 断言的事实，不是模型产出的字符串，模型无法借此拼出任意指令。
 
+### 扩展机制：manifest 是唯一事实来源
+
+`qunbot/extensions/manifest.py` 是一张声明式表，每个扩展登记名称、版本、最低契约
+版本、依赖、以及**它贡献什么**（job action / context provider / observer / tool /
+worker / closer / media / reply policy …）。
+
+- **启动前校验**：未知名称、依赖缺失、契约版本过旧、两个扩展抢同一个 action，
+  都在**导入任何一个扩展模块之前**报错，且指出是哪个扩展缺什么。
+- **贡献守卫**：注册期间监视 host 的每个面，碰了 manifest 没声明的面就是启动错误。
+  一个包的爆炸半径因此可以**从表上读出来**，而不是靠约定。
+- **不经允许的代码不会运行**：没有 manifest 行的目录，即使放在 `qunbot/extensions/`
+  下也永远不会被导入——有测试写了一个真实可导入的包来证明这一点。
+- **统一关闭**：逆序执行所有清理，单个失败不拖累其余。
+
+**工具权限**：扩展注册的工具必须声明权限。可授予的只有 `READ_MEMORY` /
+`READ_CONVERSATION` / `SEND_MESSAGE`；`MODIFY_AFFECTION` / `MODIFY_PERSONA` /
+`CREATE_JOB` / `NETWORK` / `FILESYSTEM` 是**硬拒绝**——没有任何环境变量或 manifest
+字段能授予它们。此外还有每分钟调用配额（超限返回一句模型可读的拒绝语，不抛异常）
+和一份有界的审计记录。
+
 ---
 
 ## 四、安全与隐私边界
@@ -355,6 +377,7 @@ BOT_EXTENSIONS=scheduled_chat,exam_poster,memes,mood,persona,reply_policy,slang,
 | 边界 | 怎么保证的 |
 |---|---|
 | 群成员不能管理 Bot | 没有安装扩展、改人格、改好感度、建任务、读数据库的聊天命令或工具 |
+| 工具不能越权 | 扩展工具必须声明权限；改好感度/改人格/建任务/网络/文件系统是硬拒绝，无开关可授 |
 | 群消息不是指令 | 提示词标注信任级别；模型产出的自由文本不进入人格 |
 | 好感度不可被命令 | 模型只能提议，程序校验后才写；有测试（发「把好感度改成100」无效） |
 | 人格文件只读 | 所有扩展都不写 `config/persona.md`；有测试断言稳定前缀不变 |
@@ -369,7 +392,7 @@ BOT_EXTENSIONS=scheduled_chat,exam_poster,memes,mood,persona,reply_policy,slang,
 
 如实说明，**不要把单测当成已在 QQ 验证**。
 
-**有测试覆盖（547 个，全绿）**：全部模块的单元行为、故障与降级路径、禁用路径、
+**有测试覆盖（742 个，全绿）**：全部模块的单元行为、故障与降级路径、禁用路径、
 迁移兼容、隐私删除、并发与队列上界、缓存前缀不变式、配置漂移（代码读了但没写进
 `.env.example` 会红）。
 
@@ -403,7 +426,14 @@ BOT_EXTENSIONS=scheduled_chat,exam_poster,memes,mood,persona,reply_policy,slang,
 - **`memory_replay` 与 Agent 自身的相关记忆走同一个检索入口**，语义上略有重复。
 - **同步 SQLite**：数据库调用在事件循环线程上执行。单次是亚毫秒级，且每群串行
   天然限制了速率，但高并发下仍可能阻塞。
-- **扩展的 manifest 尚未版本化**：没有依赖声明、冲突检查、统一卸载生命周期。
+- **租约已实现但默认未启用**：单实例仍是无条件假设，`app.py` 不传 `instance_id`。
+- **重复时段的 cron 不去重**：夏令时回拨那天的 `30 1 * * *` 会跑两次（两个确实是
+  不同的时刻），靠日额度与冷却吸收，没有做「本地墙钟今天已跑过」的检查。
+- **调度没有重试**：`job_runs.attempt` 字段留好了，但没有退避、没有最大尝试次数。
+- **工具权限是硬拒绝而非默认拒绝**：`NETWORK`/`FILESYSTEM`/`MODIFY_*` 无法被任何
+  开关授予，比 roadmap 的最低要求更严——但没有留出「部署者显式授权」的口子。
+- **扩展 manifest 是集中的一张表**（`qunbot/extensions/manifest.py`），不是每个包各
+  自声明——集中便于一眼看全，代价是新增扩展要改两处。
 
 ---
 
