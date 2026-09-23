@@ -1,9 +1,22 @@
-"""Explicitly assembled feature contributions; no implicit file discovery."""
+"""Explicitly assembled feature contributions; no implicit file discovery.
+
+``FeatureHost`` is the surface an extension registers against. What it may
+touch is declared in ``qunbot/extensions/manifest.py`` and checked *during*
+``register()`` by the loader: an extension that appends to ``observers``
+without declaring the observer contribution fails at startup rather than
+quietly widening what a package can do to the bot.
+
+Shutdown goes through :meth:`FeatureHost.aclose`, which runs the closers in
+reverse registration order and isolates failures — one extension's broken
+cleanup must not leave another's database open.
+"""
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Awaitable
 from dataclasses import dataclass, field
+from inspect import isawaitable
 from typing import Callable
 
 from ..runtime.context import ContextRegistry
@@ -15,6 +28,8 @@ from ..ports import (
 )
 from ..runtime.tools import ToolRegistry
 from .media import ReplyMediaProcessor
+
+log = logging.getLogger(__name__)
 
 
 @dataclass
@@ -47,6 +62,23 @@ class FeatureHost:
         if self.meme_source is None and self.speech_source is None:
             return None
         return ReplyMediaProcessor(self.meme_source or _NoMemes(), self.speech_source)
+
+    async def aclose(self) -> None:
+        """Shut every extension down, newest first.
+
+        Closers are run in reverse registration order (a feature that depends
+        on another's client is torn down before it), and one raising closer is
+        logged and skipped rather than aborting the rest: shutdown must not be
+        the step that leaks a database handle because an unrelated feature
+        threw.
+        """
+        for close in reversed(self.closers):
+            try:
+                result = close()
+                if isawaitable(result):
+                    await result
+            except Exception:
+                log.exception("Feature closer %r failed during shutdown", close)
 
 
 class _NoMemes:
