@@ -1,0 +1,28 @@
+{
+  "_comment": [
+    "Review file for the slang extension. Copy to ./config/slang_review.json",
+    "(or point BOT_SLANG_REVIEW_PATH at it) and edit.",
+    "",
+    "approve = let the bot understand this term, and (only if",
+    "BOT_SLANG_ALLOW_IMITATION=true) use it. reject = never inject it.",
+    "reset = drop any earlier decision and let it be a candidate again.",
+    "",
+    "Reviewing is an authority that belongs to whoever deployed the bot. It is",
+    "deliberately a local file: there is no chat command, and no tool the model",
+    "can call to approve its own vocabulary. Reloaded on file change; a broken",
+    "file keeps the previous decisions and logs loudly rather than clearing",
+    "them.",
+    "",
+    "The top-level lists apply to every group. A group that wants its own",
+    "decisions overrides them under 'scopes' by scope key (group:<群号>)."
+  ],
+  "approve": ["上大分", "开摆"],
+  "reject": ["示例词，请删掉"],
+  "reset": [],
+  "scopes": {
+    "group:123456789": {
+      "approve": ["本群独有的说法"],
+      "reject": ["这个群不要说的词"]
+    }
+  }
+}

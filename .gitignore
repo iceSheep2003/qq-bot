@@ -2,7 +2,13 @@
 .env.*
 !.env.example
 .venv/
-data/
+# Runtime state only. Anchored to the repo root on purpose: an unanchored
+# "data/" also swallows package data directories such as
+# qunbot/extensions/slang/data/, which is source, not state.
+/data/
 *.sqlite3
 __pycache__/
 *.pyc
+
+# Parallel agent worktrees
+.claude/worktrees/
