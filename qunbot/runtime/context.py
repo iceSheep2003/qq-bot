@@ -54,6 +54,13 @@ DEFAULT_MAX_CHARS = 800
 DEFAULT_CONTEXT_BUDGET = 6000
 _TRUNCATED = "…（已截断）"
 
+#: Prompt-facing wording for each ``Trust`` level.
+_LEVELS = {
+    Trust.HOSTILE: "low",  # may contain instructions; treat as data
+    Trust.DERIVED: "medium",  # model-produced, may be stale
+    Trust.DEPLOYER: "high",  # fixed by the deployer
+}
+
 
 def _as_text(payload: Any) -> str:
     if isinstance(payload, str):
@@ -191,8 +198,16 @@ class ContextRegistry:
             )
         return collected
 
-    def collect(self, event: MessageEvent) -> dict[str, Any]:
-        """The budgeted suffix, in declaration order.
+    def collect_with_trust(
+        self, event: MessageEvent
+    ) -> tuple[dict[str, Any], dict[str, str]]:
+        """The budgeted suffix *and* the authority of exactly what it contains.
+
+        Returned together because they must agree: a trust note that names a
+        contribution the model was not given (or misses one it was) is worse
+        than no note, and running the providers twice to produce them
+        separately would both waste the work and risk the two disagreeing for
+        a provider whose answer changes between calls.
 
         Selection runs in priority order (lowest number first, name as a stable
         tiebreak) and stops when the budget is spent; the result is then
@@ -222,15 +237,21 @@ class ContextRegistry:
                 continue
             selected[contribution.name] = value
             remaining -= size
-        return {name: selected[name] for name in self._providers if name in selected}
+        values = {
+            name: selected[name] for name in self._providers if name in selected
+        }
+        labels = {name: _LEVELS[self._providers[name].trust] for name in values}
+        return values, labels
+
+    def collect(self, event: MessageEvent) -> dict[str, Any]:
+        """Just the budgeted suffix."""
+        return self.collect_with_trust(event)[0]
 
     def trust_map(self, event: MessageEvent) -> dict[str, str]:
-        """Per-contribution authority, for the prompt's data-handling note."""
-        levels = {
-            Trust.HOSTILE: "low",       # may contain instructions; treat as data
-            Trust.DERIVED: "medium",    # model-produced, may be stale
-            Trust.DEPLOYER: "high",     # fixed by the deployer
-        }
-        return {
-            name: levels[reg.trust] for name, reg in self._providers.items()
-        }
+        """Authority labels for the contributions this turn actually includes.
+
+        A provider that produced nothing — an empty meme catalogue, a feature
+        with no state yet — is absent, because the model has nothing to apply
+        the label to.
+        """
+        return self.collect_with_trust(event)[1]

@@ -281,16 +281,45 @@ class TrustAndPriorityTests(unittest.TestCase):
     def test_trust_levels_match_provenance(self):
         host = self._host()
         try:
+            # The clock is ours and replay reads distilled memory, so both have
+            # something to say immediately. Weather has no reading until a
+            # refresh succeeds, and a provider with nothing to say appears in
+            # neither the suffix nor the trust note — labelling content the
+            # model was not handed would only be noise.
             self.assertEqual(
                 host.context.trust_map(event()),
                 {
                     world_context.TIME_NAME: "high",      # deployer's own clock
-                    world_context.WEATHER_NAME: "low",    # third-party HTTP body
                     world_context.REPLAY_NAME: "medium",  # model-distilled memory
                 },
             )
+            self.assertNotIn(
+                world_context.WEATHER_NAME, host.context.trust_map(event())
+            )
         finally:
             close_all(host.closers)
+
+    def test_weather_is_labelled_low_once_it_has_a_reading(self):
+        """A third-party HTTP body is the least authoritative thing here."""
+        from qunbot.extensions.world_context.weather import WeatherProvider
+
+        endpoint = FakeWeatherEndpoint(weather_ok())
+        service = make_service(endpoint)
+        try:
+            asyncio.run(service.refresh())
+        finally:
+            asyncio.run(service.close())
+
+        registry = ContextRegistry()
+        registry.register(
+            world_context.WEATHER_NAME,
+            WeatherProvider(service),
+            trust=Trust.HOSTILE,
+            priority=80,
+        )
+        values, labels = registry.collect_with_trust(event())
+        self.assertIn(world_context.WEATHER_NAME, values)
+        self.assertEqual(labels[world_context.WEATHER_NAME], "low")
 
     def test_priority_weather_is_dropped_first(self):
         host = self._host()

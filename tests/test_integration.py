@@ -222,6 +222,16 @@ class AssemblyTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         root = Path(self.temp.name)
+        # A populated catalogue, because a contributor with nothing to say is
+        # absent from the prompt entirely — the memes extension would
+        # otherwise be indistinguishable from an unregistered one here.
+        memes = root / "memes"
+        memes.mkdir()
+        (memes / "catalog.json").write_text(
+            json.dumps({"memes": [{"tag": "开心", "file": "a.png"}]}),
+            encoding="utf-8",
+        )
+        (memes / "a.png").write_bytes(b"")
         self.env = mock.patch.dict(
             os.environ,
             {
@@ -231,6 +241,7 @@ class AssemblyTests(unittest.TestCase):
                 "BOT_EXAM_DATE": "2026-12-19",
                 "BOT_DB_PATH": str(root / "bot.sqlite3"),
                 "BOT_MOOD_DB_PATH": str(root / "emotion.sqlite3"),
+                "BOT_MEMES_PATH": str(memes),
                 "BOT_EXTENSIONS": ALL_EXTENSIONS,
                 "BOT_SLANG_ENABLED": "true",
                 "BOT_PERSONA_ENABLED": "true",
@@ -266,13 +277,32 @@ class AssemblyTests(unittest.TestCase):
 
     def test_contributions_carry_their_declared_trust(self):
         app = self.app()
-        trust = app.features.context.trust_map(event("7"))
+        values, trust = app.features.context.collect_with_trust(event("7"))
         # A deployer's asset list and the local clock carry more authority
         # than anything a model produced.
         self.assertEqual(trust["available_meme_tags"], "high")
         self.assertEqual(trust["world_time"], "high")
         self.assertEqual(trust["mood"], "medium")
-        self.assertEqual(trust["group_slang"], "medium")
+        # Both halves describe the same selection, whichever contributors
+        # happened to have something to say this turn.
+        self.assertEqual(set(trust), set(values))
+        self.assertTrue(values)
+
+    def test_a_silent_contributor_is_absent_from_both_halves(self):
+        """No content means no entry — not an entry with an empty payload.
+
+        The trust note used to list every *registered* contributor, so the
+        model was told the authority of things it had not been given.
+        """
+        app = self.app()
+        values, trust = app.features.context.collect_with_trust(event("7"))
+        for silent in ("style_echo", "memory_replay", "group_slang"):
+            with self.subTest(contributor=silent):
+                # Nothing collected yet: too few samples, no memories stored,
+                # no vocabulary mined. Each must be absent from both halves.
+                self.assertNotIn(silent, values)
+                self.assertNotIn(silent, trust)
+        self.assertEqual(set(trust), set(values))
 
     def test_reply_policy_is_installed_when_enabled(self):
         app = self.app()

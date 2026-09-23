@@ -111,6 +111,52 @@ def _event(*, user_id="7", at_users=()):
     )
 
 
+class NonAsciiTagTests(unittest.TestCase):
+    """Tags are whatever the deployer wrote in the catalogue.
+
+    Regression: the tag charset was ``[A-Za-z0-9_-]``, so every Chinese tag —
+    which is what a Chinese group's catalogue naturally holds — failed to match
+    and the marker survived as literal text. The suite missed it because every
+    fixture used an ASCII tag like ``happy``; the shape of the test data hid
+    the shape of the production data.
+    """
+
+    def test_a_chinese_tag_parses(self):
+        message = parse_outbound("加油 [[meme:加油]]")
+        self.assertEqual(message.text, "加油")
+        image = next(p for p in message.parts if isinstance(p, Image))
+        self.assertEqual(image.ref, "加油")
+
+    def test_a_tag_mixing_scripts_parses(self):
+        message = parse_outbound("走一个 [[meme:打call]]")
+        self.assertEqual(message.text, "走一个")
+        self.assertEqual(
+            next(p for p in message.parts if isinstance(p, Image)).ref, "打call"
+        )
+
+    def test_a_chinese_tag_resolves_against_the_catalog(self):
+        class Catalog:
+            def pick(self, tag):
+                return f"base64://{tag}" if tag == "加油" else None
+
+        processor = ReplyMediaProcessor(Catalog())
+        message = asyncio.run(
+            processor.compose_message("加油 [[meme:加油]]", allowed_at=frozenset())
+        )
+        self.assertEqual(message.text, "加油")
+        self.assertEqual(message.image, "base64://加油")
+
+    def test_a_tag_cannot_escape_the_marker(self):
+        # A bracket inside the tag would close the marker early and let the
+        # remainder of the reply become syntax the deployer never defined.
+        text = "你好 [[meme:a]]b]]"
+        self.assertEqual(parse_outbound(text).text, text)
+
+    def test_a_tag_cannot_contain_whitespace(self):
+        text = "你好 [[meme:a b]]"
+        self.assertEqual(parse_outbound(text).text, text)
+
+
 class ParseTests(unittest.TestCase):
     def test_trailing_markers_become_parts(self):
         message = parse_outbound("给你看看 [[meme:happy]] [[voice]]")

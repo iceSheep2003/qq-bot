@@ -164,10 +164,18 @@ class OutboundMessage:
 
 # --- marker grammar -------------------------------------------------------
 
+# A tag is whatever the deployer wrote in the catalogue, so it must not be
+# restricted to ASCII: "加油" and "打call" are both ordinary tags for a Chinese
+# group. The only characters that genuinely cannot appear are whitespace and
+# the brackets themselves — whitespace because the trailing run uses it as a
+# separator, brackets because allowing them would let a tag close the marker
+# early and turn the rest of the reply into attacker-chosen syntax.
+_TAG = r"[^\s\[\]]{1,40}"
+
 # One well-formed marker. Malformed text simply does not match, so it can never
 # be part of a trailing run and therefore survives as literal text.
 MARKER = re.compile(
-    r"\[\[(?:(?P<meme>meme):(?P<tag>[A-Za-z0-9_-]{1,40})"
+    r"\[\[(?:(?P<meme>meme):(?P<tag>" + _TAG + r")"
     r"|(?P<voice>voice)"
     r"|(?P<at>at):(?P<qq>[0-9]{5,12}))\]\]"
 )
@@ -176,15 +184,13 @@ MARKER = re.compile(
 # marker followed by anything but another marker stays literal.
 _TRAILING_RUN = re.compile(
     r"(?:[ \t\r\n]*"
-    r"\[\[(?:meme:[A-Za-z0-9_-]{1,40}|voice|at:[0-9]{5,12})\]\]"
+    r"\[\[(?:meme:" + _TAG + r"|voice|at:[0-9]{5,12})\]\]"
     r")+[ \t\r\n]*$"
 )
 
 # Liberal form used only to sanitise *display* text (poster captions) that will
 # never be sent as media, so position rules do not apply.
-_ANY_MARKER = re.compile(
-    r"\[\[(?:meme:[A-Za-z0-9_-]{1,40}|voice|at:[0-9]{5,12})\]\]"
-)
+_ANY_MARKER = re.compile(r"\[\[(?:meme:" + _TAG + r"|voice|at:[0-9]{5,12})\]\]")
 
 
 def roster_from_event(event: object) -> frozenset[str]:

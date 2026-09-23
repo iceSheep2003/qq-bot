@@ -250,11 +250,22 @@ class ToolProvider(Protocol):
 class ContextProvider(Protocol):
     """The dynamic prompt suffix.
 
-    ``collect`` maps contributor name to payload. Payloads stay ``Any`` on
-    purpose: a contributor may legitimately return a string, a mapping or a
-    list, and the registry — not this port — owns the budget, priority and
-    truncation that make them safe to concatenate.
+    ``collect_with_trust`` maps contributor name to payload, plus the authority
+    label for exactly those contributors that produced something. The two are
+    returned together because they must agree: an authority note naming a
+    contribution the model was not given is noise, and one missing a
+    contribution it *was* given is a misleading label on untrusted text.
+
+    Payloads stay ``Any`` on purpose: a contributor may legitimately return a
+    string, a mapping or a list, and the registry — not this port — owns the
+    budget, priority and truncation that make them safe to concatenate.
+
+    ``collect`` and ``trust_map`` are convenience halves of the same selection,
+    for callers that need only one side; each runs the providers once.
     """
 
+    def collect_with_trust(
+        self, event: MessageEvent
+    ) -> tuple[dict[str, Any], dict[str, TrustLabel]]: ...
     def collect(self, event: MessageEvent) -> dict[str, Any]: ...
     def trust_map(self, event: MessageEvent) -> dict[str, TrustLabel]: ...
