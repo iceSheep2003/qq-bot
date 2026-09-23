@@ -22,7 +22,12 @@ class ExtensionBoundaryTests(unittest.TestCase):
         )
 
     def test_only_enabled_actions_are_registered(self):
-        self.assertEqual(build_registry(self.config("scheduled_chat")).actions(), {"chat"})
+        # scheduled_chat owns both water-the-group strategies: the fixed-time
+        # "chat" action and the post-message interval "continuation" action.
+        self.assertEqual(
+            build_registry(self.config("scheduled_chat")).actions(),
+            {"chat", "continuation"},
+        )
         self.assertEqual(build_registry(self.config()).actions(), set())
 
     def test_poster_does_not_load_for_chat_only(self):

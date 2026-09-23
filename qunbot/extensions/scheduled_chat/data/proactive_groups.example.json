@@ -1,0 +1,20 @@
+{
+  "groups": {
+    "123456789": {
+      "enabled": true,
+      "quiet_start_hour": 23,
+      "quiet_end_hour": 8,
+      "quiet_minutes": 12,
+      "interval_minutes": 45,
+      "retry_minutes": 30,
+      "freshness_minutes": 180,
+      "daily_limit": 2,
+      "probability": 0.2,
+      "max_chars": 120,
+      "min_messages": 3
+    },
+    "987654321": {
+      "enabled": false
+    }
+  }
+}
