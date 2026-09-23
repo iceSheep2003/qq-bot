@@ -18,7 +18,7 @@ import json
 import logging
 import os
 import uuid
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Collection
 from dataclasses import dataclass
 
 from websockets.asyncio.server import ServerConnection, serve
@@ -375,6 +375,7 @@ class OneBotGateway:
         at_user: str | None = None,
         image: str | None = None,
         voice: str | None = None,
+        allowed_at: Collection[str] | None = None,
     ) -> dict:
         if bool(group_id) == bool(user_id):
             raise ValueError("exactly one of group_id or user_id is required")
@@ -385,6 +386,14 @@ class OneBotGateway:
             raise OneBotError(
                 f"non-numeric OneBot target: {group_id or user_id!r}"
             ) from error
+        # ``at_user`` is a structured field, never a free-form OneBot command:
+        # by the time it reaches here it is a bare QQ number. When the caller
+        # supplies the group roster, an out-of-roster target is dropped rather
+        # than turning the whole reply into a failure.
+        if at_qq is not None and allowed_at is not None:
+            if str(at_qq) not in {str(member) for member in allowed_at}:
+                log.warning("Dropping @ target %s: not a known group member", at_qq)
+                at_qq = None
         message = []
         if at_qq is not None and group_id:
             message.append({"type": "at", "data": {"qq": str(at_qq)}})
