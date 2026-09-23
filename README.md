@@ -29,9 +29,9 @@
 - SQLite FTS5 长期记忆、模型只读搜索工具、每 N 条消息后台提炼事实。当前尚无 LivingMemory 的向量、图谱、TTL 和管理面板。
 - 机器人**自己的心情**：`qunbot/emotion/` 维护心情/精力/压力/兴致/社交意愿五个维度，会随互动起落、并按半衰期自然回落到中性基准。回复后的独立评估器给出小幅变化；注入提示词时只给自然语言心境（分档措辞 + 一句最近的心事），不下发任何数值。心情差到低于 `BOT_MOOD_PROACTIVE_MIN_SOCIABILITY` 时不会主动水群，但**定时任务不受影响**，也绝不会因此失礼或迁怒。可通过 `BOT_MOOD_ENABLED=false` 整体关闭，或 `BOT_MOOD_AUTO_ENABLED=false` 只关掉自动评估。
 - `skills/*/SKILL.md` 指令型 Skill 按触发词加载；修改后重启生效。Skill 不能执行任意代码。
-- 随机主动群聊是可选的 `proactive_chat` 扩展，默认未启用。开启后仍受白天时段、群白名单、近期活跃度、冷却、每日额度、随机门控与重复内容过滤限制。
+- 主动续聊走 AIReplay 式工作流：群里安静满 N 分钟后才判断**这次**该不该接一句，而不是到点掷骰子。窗口状态与每条沉默决策都存在主库，重启不丢；群成员说话才会重开窗口，陈旧窗口会被丢弃。两条触发路径——`scheduled_chat` 的 `continuation` 任务（推荐，会写 `job_runs` 的 `skipped` 记录）和不写任务表的 `proactive_chat` 后台 tick——共用同一份配置与同一份持久化窗口，所以同时启用也不会重复发言。仍受白天时段、群白名单、每群免打扰、近期活跃度、冷却、每日额度与重复内容过滤限制。
 - 在 `config/schedules.json` 定义 `at`、`every` 或五段 `cron` 任务，重启后加载并持久化运行记录。聊天参与者不能创建、关闭或修改任务。
-- 定时任务有两种动作：`chat`（结合群上下文水一句）与 `poster`（发考研倒计时海报）。海报由 Pillow 本地绘制，模型只负责配文，因此模型服务不可用时海报照发不误。
+- 定时任务有三种动作：`chat`（结合群上下文水一句）、`continuation`（消息后间隔续聊）与 `poster`（发考研倒计时海报）。海报由 Pillow 本地绘制，模型只负责配文，因此模型服务不可用时海报照发不误。`chat`/`poster` 是部署者显式要求的，**不受心情门控**；只有 `continuation` 会因心情差而沉默。每群的免打扰时段、冷却与概率写在本地 `config/proactive_groups.json`（模板见 `qunbot/extensions/scheduled_chat/data/`），只有部署者能改。
 - 日志记录每轮稳定前缀 SHA-256 摘要和模型用量；是否返回 `cached_tokens` 取决于模型服务商。
 
 ## 扩展边界
@@ -70,7 +70,9 @@
 
 每项必须有稳定唯一的 `id`。修改配置后重启生效；同一个 `id` 的未变更任务保留下一次运行时间。错过的执行不会在重启后补发。
 
-各类计划发言的配额互相独立，不会互相挤占：`chat` 任务用 `BOT_JOB_DAILY_LIMIT`，随机主动发言用 `BOT_PROACTIVE_DAILY_LIMIT`，`poster` 不受日额度限制。所有任务都受 `BOT_ACTIVE_START_HOUR`–`BOT_ACTIVE_END_HOUR`（默认 7–23 点）限制，落在窗口外会被记为 `skipped` 而不是 `failed`。
+各类计划发言的配额互相独立，不会互相挤占：`chat` 任务用 `BOT_JOB_DAILY_LIMIT`，`continuation`/随机主动发言用 `BOT_PROACTIVE_DAILY_LIMIT`，`poster` 不受日额度限制。所有任务都受 `BOT_ACTIVE_START_HOUR`–`BOT_ACTIVE_END_HOUR`（默认 7–23 点）限制，落在窗口外会被记为 `skipped` 而不是 `failed`。
+
+`continuation` 是消息后间隔续聊，它作为一条 `every` 任务随 `scheduled_chat` 一起被登记，但**默认停用**；`qunbot --check` 会在 `to_enable` 里给出该群对应的 `continue-quiet@<群号>`，粘进 `config/schedules.json` 才会开始跑。它额外受 `BOT_PROACTIVE_*` 那一组配置和本地每群策略文件约束，并且是唯一受心情门控的主动发言动作。
 
 `chat` 任务还有两道额外闸门：距机器人上次在该群发言不足 `BOT_JOB_COOLDOWN_MINUTES`（默认 30 分钟）不发；群里超过 `BOT_JOB_FRESHNESS_MINUTES`（默认 180 分钟）没人说话不发。生成结果超过 150 字或与最近发言重复也会被丢弃。`poster` 任务不受这两道闸门限制——它是固定要送达的。
 

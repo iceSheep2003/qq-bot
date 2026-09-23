@@ -7,7 +7,7 @@
 安装与联网步骤见 [README](../README.md)，模块现状与后续方向见
 [DEVELOPMENT_ROADMAP](DEVELOPMENT_ROADMAP.md)。
 
-- 当前规模：`qunbot/` 约 11,300 行，测试约 7,900 行，**491 个测试全部通过**。
+- 当前规模：`qunbot/` 约 11,900 行，测试约 8,900 行，**547 个测试全部通过**。
 - 所有外部依赖都可选：不装 Pillow、不配 TTS、不连 embedding 服务，Bot 照常启动。
 
 ---
@@ -118,12 +118,62 @@
 
 `prompt` 是**给模型看的场景指令**，不是要发出去的原话。
 
-- 任务类型走注册表，调度路径上没有 `if action == ...`；新增一种只需往
-  `qunbot/scheduling/handlers/` 丢一个文件。
+- 任务类型走注册表，调度路径上没有 `if action == ...`；新增一种只需在扩展包里写一个
+  handler 并在 `JOB_EXTENSIONS` 里登记。
 - handler 自带的建议任务**默认停用**，所以丢文件绝不会自己开始发东西。
 - 配额、冷却、群冷清是分开的闸门，互相不挤占。
 - 错过的执行**不补发**——重启后补发等于半夜刷屏。
 - **群成员不能创建、修改或关闭任务**，只有本地配置文件可以。
+
+#### 两种主动说话的策略
+
+它们是**不同的 action**，因为回答的是不同的问题：
+
+| action | 触发条件 | 闸门 |
+|---|---|---|
+| `chat` | 部署者选定的固定时刻（`cron`） | 每日额度、冷却、群冷清、去重/字数。**不受心情门控** |
+| `continuation` | 群里安静了一段时间（`every` 轮询 + 持久化的"静默窗口"） | 上面全部，外加心情门控与每群策略 |
+
+`continuation` 就是 AIReplay 式的"最后一条消息之后 X 分钟"工作流，不是到点掷骰子：
+
+1. **计时**：窗口由会话表里最新一条群友消息定义，不另存一份时间戳——不会漂移。
+2. **判断**：安静满 `BOT_PROACTIVE_QUIET_MINUTES` 后才进入评估；先过部署级闸门
+   （白名单、活跃时段、每群免打扰），再过窗口闸门（历史条数、是否还在聊、窗口是否
+   已答过、是否已经太陈旧），最后才是当次决策（心情、日额度、发言冷却、概率）。
+3. **当次沉默决策**：概率过了也不等于要发。模型仍可回答"没有合适的内容"，或者
+   产出的句子太长、和最近重复——任何一条都记为 `skipped`，不发。
+4. **重置**：说过一句（或判定窗口陈旧）后窗口关闭，直到**群里再次有人说话**才会
+   重开——Bot 不会在冷场里自说自话。
+5. **放弃**：静默超过 `BOT_PROACTIVE_FRESHNESS_MINUTES` 就丢弃这个窗口；连续沉默
+   决策会拉长下一次尝试的间隔（上限即新鲜度窗口）。
+
+两块状态落在主库的 `continuation_state` / `continuation_decisions` 两张表里
+（`qunbot/storage/continuation.py`），所以**重启之后窗口、尝试记录和沉默次数都还在**。
+每条决策都带原因留痕，`--check` 与调度器的 `job_runs.detail` 里都能看到"为什么这次
+没说话"。
+
+**每群细粒度策略**在本地文件里（默认 `./config/proactive_groups.json`，缺失就全用
+环境变量默认值），可以给单个群设置免打扰时段、静默门槛、冷却、概率、日额度，或者
+直接 `"enabled": false` 静音。模板见
+`qunbot/extensions/scheduled_chat/data/proactive_groups.example.json`。
+**这个文件只能由部署者改**，群成员既不能让 Bot 闭嘴，也不能让它多说话。
+
+| 变量 | 默认 | 说明 |
+|---|---|---|
+| `BOT_PROACTIVE_ENABLED` | `true` | 整个 interval 续聊的开关 |
+| `BOT_PROACTIVE_QUIET_MINUTES` | 12 | 需要安静多久 |
+| `BOT_PROACTIVE_FRESHNESS_MINUTES` | 180 | 超过多久就丢弃窗口 |
+| `BOT_PROACTIVE_RETRY_MINUTES` | 30 | 同一窗口内两次尝试的最小间隔 |
+| `BOT_PROACTIVE_PROBABILITY` | 0.15 | 闸门全过之后开口的概率 |
+| `BOT_PROACTIVE_INTERVAL_MINUTES` | 180 | 两次主动发言之间的最小间隔 |
+| `BOT_PROACTIVE_DAILY_LIMIT` | 2 | 每日额度（与 `chat`/`poster` 各自独立） |
+| `BOT_PROACTIVE_MIN_MESSAGES` / `_MAX_CHARS` | 3 / 150 | 上下文最少几条、单句最长多少字 |
+| `BOT_PROACTIVE_QUIET_START_HOUR` / `_END_HOUR` | 23 / 8 | 全局免打扰时段（可跨零点） |
+| `BOT_PROACTIVE_CHECK_SECONDS` | 300 | 多久评估一次（调度器 `every` 下限 300 秒） |
+| `BOT_PROACTIVE_GROUPS_PATH` | `./config/proactive_groups.json` | 每群策略文件 |
+
+两条触发路径（后台 `proactive_chat` worker 与调度器 `continuation` 任务）**共用同一份
+配置和同一份持久化窗口**，所以同时启用也不会重复发言。
 
 ### Skill
 
@@ -146,9 +196,9 @@ BOT_EXTENSIONS=scheduled_chat,exam_poster,memes,mood,persona,reply_policy,slang,
 
 | 扩展 | 作用 |
 |---|---|
-| `scheduled_chat` | 提供 `chat` 任务动作（定时水群） |
+| `scheduled_chat` | 提供 `chat`（定时水群）与 `continuation`（消息后间隔续聊）两个任务动作 |
 | `exam_poster` | 提供 `poster` 任务动作（考研倒计时海报，Pillow 本地绘制，模型挂了也照发） |
-| `proactive_chat` | 随机主动续聊（60 秒轮询 + 随机门控 + 每日额度） |
+| `proactive_chat` | 上面那个 interval 续聊的**后台 tick 版**：不写 `schedules.json` 也能跑 |
 
 ### `mood` — 机器人自己的心情
 
@@ -319,7 +369,7 @@ BOT_EXTENSIONS=scheduled_chat,exam_poster,memes,mood,persona,reply_policy,slang,
 
 如实说明，**不要把单测当成已在 QQ 验证**。
 
-**有测试覆盖（491 个，全绿）**：全部模块的单元行为、故障与降级路径、禁用路径、
+**有测试覆盖（547 个，全绿）**：全部模块的单元行为、故障与降级路径、禁用路径、
 迁移兼容、隐私删除、并发与队列上界、缓存前缀不变式、配置漂移（代码读了但没写进
 `.env.example` 会红）。
 
