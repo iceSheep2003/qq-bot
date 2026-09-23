@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import re
 import tempfile
 import unittest
 from pathlib import Path
@@ -368,6 +369,38 @@ class ForgetUserTests(unittest.TestCase):
             "SELECT count(*) FROM messages WHERE user_id='9'"
         ).fetchone()[0]
         self.assertEqual(remaining, 1)
+
+
+class DocumentedSettingsTests(unittest.TestCase):
+    """A knob the deployer cannot discover is a knob that does not exist.
+
+    Every BOT_* name read anywhere in the package must appear in
+    .env.example, so adding a feature cannot quietly add an undocumented
+    setting. The reverse is checked too: a documented name nothing reads is
+    either a typo or a leftover.
+    """
+
+    ROOT = Path(__file__).resolve().parent.parent
+
+    def _code_names(self) -> set[str]:
+        names: set[str] = set()
+        for path in (self.ROOT / "qunbot").rglob("*.py"):
+            names |= set(
+                re.findall(r'"(BOT_[A-Z0-9_]+)"', path.read_text(encoding="utf-8"))
+            )
+        return names
+
+    def _documented_names(self) -> set[str]:
+        text = (self.ROOT / ".env.example").read_text(encoding="utf-8")
+        return set(re.findall(r"^(BOT_[A-Z0-9_]+)=", text, re.M))
+
+    def test_every_setting_read_is_documented(self):
+        missing = self._code_names() - self._documented_names()
+        self.assertEqual(sorted(missing), [], f"undocumented settings: {sorted(missing)}")
+
+    def test_every_documented_setting_is_read(self):
+        unused = self._documented_names() - self._code_names()
+        self.assertEqual(sorted(unused), [], f"documented but unread: {sorted(unused)}")
 
 
 if __name__ == "__main__":
