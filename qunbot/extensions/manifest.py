@@ -259,9 +259,14 @@ _register(
         kind=ExtensionKind.JOB,
         entry="qunbot.extensions.scheduled_chat.job:register_jobs",
         contributes=frozenset({Contribution.JOB_ACTION}),
-        actions=("chat",),
+        # "continuation" is declared here rather than in proactive_chat because
+        # only a JOB-kind extension may register an action, and the default
+        # configuration enables scheduled_chat but not proactive_chat —
+        # hosting the engine in the tick extension would make the default
+        # configuration import a disabled package.
+        actions=("chat", "continuation"),
         skills=frozenset({"proactive-chat"}),
-        description="定时闲聊：注册 chat 任务动作",
+        description="定时闲聊：注册 chat（定时）与 continuation（间隔续聊）两个动作",
     )
 )
 

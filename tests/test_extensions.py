@@ -18,6 +18,8 @@ deployment: no NapCat, no model, no group.
 from __future__ import annotations
 
 import asyncio
+import sqlite3
+from contextlib import contextmanager
 import importlib.util
 import inspect
 import shutil
@@ -142,7 +144,7 @@ class ManifestTableTests(unittest.TestCase):
 
     def test_job_extensions_declare_the_actions_they_register(self):
         registered = build_registry(config("scheduled_chat")).actions()
-        self.assertEqual(registered, {"chat"})
+        self.assertEqual(registered, {"chat", "continuation"})
         for manifest in MANIFESTS.values():
             if manifest.kind is ExtensionKind.JOB:
                 with self.subTest(extension=manifest.name):
@@ -283,7 +285,10 @@ class ResolvePlanTests(FakeModuleMixin):
         )
         self.assertEqual([m.name for m in plan.jobs], ["scheduled_chat"])
         self.assertEqual([m.name for m in plan.background], ["proactive_chat"])
-        self.assertEqual(plan.actions(), {"chat": "scheduled_chat"})
+        self.assertEqual(
+            plan.actions(),
+            {"chat": "scheduled_chat", "continuation": "scheduled_chat"},
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -584,11 +589,28 @@ class WorkerSupervisionTests(unittest.TestCase):
         class Gateway:
             connection = None
 
+        class Conversations:
+            """Just enough for the continuation store to attach to.
+
+            ``ContinuationStore`` is built from anything exposing ``.db`` and
+            ``.transaction``, so a plain in-memory connection satisfies it.
+            """
+
+            def __init__(self):
+                self.db = sqlite3.connect(":memory:")
+
+            @contextmanager
+            def transaction(self):
+                yield
+
+        class Service:
+            conversations = Conversations()
+
         # proactive_chat's factory builds a loop; with no connection it idles,
         # so it is cancelled immediately rather than left running.
         async def main():
             workers = build_workers(
-                config("proactive_chat"), object(), Gateway(), FeatureHost()
+                config("proactive_chat"), Service(), Gateway(), FeatureHost()
             )
             self.assertEqual(len(workers), 1)
             task = asyncio.ensure_future(workers[0])
