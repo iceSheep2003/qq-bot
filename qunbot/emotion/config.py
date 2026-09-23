@@ -35,6 +35,11 @@ class EmotionConfig:
     decay_minutes: int
     sensitivity: float
     min_sociability: int
+    # Scale on the coupling matrix. 1.0 is the shipped feel; 0.0 removes the
+    # cross-dimension push entirely. Together with decay_minutes this decides
+    # whether a mood relaxes back or latches at an extreme — see
+    # ``EmotionPolicy``/``loop_gain`` and the calibration tests.
+    coupling: float = 1.0
 
     @classmethod
     def from_env(cls) -> EmotionConfig:
@@ -51,4 +56,5 @@ class EmotionConfig:
             min_sociability=int(
                 _number("BOT_MOOD_PROACTIVE_MIN_SOCIABILITY", 35, low=0, high=100)
             ),
+            coupling=_number("BOT_MOOD_COUPLING", 1.0, low=0.0, high=2.0),
         )

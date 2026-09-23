@@ -3,10 +3,15 @@
 The same defences apply: the transcript is untrusted input, the verdict is a
 small bounded JSON object, and anything malformed is dropped silently rather
 than surfaced to the caller.
+
+This module reads the turn and the bot's own reply. It never asks the model to
+judge the *speaker*, never writes an affection score and never touches the
+persona file — the verdict's only destination is this package's own tables.
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import re
@@ -20,6 +25,26 @@ from .store import EmotionStore
 log = logging.getLogger(__name__)
 
 MAX_DIMENSIONS_PER_TURN = 3
+
+
+def dedupe_key(event: MessageEvent) -> str:
+    """A stable name for "the turn this event is", for at-most-once apply.
+
+    The platform's own message id is the honest key: a redelivery, a restart
+    replay or a retry carries the same id, two different messages do not. The
+    fallback exists only for synthetic events with no id (tests, replay
+    harnesses); it hashes the turn's own content, so verbatim redelivery still
+    collapses while two distinct messages never do — folding every id-less
+    event into one key would wedge the mood permanently.
+    """
+    event_id = str(getattr(event, "event_id", "") or "").strip()
+    if event_id:
+        return event_id
+    digest = hashlib.sha1(
+        f"{event.user_id}\x00{event.timestamp}\x00{event.text}".encode("utf-8")
+    ).hexdigest()
+    return f"content:{digest}"
+
 
 SYSTEM_PROMPT = (
     "你只评估这次互动如何影响你自己此刻的心情，不是评价对方人品，也不是打分。"
@@ -76,12 +101,21 @@ class MoodEvaluator:
         policy: EmotionPolicy,
         *,
         auto_enabled: bool = True,
+        clock=time.time,
     ):
         self.model, self.store, self.policy = model, store, policy
         self.auto_enabled = auto_enabled
+        self.clock = clock
 
     async def observe(self, event: MessageEvent, bot_reply: str) -> None:
         if not self.auto_enabled or not event.group_id or not event.text.strip():
+            return
+        key = dedupe_key(event)
+        # Cheap pre-check: a redelivery that this layer already applied costs
+        # no model call. The write below re-checks atomically, because two
+        # observers can reach this line at the same time.
+        if self.store.seen(event.scope, key):
+            log.debug("mood already observed %s; ignored", key)
             return
         result = await self.model.complete(
             [
@@ -105,7 +139,17 @@ class MoodEvaluator:
         if verdict is None:
             return
         deltas, reason = verdict
-        now = int(time.time())
+        now = int(self.clock())
         before = Mood.from_row(self.store.load(event.scope))
         after = self.policy.apply(before, deltas, reason, now)
-        self.store.change(event.scope, after.values(), deltas, reason)
+        # The claim happens here, inside the same transaction as the write: a
+        # verdict that never reaches this line (model error, malformed JSON)
+        # leaves the key unclaimed, so an honest retry can still apply.
+        self.store.change(
+            event.scope,
+            after.values(),
+            deltas,
+            reason,
+            dedupe_key=key,
+            now=now,
+        )
