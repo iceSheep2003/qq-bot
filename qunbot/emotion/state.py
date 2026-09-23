@@ -2,13 +2,18 @@
 
 No database, no HTTP client, no model. Everything here is a deterministic
 function of its arguments, which is what makes the whole emotion system
-testable without a clock or a network.
+testable without a clock or a network — a caller with a fixed clock and a fixed
+list of events gets byte-identical answers every time, which is also what makes
+:func:`replay` able to rebuild a past mood exactly.
+
+This module owns *state*, never other people's facts. It reads no group
+member's affection, writes none, and cannot touch the stable persona.
 """
 
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 
 # Five dimensions, each 0..100 and relaxed toward BASELINE when nothing happens.
 # Deliberately no libido/aggression axes: this bot shares a study group and
@@ -105,6 +110,114 @@ class Mood:
         )
 
 
+@dataclass(frozen=True)
+class MoodEvent:
+    """One recorded change, read back from the event log.
+
+    ``at`` is the instant the change was *applied*, which is also the instant
+    the mood's clock was reset to — that equality is what makes replay exact
+    rather than approximate. ``deltas`` are the raw proposal, before coupling,
+    so replay runs the same arithmetic the live path ran.
+    """
+
+    at: int
+    deltas: dict[str, int] = field(default_factory=dict)
+    reason: str = ""
+
+
+@dataclass(frozen=True)
+class MoodSnapshot:
+    """The mood as it stood immediately after one event."""
+
+    at: int
+    mood: Mood
+    deltas: dict[str, int] = field(default_factory=dict)
+    reason: str = ""
+
+
+def replay(policy: "EmotionPolicy", events, *, upto: int | None = None) -> Mood:
+    """Rebuild the mood from the event log.
+
+    ``events`` must be in log order (the store returns them by ascending id,
+    which is the order they were applied). Folding them through the same
+    :meth:`EmotionPolicy.apply` the live path used reproduces the stored state
+    exactly, provided the policy's constants are unchanged.
+
+    ``upto`` answers the other question — "what was the mood *then*?" — by
+    ignoring every event that happened later and decaying forward to that
+    instant. Without it you get the mood as of the last recorded change.
+    """
+    ordered = tuple(events)
+    if upto is not None:
+        ordered = tuple(event for event in ordered if event.at <= upto)
+    mood = Mood(updated_at=ordered[0].at) if ordered else Mood()
+    for event in ordered:
+        mood = policy.apply(mood, event.deltas, event.reason, event.at)
+    return policy.decay(mood, upto) if upto is not None else mood
+
+
+def timeline(policy: "EmotionPolicy", events) -> tuple[MoodSnapshot, ...]:
+    """Every past mood the log can account for, oldest first."""
+    ordered = tuple(events)
+    mood = Mood(updated_at=ordered[0].at) if ordered else Mood()
+    snapshots: list[MoodSnapshot] = []
+    for event in ordered:
+        mood = policy.apply(mood, event.deltas, event.reason, event.at)
+        snapshots.append(
+            MoodSnapshot(
+                at=event.at,
+                mood=mood,
+                deltas=dict(event.deltas),
+                reason=event.reason,
+            )
+        )
+    return tuple(snapshots)
+
+
+def _gain_matrix(coupling: float) -> tuple[tuple[float, ...], ...]:
+    """``I + coupling*C``: how one apply() maps a deviation from baseline."""
+    return tuple(
+        tuple(
+            (1.0 if source == target else 0.0)
+            + coupling * COUPLING.get(source, {}).get(target, 0.0)
+            for target in DIMENSIONS
+        )
+        for source in DIMENSIONS
+    )
+
+
+def _spectral_radius(matrix: tuple[tuple[float, ...], ...]) -> float:
+    """Largest |eigenvalue|, by power iteration (the dominant one is positive)."""
+    size = len(matrix)
+    vector = [1.0] * size
+    for _ in range(500):
+        moved = [sum(row[j] * vector[j] for j in range(size)) for row in matrix]
+        norm = math.sqrt(sum(value * value for value in moved))
+        if norm == 0.0:
+            return 0.0
+        vector = [value / norm for value in moved]
+    moved = [sum(row[j] * vector[j] for j in range(size)) for row in matrix]
+    return math.sqrt(sum(value * value for value in moved))
+
+
+def loop_gain(policy: "EmotionPolicy", *, cadence_seconds: int) -> float:
+    """How much a deviation from baseline survives one event cycle.
+
+    One :meth:`EmotionPolicy.apply` multiplies a deviation by ``I + coupling*C``
+    and the decay that runs first multiplies it by ``exp(-T/tau)`` for an event
+    cadence ``T``. A product **above 1** means the mood is a latch instead of a
+    mood: any steady stream of events, even a balanced one, grows until a
+    dimension reaches 0 or 100 and stays there. A product below 1 means the
+    decay wins and the mood hovers near the baseline.
+
+    This is the calibration check for ``BOT_MOOD_DECAY_MINUTES`` and
+    ``BOT_MOOD_COUPLING``; ``tests/test_emotion.py`` asserts the shipped pair.
+    """
+    return _spectral_radius(_gain_matrix(policy.coupling)) * math.exp(
+        -cadence_seconds / policy.tau_seconds
+    )
+
+
 class EmotionPolicy:
     """Decay, coupling and wording. Stateless; safe to share."""
 
@@ -115,11 +228,16 @@ class EmotionPolicy:
         sensitivity: float = 1.0,
         min_sociability: int = 35,
         baseline: float = BASELINE,
+        coupling: float = 1.0,
     ):
         self.half_life_minutes = half_life_minutes
         self.sensitivity = sensitivity
         self.min_sociability = min_sociability
         self.baseline = baseline
+        # Multiplier on COUPLING. 1.0 is the shipped feel; see ``loop_gain``
+        # for why a deployer who wants a mood that hovers instead of latching
+        # sets it to 0.
+        self.coupling = coupling
         # e-folding time. A value halfway back to baseline after half_life.
         self.tau_seconds = (half_life_minutes * 60.0) / math.log(2)
 
@@ -150,7 +268,9 @@ class EmotionPolicy:
         for source, targets in COUPLING.items():
             deviation = spread[source] - self.baseline
             for target, weight in targets.items():
-                spread[target] = clamp(spread[target] + weight * deviation)
+                spread[target] = clamp(
+                    spread[target] + weight * self.coupling * deviation
+                )
         return Mood(
             **spread,
             reason=reason.strip()[:120],
