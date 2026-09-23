@@ -7,10 +7,27 @@ from __future__ import annotations
 
 from typing import Any, Protocol
 
-from .domain import MessageEvent
+from .domain import (
+    ChatMessage,
+    ConversationRow,
+    JobRow,
+    MessageEvent,
+    ModelResult,
+    SendReceipt,
+    SkillRef,
+    TrustLabel,
+)
 
 
 class ReplyResult(Protocol):
+    """What a turn produced as far as its callers are concerned.
+
+    Only ``text`` is required. ``runtime.agent.Reply`` also carries usage and a
+    prefix hash, but a test double or a future cheap agent need not, and the
+    conversation service never reads them — so the contract stays at the one
+    field every implementation can honour.
+    """
+
     text: str
 
 
@@ -24,7 +41,7 @@ class ReplyDecisionPolicy(Protocol):
     """
 
     async def decide(
-        self, event: MessageEvent, *, recent: list[dict[str, Any]]
+        self, event: MessageEvent, *, recent: list[ConversationRow]
     ) -> bool: ...
 
 
@@ -64,7 +81,7 @@ class ConversationRepository(Protocol):
         role: str,
         content: str,
     ) -> bool: ...
-    def recent(self, scope: str, limit: int = 24) -> list[dict[str, Any]]: ...
+    def recent(self, scope: str, limit: int = 24) -> list[ConversationRow]: ...
     def message_count(self, scope: str) -> int: ...
 
 
@@ -163,26 +180,33 @@ class JobRepository(Protocol):
         suggested: list[tuple[str, str, str, str, str, str, int]],
         now: int,
     ) -> None: ...
-    def list_jobs(self, group_id: str) -> list[dict[str, Any]]: ...
+    def list_jobs(self, group_id: str) -> list[JobRow]: ...
     def disable_job(self, group_id: str, job_id: int) -> bool: ...
-    def due_jobs(self, now: int, limit: int = 10) -> list[dict[str, Any]]: ...
+    def due_jobs(self, now: int, limit: int = 10) -> list[JobRow]: ...
     def reserve_job(
-        self, job: dict[str, Any], next_run: int | None, now: int
+        self, job: JobRow, next_run: int | None, now: int
     ) -> int | None: ...
     def finish_job(self, run_id: int, status: str, detail: str, now: int) -> None: ...
     def reconcile_interrupted_jobs(self, now: int) -> None: ...
-    def missed_jobs(self, before: int) -> list[dict[str, Any]]: ...
-    def skip_job(self, job: dict[str, Any], next_run: int | None, now: int) -> None: ...
+    def missed_jobs(self, before: int) -> list[JobRow]: ...
+    def skip_job(self, job: JobRow, next_run: int | None, now: int) -> None: ...
 
 
 class ChatModel(Protocol):
+    """The provider edge. Implementations return the OpenAI-compatible shape.
+
+    ``ModelResult`` is a ``TypedDict``, so an adapter that returns a plain dict
+    still satisfies this port — the annotation only names the fields callers
+    are allowed to rely on.
+    """
+
     async def complete(
         self,
-        messages: list[dict],
+        messages: list[ChatMessage],
         tools: list[dict] | None = None,
         *,
         temperature: float = 0.7,
-    ) -> dict: ...
+    ) -> ModelResult: ...
 
 
 class MessageSender(Protocol):
@@ -195,7 +219,7 @@ class MessageSender(Protocol):
         at_user: str | None = None,
         image: str | None = None,
         voice: str | None = None,
-    ) -> dict: ...
+    ) -> SendReceipt: ...
 
 
 class OutboundParts(Protocol):
@@ -215,14 +239,22 @@ class MediaProcessor(Protocol):
 
 class SkillProvider(Protocol):
     def catalog_text(self) -> str: ...
-    def select(self, text: str, *, proactive: bool = False) -> list[Any]: ...
+    def select(self, text: str, *, proactive: bool = False) -> list[SkillRef]: ...
 
 
 class ToolProvider(Protocol):
     def schemas(self) -> list[dict]: ...
-    def call(self, name: str, args: dict[str, Any], event: Any) -> str: ...
+    def call(self, name: str, args: dict[str, Any], event: MessageEvent) -> str: ...
 
 
 class ContextProvider(Protocol):
-    def collect(self, event: Any) -> dict[str, Any]: ...
-    def trust_map(self, event: Any) -> dict[str, str]: ...
+    """The dynamic prompt suffix.
+
+    ``collect`` maps contributor name to payload. Payloads stay ``Any`` on
+    purpose: a contributor may legitimately return a string, a mapping or a
+    list, and the registry — not this port — owns the budget, priority and
+    truncation that make them safe to concatenate.
+    """
+
+    def collect(self, event: MessageEvent) -> dict[str, Any]: ...
+    def trust_map(self, event: MessageEvent) -> dict[str, TrustLabel]: ...
