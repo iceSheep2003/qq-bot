@@ -23,7 +23,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from .domain import ConfigError
+from .domain import ConfigError, normalize_reasoning_effort
 
 #: Version of the *configuration contract* this build understands: the set and
 #: meaning of the BOT_* settings. Bump it when a release changes what an
@@ -68,6 +68,11 @@ class Config:
     onebot_max_lanes: int = 32
     onebot_request_timeout: float = 20.0
     onebot_max_frame_kb: int = 1024
+    # Reasoning budget sent to the provider, or "" to send no field. A chat bot
+    # spends most of its latency thinking: measured against the local proxy, a
+    # short reply cost ~1500 reasoning tokens at the default and ~830 at "low",
+    # which was the difference between a 30s and an 18s turn.
+    model_reasoning_effort: str = ""
     extensions: frozenset[str] = frozenset({"scheduled_chat"})
     # Which contract version this configuration claims to satisfy. Stamped by
     # from_env; validated so a .env written for a newer build is refused rather
@@ -141,6 +146,9 @@ class Config:
                 "BOT_ONEBOT_REQUEST_TIMEOUT must be positive, "
                 f"got {self.onebot_request_timeout}"
             )
+        # Checked here rather than at the first reply: a typo would otherwise
+        # surface as slow turns with no explanation.
+        normalize_reasoning_effort(self.model_reasoning_effort)
 
     @classmethod
     def from_env(cls) -> Config:
@@ -153,6 +161,7 @@ class Config:
             ).rstrip("/"),
             model_api_key=os.getenv("BOT_MODEL_API_KEY", ""),
             model_name=os.getenv("BOT_MODEL_NAME", "deepseek-chat"),
+            model_reasoning_effort=os.getenv("BOT_MODEL_REASONING_EFFORT", ""),
             onebot_host=os.getenv("BOT_ONEBOT_HOST", "127.0.0.1"),
             onebot_port=integer("BOT_ONEBOT_PORT", 6199),
             onebot_token=os.getenv("BOT_ONEBOT_TOKEN", ""),

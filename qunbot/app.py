@@ -115,7 +115,10 @@ class BotApp:
         activity = ActivityStore(database)
         jobs = JobsStore(database)
         model = ModelClient(
-            config.model_base_url, config.model_api_key, config.model_name
+            config.model_base_url,
+            config.model_api_key,
+            config.model_name,
+            reasoning_effort=config.model_reasoning_effort or None,
         )
         self._closers.append(model.close)
         skills = SkillCatalog(config.skills_path, enabled_skills(config))

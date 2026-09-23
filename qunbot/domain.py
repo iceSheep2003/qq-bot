@@ -26,6 +26,33 @@ class ConfigError(ValueError):
     """
 
 
+#: Reasoning budgets an OpenAI-compatible provider may accept. Lives here
+#: rather than in the adapter because ``config`` validates the setting and the
+#: adapter sends it, and only a value-neutral module can be shared by both.
+REASONING_EFFORTS = ("minimal", "low", "medium", "high")
+
+
+def normalize_reasoning_effort(value: str | None) -> str | None:
+    """Validate a reasoning budget, or ``None`` to leave the field out.
+
+    Rejected loudly rather than ignored. A provider that does not recognise the
+    value usually drops it silently, so a typo would look exactly like "the
+    model is slow today" — the deployer would have no way to tell the setting
+    never took effect.
+    """
+    if value is None:
+        return None
+    cleaned = str(value).strip().lower()
+    if not cleaned:
+        return None
+    if cleaned not in REASONING_EFFORTS:
+        raise ConfigError(
+            f"unknown reasoning effort {value!r}; expected one of "
+            f"{list(REASONING_EFFORTS)}, or empty to send no field"
+        )
+    return cleaned
+
+
 class JobSkipped(Exception):
     """A scheduled run declined to post. Expected, not an error.
 

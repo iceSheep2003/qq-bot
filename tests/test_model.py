@@ -14,6 +14,7 @@ import unittest
 
 import httpx
 
+from qunbot.domain import ConfigError
 from qunbot.adapters.model import (
     UNKNOWN,
     BudgetPolicy,
@@ -556,6 +557,71 @@ class ToolProtocolTests(unittest.TestCase):
         self.assertEqual(payload["tools"], schema)
         self.assertEqual(payload["tool_choice"], "auto")
         self.assertEqual(provider.payloads[1]["tools"], schema)
+
+
+class ReasoningEffortTests(unittest.TestCase):
+    """The reasoning budget is the main latency lever on a chat bot.
+
+    A short reply measured ~1500 reasoning tokens at the provider default and
+    ~830 at "low". Both failure modes are silent — the field never sent, or a
+    value the provider ignores — so both are pinned here.
+    """
+
+    def test_no_field_is_sent_by_default(self):
+        provider = FakeProvider(ok("hi"))
+        client, _ = make_client(provider)
+        try:
+            run(client.complete(messages()))
+        finally:
+            run(client.close())
+        self.assertNotIn("reasoning_effort", provider.payloads[0])
+
+    def test_a_configured_effort_is_sent(self):
+        provider = FakeProvider(ok("hi"))
+        client, _ = make_client(provider, reasoning_effort="low")
+        try:
+            run(client.complete(messages()))
+        finally:
+            run(client.close())
+        self.assertEqual(provider.payloads[0]["reasoning_effort"], "low")
+
+    def test_the_value_is_normalised(self):
+        provider = FakeProvider(ok("hi"))
+        client, _ = make_client(provider, reasoning_effort="  LOW  ")
+        try:
+            run(client.complete(messages()))
+        finally:
+            run(client.close())
+        self.assertEqual(provider.payloads[0]["reasoning_effort"], "low")
+
+    def test_an_empty_value_sends_nothing(self):
+        provider = FakeProvider(ok("hi"))
+        client, _ = make_client(provider, reasoning_effort="")
+        try:
+            run(client.complete(messages()))
+        finally:
+            run(client.close())
+        self.assertNotIn("reasoning_effort", provider.payloads[0])
+
+    def test_an_unknown_value_is_refused(self):
+        # Silently dropping it would be indistinguishable from "slow today".
+        with self.assertRaises(ConfigError):
+            make_client(FakeProvider(ok("hi")), reasoning_effort="very-hard")
+
+    def test_effort_does_not_disturb_the_prompt(self):
+        """It is a request option, not prompt content."""
+        provider = FakeProvider(ok("hi"), ok("hi"))
+        plain, _ = make_client(provider)
+        effort, _ = make_client(provider, reasoning_effort="low")
+        try:
+            run(plain.complete(messages()))
+            run(effort.complete(messages()))
+        finally:
+            run(plain.close())
+            run(effort.close())
+        self.assertEqual(
+            provider.payloads[0]["messages"], provider.payloads[1]["messages"]
+        )
 
 
 class CapabilityTests(unittest.TestCase):

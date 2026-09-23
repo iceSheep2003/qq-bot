@@ -36,6 +36,8 @@ from enum import Enum
 
 import httpx
 
+from ..domain import normalize_reasoning_effort
+
 log = logging.getLogger(__name__)
 
 UNKNOWN = "unknown"
@@ -385,6 +387,7 @@ class ModelClient:
         model: str,
         *,
         timeout: float = 90.0,
+        reasoning_effort: str | None = None,
         capabilities: ModelCapabilities | None = None,
         retry: RetryPolicy | None = None,
         circuit: CircuitPolicy | None = None,
@@ -398,6 +401,7 @@ class ModelClient:
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
         self.model = model
+        self.reasoning_effort = normalize_reasoning_effort(reasoning_effort)
         self.capabilities = capabilities or ModelCapabilities(model=model)
         self.retry = retry or RetryPolicy()
         self.circuit = circuit or CircuitPolicy()
@@ -574,6 +578,8 @@ class ModelClient:
             "messages": messages,
             "temperature": temperature,
         }
+        if self.reasoning_effort:
+            payload["reasoning_effort"] = self.reasoning_effort
         if tools:
             payload["tools"] = tools
             payload["tool_choice"] = "auto"
