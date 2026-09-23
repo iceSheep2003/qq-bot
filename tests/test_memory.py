@@ -404,6 +404,66 @@ class MemoryStoreTests(unittest.TestCase):
         )
 
 
+class NaturalLanguageRecallTests(unittest.TestCase):
+    """Recall has to survive how people actually type.
+
+    Regression: the substring fallback AND-ed its probe words, so a memory only
+    matched if it literally contained *every* word of the question. Combined
+    with a trigram index that skips two-character Chinese words, whole-sentence
+    queries — which is all of them, since Chinese has no spaces — recalled
+    nothing. The feature was effectively dead in production while every unit
+    test passed, because those queried with the memory's own keywords.
+    """
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.database = SqliteDatabase(Path(self.temp.name) / "bot.sqlite3")
+        self.store = MemoryStore(self.database)
+        self.store.observe(SCOPE, "7", "小明在备考计算机统考")
+        self.store.observe(SCOPE, "7", "小明喜欢蓝莓蛋糕")
+        self.store.observe(SCOPE, "9", "小红养了一只叫豆豆的猫")
+
+    def tearDown(self):
+        self.database.close()
+        self.temp.cleanup()
+
+    def contents(self, query: str, limit: int = 4) -> set[str]:
+        return {
+            row["content"] for row in self.store.search_memories(SCOPE, query, limit)
+        }
+
+    def test_a_whole_sentence_finds_its_topic(self):
+        self.assertIn("小明在备考计算机统考", self.contents("这周备考情况如何"))
+
+    def test_an_unspaced_sentence_finds_its_topic(self):
+        self.assertIn("小红养了一只叫豆豆的猫", self.contents("小红家那只猫叫什么来着"))
+
+    def test_a_two_character_word_is_searchable(self):
+        # 备考 is two characters: the trigram index cannot serve it.
+        self.assertIn("小明在备考计算机统考", self.contents("备考"))
+
+    def test_a_question_may_match_several_memories(self):
+        found = self.contents("小明最近在忙什么")
+        self.assertIn("小明在备考计算机统考", found)
+        self.assertIn("小明喜欢蓝莓蛋糕", found)
+
+    def test_an_unrelated_message_recalls_nothing(self):
+        self.assertEqual(self.contents("今天天气不错"), set())
+
+    def test_a_bare_greeting_recalls_nothing(self):
+        self.assertEqual(self.contents("你好"), set())
+
+    def test_more_overlapping_words_ranks_higher(self):
+        rows = self.store.search_memories(SCOPE, "小明 蓝莓 蛋糕", 4)
+        self.assertEqual(rows[0]["content"], "小明喜欢蓝莓蛋糕")
+
+    def test_the_probe_list_is_deterministic(self):
+        first = MemoryStore._tokens("这周备考情况如何")
+        self.assertEqual(first, MemoryStore._tokens("这周备考情况如何"))
+        self.assertTrue(first)
+        self.assertTrue(all(len(token) <= 4 for token in first))
+
+
 class MemoryServiceTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()

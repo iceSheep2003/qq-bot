@@ -15,6 +15,7 @@ import sqlite3
 import time
 from array import array
 
+from ..memory.text import query_tokens
 from .base import SqliteRepository
 
 log = logging.getLogger(__name__)
@@ -563,15 +564,46 @@ class MemoryStore(SqliteRepository):
                 rows = []
             if rows:
                 return [dict(row) for row in rows]
-        # FTS tokenization may not match unsegmented Chinese or short queries.
-        words = self._terms(query)[:5] or [query.strip()[:80]]
-        like = " AND ".join("m.content LIKE ?" for _ in words)
+        # Substring fallback for what the trigram index cannot serve. Chinese
+        # has no whitespace word boundaries, so a whole message arrives as one
+        # "word" and a substring match on it finds nothing; and the trigram
+        # index needs three characters, while 备考 / 考试 / 喜欢 are two. This
+        # path therefore carries most real queries and has to stay permissive.
+        # ``query_tokens`` supplies the character bigrams that actually overlap
+        # a memory.
+        #
+        # OR, never AND. A distilled fact is one short sentence; requiring every
+        # term of the *question* to appear inside it matches almost nothing —
+        # "备考 怎么样" would demand a memory containing both 备考 and 怎么样.
+        # That is why recall silently returned nothing for whole-sentence input.
+        # Sharing one topic word is the signal, so rank by overlap count and let
+        # the caller's own scoring decide from there.
+        words = self._tokens(query) or [query.strip()[:80]]
+        patterns = [f"%{word[:80]}%" for word in words]
+        hits = " + ".join(
+            "(CASE WHEN m.content LIKE ? THEN 1 ELSE 0 END)" for _ in words
+        )
+        matched = " OR ".join("m.content LIKE ?" for _ in words)
         rows = self.db.execute(
-            "SELECT m.*, 0.0 AS lexical, 'like' AS match FROM memories m "
-            f"WHERE {like} AND {where} ORDER BY m.importance DESC, m.created_at DESC LIMIT ?",
-            (*[f"%{word[:80]}%" for word in words], *params, max(1, int(limit))),
+            f"SELECT m.*, 0.0 AS lexical, 'like' AS match, ({hits}) AS hits "
+            f"FROM memories m WHERE ({matched}) AND {where} "
+            "ORDER BY hits DESC, m.importance DESC, m.created_at DESC LIMIT ?",
+            (*patterns, *patterns, *params, max(1, int(limit))),
         ).fetchall()
         return [dict(row) for row in rows]
+
+    @staticmethod
+    def _tokens(query: str) -> list[str]:
+        """Substring probes for a query, longest-useful first.
+
+        Whitespace words plus character bigrams, minus anything long enough to
+        only ever match itself. Sorted for a deterministic plan (and therefore a
+        stable query plan and stable result ordering).
+        """
+        tokens = {
+            token for token in query_tokens(query) if 1 <= len(token) <= 4
+        }
+        return [token for token in sorted(tokens) if token][:8]
 
     def _vector_rows(
         self,
