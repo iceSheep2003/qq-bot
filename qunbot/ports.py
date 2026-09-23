@@ -198,8 +198,19 @@ class MessageSender(Protocol):
     ) -> dict: ...
 
 
+class OutboundParts(Protocol):
+    """A parsed, media-resolved reply — the shape ``MessageSender.send`` takes."""
+
+    @property
+    def text(self) -> str: ...
+    def send_kwargs(self) -> dict[str, str]: ...
+
+
 class MediaProcessor(Protocol):
     async def compose(self, text: str) -> tuple[str, str | None, str | None]: ...
+    async def compose_message(
+        self, text: str, *, allowed_at: frozenset[str] | None = None
+    ) -> OutboundParts: ...
 
 
 class SkillProvider(Protocol):

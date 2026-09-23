@@ -256,6 +256,7 @@ class ConversationService:
                 event.group_id,
                 None if event.group_id else event.user_id,
                 reply.text,
+                event,
             )
             if not clean:
                 return None
@@ -272,18 +273,47 @@ class ConversationService:
             return clean
 
     async def send_reply(
-        self, group_id: str | None, user_id: str | None, text: str
+        self,
+        group_id: str | None,
+        user_id: str | None,
+        text: str,
+        event: MessageEvent | None = None,
     ) -> str:
-        clean, image, voice = (
-            await self.media.compose(text) if self.media else (text, None, None)
+        """Parse the reply into structured parts, resolve media, then send.
+
+        ``event`` supplies the roster an ``[[at:...]]`` marker is allowed to
+        reference. Without it no @ target is granted, so a caller that cannot
+        prove who is in the group never lets the model address anyone.
+        """
+        if self.media is None:
+            await self.sender.send(group_id=group_id, user_id=user_id, text=text)
+            return text
+        message = await self.media.compose_message(
+            text, allowed_at=self._roster(event) if event else frozenset()
         )
-        if clean or image:
-            await self.sender.send(
-                group_id=group_id, user_id=user_id, text=clean, image=image
-            )
+        kwargs = message.send_kwargs()
+        # Voice goes in its own frame: the platform rejects mixing a record
+        # segment with image/text in one message.
+        voice = kwargs.pop("voice", None)
+        if kwargs.get("text") or kwargs.get("image"):
+            await self.sender.send(group_id=group_id, user_id=user_id, **kwargs)
         if voice:
             await self.sender.send(group_id=group_id, user_id=user_id, voice=voice)
-        return clean
+        return message.text
+
+    @staticmethod
+    def _roster(event: MessageEvent | None) -> frozenset[str]:
+        """Members the platform asserted are present, as @-target evidence.
+
+        The trigger's sender and anyone @-ed in the triggering message. Both are
+        facts OneBot reported, never strings the model produced — which is the
+        whole point of validating an @ target against them.
+        """
+        if event is None:
+            return frozenset()
+        return frozenset(
+            str(value) for value in (event.user_id, *event.at_users) if value
+        )
 
     # --- use case 4: post-reply events -----------------------------------
 
