@@ -11,7 +11,12 @@ from inspect import isawaitable
 from .runtime.agent import Agent
 from .config import Config
 from .extensions.loader import (
-    build_features, build_registry, build_workers, enabled_skills, validate_features,
+    bind_features,
+    build_features,
+    build_registry,
+    build_workers,
+    enabled_skills,
+    validate_features,
 )
 from .adapters.events import parse_message
 from .adapters.model import ModelClient
@@ -45,12 +50,18 @@ class BotApp:
             config.model_base_url, config.model_api_key, config.model_name
         )
         skills = SkillCatalog(config.skills_path, enabled_skills(config))
-        features = build_features(config, model, built_in_tools(memories))
+        memory = MemoryService(model, conversations, memories)
+        # Handed to the features before they register, so one that reads
+        # memories finds the coordinator there. Read-only: the memory package
+        # stays the sole owner of its data.
+        features = build_features(
+            config, model, built_in_tools(memories), memory=memory
+        )
         agent = Agent(
             model,
             conversations,
             people,
-            MemoryService(model, conversations, memories),
+            memory,
             skills,
             features.tools,
             config.persona_path,
@@ -100,6 +111,9 @@ class BotApp:
             observation_workers=config.observer_workers,
             observation_dedupe=config.observer_dedupe,
         )
+        # Features that need a runtime collaborator get it here, rather than
+        # app.py importing each feature module to wire it by hand.
+        bind_features(features, service)
         job_runner = JobRunner(service, handlers)
 
         async def on_event(raw: dict) -> None:
@@ -117,6 +131,8 @@ class BotApp:
             job_runner,
             model,
         )
+        # Held so run() can drain the observation queue on shutdown.
+        self.service = service
         self.config = config
         self.database = database
         # Feature-declared loops run beside the scheduled-job workers. A feature

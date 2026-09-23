@@ -28,6 +28,15 @@ class FeatureHost:
     proactive_gate: MoodObserver | None = None
     # Replaces the built-in "@ me only" rule. None keeps the default.
     reply_policy: ReplyDecisionPolicy | None = None
+    # Set by the loader before registration, so a feature that reads memories
+    # at register time finds it. qunbot/memory stays the only owner of the
+    # data; this is a read handle.
+    memory_coordinator: object | None = None
+    # Wiring callbacks, run once the conversation service exists. A feature
+    # that needs a runtime collaborator appends one here; the loader does not
+    # grow a parameter per feature, and app.py does not import feature modules
+    # to wire them.
+    binders: list[Callable[[object], None]] = field(default_factory=list)
     # Long-running background loops, started alongside the gateway and the
     # scheduler and cancelled on shutdown. Each is a zero-argument coroutine
     # function; a worker that raises is restarted by the supervisor, not by

@@ -303,31 +303,34 @@ class RegistrationTests(unittest.TestCase):
         self.assertEqual(len(host.observers), 1)
         self.assertEqual(len(host.closers), 1)
 
-    def test_priority_50_outranks_mood(self):
-        """The specified constant, checked as behaviour rather than as a number.
+    def test_mood_outranks_persona_when_the_budget_runs_short(self):
+        """The cause survives, the re-derivable refinement is dropped.
 
-        ``ContextRegistry`` selects the lowest number first, so priority 50 is
-        kept *before* mood's 60 — the reverse of "drop the style hint before
-        the state that produced it". This test pins the current, specified
-        behaviour so that correcting the constant is a deliberate edit with a
-        failing test to update, rather than a silent drift.
+        ``ContextRegistry`` keeps the *lowest* number, so this asserts the
+        behaviour rather than the constant: with room for only one line, the
+        mood (the state that produced the phrasing) is what the model keeps.
+        """
+        from qunbot.runtime.context import ContextRegistry
+
+        context = ContextRegistry(budget_chars=100)
+        context.register("mood", lambda e: "心" * 60, priority=60, max_chars=200)
+        context.register(
+            "persona", lambda e: "风" * 60, priority=CONTEXT_PRIORITY, max_chars=200
+        )
+        self.assertEqual(list(context.collect(event(1))), ["mood"])
+
+    def test_a_value_below_mood_is_what_the_reverse_would_need(self):
+        """Guards the direction of the comparison, not just the outcome.
+
+        If someone later "simplifies" the constant downwards, the ordering
+        silently flips back. This states what that would produce.
         """
         from qunbot.runtime.context import ContextRegistry
 
         context = ContextRegistry(budget_chars=100)
         context.register("mood", lambda e: "心" * 60, priority=60, max_chars=200)
         context.register("persona", lambda e: "风" * 60, priority=50, max_chars=200)
-        collected = context.collect(event(1))
-        self.assertEqual(list(collected), ["persona"])
-
-    def test_a_value_above_mood_is_what_the_intent_needs(self):
-        """What the intended ordering costs: one number, not a redesign."""
-        from qunbot.runtime.context import ContextRegistry
-
-        context = ContextRegistry(budget_chars=100)
-        context.register("mood", lambda e: "心" * 60, priority=60, max_chars=200)
-        context.register("persona", lambda e: "风" * 60, priority=65, max_chars=200)
-        self.assertEqual(list(context.collect(event(1))), ["mood"])
+        self.assertEqual(list(context.collect(event(1))), ["persona"])
 
     def test_the_extension_reads_no_mood_state_of_its_own(self):
         # The boundary with ``qunbot/emotion/`` is enforced, not just intended:

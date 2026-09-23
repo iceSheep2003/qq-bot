@@ -60,18 +60,29 @@ CONTEXT_MAX_CHARS = 300
 def bind_service(service) -> None:
     """Route message reads through the conversation service.
 
-    Optional. Wiring calls this once the service exists; without it the
-    package falls back to a read-only mirror of the ``messages`` table, which
-    is the same data by a less canonical route.
+    Registered as a feature binder: the host calls it once the service exists.
+    Without it the package falls back to a read-only mirror of the
+    ``messages`` table — the same data by a less canonical route.
     """
     global _SERVICE
     _SERVICE = service
 
 
 def _reader_for(store):
-    if _SERVICE is not None and hasattr(_SERVICE, "conversations"):
-        return lambda scope, limit: _SERVICE.conversations.recent(scope, limit)
-    return store.recent_messages
+    """Resolve the reader *per call*, not per registration.
+
+    The binder runs after registration, so deciding here would bake in the
+    fallback before the service was ever offered. Late binding makes the two
+    paths order-independent.
+    """
+
+    def read(scope: str, limit: int) -> list[dict]:
+        service = _SERVICE
+        if service is not None and hasattr(service, "conversations"):
+            return service.conversations.recent(scope, limit)
+        return store.recent_messages(scope, limit)
+
+    return read
 
 
 class TermIndex:
@@ -165,6 +176,7 @@ def register(host, app_config=None, _model=None, *, store=None) -> None:
     )
     worker = SlangWorker(store, config, scopes, _reader_for(store))
     host.workers.append(worker.run)
+    host.binders.append(bind_service)
 
 
 def validate() -> dict:

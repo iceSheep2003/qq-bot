@@ -70,11 +70,21 @@ class Scheduler:
         ZoneInfo(tz_name)
 
     def _validate_schedule(
-        self, kind: str, value: str, prompt: str, action: str
+        self, kind: str, value: str, prompt: str, action: str, key: str = ""
     ) -> None:
         """Checks that apply to a config job and a handler suggestion alike."""
         if action not in self.known_actions:
-            raise ValueError(f"job action must be one of {sorted(self.known_actions)}")
+            # Name the job. "must be one of []" with no context is what a
+            # deployer sees after trimming BOT_EXTENSIONS while a job in
+            # config/schedules.json still needs that extension — which is
+            # exactly the moment they need to be told which job to look at.
+            where = f"job {key!r} " if key else "job "
+            raise ValueError(
+                f"{where}wants action {action!r}, which no enabled extension "
+                f"provides (enabled actions: {sorted(self.known_actions) or 'none'}). "
+                "Add the extension that owns it to BOT_EXTENSIONS, or remove "
+                "the job from the schedule."
+            )
         # Conversational jobs need a prompt; other actions decide for themselves.
         minimum = 0 if action != DEFAULT_ACTION else 1
         if not minimum <= len(prompt) <= 500:
@@ -124,7 +134,7 @@ class Scheduler:
             value = str(entry.get("value", ""))
             action = str(entry.get("action", DEFAULT_ACTION)).strip() or DEFAULT_ACTION
             prompt = str(entry.get("prompt", "")).strip()
-            self._validate_schedule(kind, value, prompt, action)
+            self._validate_schedule(kind, value, prompt, action, key)
             configured.append(
                 (
                     key,
@@ -160,7 +170,7 @@ class Scheduler:
         """Fan a per-handler suggestion out across every allowlisted group."""
         rows: list[Row] = []
         for action, item in suggestions:
-            self._validate_schedule(item.kind, item.value, item.prompt, action)
+            self._validate_schedule(item.kind, item.value, item.prompt, action, item.id)
             next_run = self._next_run(item.kind, item.value, now, past_is_ok=False)
             for group_id in sorted(allowed_groups):
                 rows.append(

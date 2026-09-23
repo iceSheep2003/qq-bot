@@ -21,10 +21,18 @@ JOB_EXTENSIONS = {
 BACKGROUND_EXTENSIONS = {
     "proactive_chat": "qunbot.extensions.proactive_chat.runner:build_worker",
 }
+# Two accepted forms, both resolved with import_module(...).register:
+# a package path whose __init__ exposes register()/validate(), or a
+# "module.attribute" path naming the register function directly.
 FEATURE_EXTENSIONS = {
     "mood": "qunbot.extensions.mood.register",
     "memes": "qunbot.extensions.memes.register",
     "voice": "qunbot.extensions.voice.register",
+    "persona": "qunbot.extensions.persona",
+    "reply_policy": "qunbot.extensions.reply_policy",
+    "slang": "qunbot.extensions.slang",
+    "style_echo": "qunbot.extensions.style_echo",
+    "world_context": "qunbot.extensions.world_context",
 }
 KNOWN_EXTENSIONS = (
     JOB_EXTENSIONS.keys() | BACKGROUND_EXTENSIONS.keys() | FEATURE_EXTENSIONS.keys()
@@ -60,12 +68,21 @@ def build_registry(config: Config) -> JobHandlerRegistry:
     return registry
 
 
-def build_features(config: Config, model, tools=None) -> FeatureHost:
+def build_features(config: Config, model, tools=None, *, memory=None) -> FeatureHost:
     validate_names(config)
     host = FeatureHost(tools=tools) if tools is not None else FeatureHost()
+    # Available before registration so a feature that reads memories finds it
+    # there. Read-only: the memory package stays the sole owner of its data.
+    host.memory_coordinator = memory
     for name in sorted(config.extensions & FEATURE_EXTENSIONS.keys()):
         import_module(FEATURE_EXTENSIONS[name]).register(host, config, model)
     return host
+
+
+def bind_features(features: FeatureHost, service) -> None:
+    """Run each feature's wiring callback now that the service exists."""
+    for bind in features.binders:
+        bind(service)
 
 
 def validate_features(config: Config) -> dict:

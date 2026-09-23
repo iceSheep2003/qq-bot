@@ -11,6 +11,9 @@ from qunbot.storage.relationships import RelationshipsStore
 class Store:
     def __init__(self, path):
         database = SqliteDatabase(path)
+        # Kept so tests can exercise the database-level helpers (migrations,
+        # cross-domain deletion) rather than only the repositories.
+        self.database = database
         self.db = database.db
         self.conversations = ConversationStore(database)
         self.people = RelationshipsStore(database)

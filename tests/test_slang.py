@@ -93,7 +93,10 @@ class SlangTestCase(unittest.TestCase):
 
     def host(self):
         return SimpleNamespace(
-            context=ContextRegistry(), workers=[], closers=[], tools=None
+            context=ContextRegistry(), workers=[],
+            closers=[],
+            tools=None,
+            binders=[],
         )
 
     def app_config(self, groups=("42",)):
@@ -659,6 +662,7 @@ class BoundaryTests(SlangTestCase):
                 workers=[],
                 closers=[],
                 tools=None,
+                binders=[],
             )
             register(host, self.app_config(), FakeModel())
             self.assertIsNone(host.tools)

@@ -23,10 +23,9 @@ design:
 The intended priority is that when the dynamic budget runs short the model
 keeps the causal state (mood) and loses the stylistic refinement, because the
 refinement is re-derivable and the state is not. See the note on
-``CONTEXT_PRIORITY`` below: the value this feature was specified with (50) does
-not achieve that, because ``ContextRegistry`` keeps the *lowest* number. A
-disabled package imports nothing, and a disabled mood simply means the
-situation alone is used.
+``CONTEXT_PRIORITY`` below for how the number achieves that. A disabled
+package imports nothing, and a disabled mood simply means the situation alone
+is used.
 
 Enabled only by an explicit ``BOT_PERSONA_ENABLED=true`` plus adding
 ``persona`` to the deployer's extension allowlist.
@@ -47,17 +46,14 @@ from .strategy import (
 )
 
 CONTEXT_NAME = "persona"
-# The value this feature was specified with.
-#
 # Read ``ContextRegistry.collect`` before changing it: selection runs lowest
 # number first and stops when the budget is spent, so a *smaller* number is
-# kept *longer*. 50 therefore outranks mood's 60 — under a tight budget the
-# mood line is dropped and this refinement survives, which is the opposite of
-# the intent ("drop the style hint before the state that produced it"). Use a
-# value above 60 to get that intent. The constant is left at the specified 50
-# and the consequence is pinned by
-# tests/test_persona.py::RegistrationTests::test_priority_50_outranks_mood.
-CONTEXT_PRIORITY = 50
+# kept *longer*. This must therefore sit **above** mood's 60 to get the
+# intended ordering — under a tight budget the mood line (the cause) survives
+# and this refinement (re-derivable) is dropped. It is also above the slang
+# terms (70) and the replayed memory (75), and below the meme tag list (20),
+# the clock (10) and the speaker's own history.
+CONTEXT_PRIORITY = 65
 
 __all__ = [
     "CONTEXT_NAME",
