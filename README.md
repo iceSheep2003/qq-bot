@@ -8,6 +8,10 @@
 
 [快速开始](#快速开始) · [使用文档](#使用文档) · [开发指南](CONTRIBUTING.md) · [反馈问题](https://github.com/iceSheep2003/qq-bot/issues)
 
+<p align="center">
+  <img src="memes/ip/zinxtick-present-sheet.png" alt="Kinna：蓝发、黑卫衣，拿着一张清单" width="306" />
+</p>
+
 ## 项目简介
 
 Kinna 侧重 QQ 群里的日常聊天：参与多人话题、接梗、发表情，以及根据与群友的关系调整互动方式。项目自带 Kinna 人设，也支持修改角色和说话风格。
