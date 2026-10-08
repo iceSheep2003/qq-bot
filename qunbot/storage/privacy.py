@@ -48,8 +48,24 @@ def forget_user(database: SqliteDatabase, user_id: str) -> int:
     message the bot quoted, a memory about someone else) is a different
     question and deliberately not covered here.
     """
+    # Prompt-session rows deliberately store exact provider-visible JSON, not
+    # a lossy per-user projection. Find affected scopes before deleting the
+    # transcript, then discard those cache sessions as one consistency unit;
+    # editing a row inside them would be both an incomplete privacy deletion
+    # and a broken prefix-cache history.
+    prompt_scopes = {
+        str(row[0])
+        for row in database.db.execute(
+            "SELECT DISTINCT scope FROM messages WHERE user_id=?", (user_id,)
+        ).fetchall()
+    }
     removed = 0
     with database.transaction():
+        for scope in prompt_scopes:
+            cursor = database.db.execute(
+                "DELETE FROM prompt_session_events WHERE scope=?", (scope,)
+            )
+            removed += cursor.rowcount or 0
         for table in _personal_tables(database):
             cursor = database.db.execute(
                 f"DELETE FROM {table} WHERE user_id=?", (user_id,)

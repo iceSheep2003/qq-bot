@@ -31,6 +31,8 @@ def parse_message(data: dict) -> MessageEvent | None:
     at_users = tuple(
         str(p.get("data", {}).get("qq", "")) for p in parts if p.get("type") == "at"
     )
+    reply_parts = [p for p in parts if p.get("type") == "reply"]
+    reply_data = reply_parts[0].get("data", {}) if reply_parts else {}
     sender = data.get("sender") or {}
     card = str(sender.get("card") or "").strip()
     nickname = str(sender.get("card") or sender.get("nickname") or user)
@@ -46,4 +48,7 @@ def parse_message(data: dict) -> MessageEvent | None:
         at_users=at_users,
         timestamp=int(data.get("time") or 0),
         card=card,
+        platform_message_id=str(data.get("message_id") or ""),
+        reply_to_message_id=str(reply_data.get("id") or ""),
+        reply_to_user_id=str(reply_data.get("user_id") or ""),
     )

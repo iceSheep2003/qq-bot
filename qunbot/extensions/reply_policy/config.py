@@ -59,6 +59,25 @@ class ReplyPolicyConfig:
     # Names that address the bot in message text. Empty means the name signal is
     # simply inactive, which is the privacy-preserving default.
     bot_names: tuple[str, ...] = ()
+    # Admission control is evaluated before the model call.  A mention is a
+    # strong signal, not an unlimited entitlement to spend API quota.
+    mention_probability: float = 0.85
+    ambient_probability: float = 0.25
+    # A fresh question that the room-reading layer considers open should not
+    # inherit silence merely because the same person chatted several times.
+    # Exact/near repeated questions still go through repeat_multiplier.
+    question_probability_floor: float = 0.70
+    # Once the bot joins a coherent thread, keep the conversational floor high
+    # for a short time. Mirroring Group Chat Plus' after-reply window avoids
+    # rolling the low ambient probability again on every natural follow-up.
+    after_reply_probability: float = 0.85
+    after_reply_duration_seconds: int = 180
+    daily_group_limit: int = 20
+    daily_user_limit: int = 6
+    decay_half_life_seconds: int = 900
+    pursuit_window_seconds: int = 300
+    decay_strength: float = 0.45
+    repeat_multiplier: float = 0.20
 
     @classmethod
     def from_env(cls) -> "ReplyPolicyConfig":
@@ -85,4 +104,37 @@ class ReplyPolicyConfig:
                 _number("BOT_REPLY_POLICY_CROWD_SPEAKERS", 3, low=2, high=50)
             ),
             bot_names=_names("BOT_REPLY_POLICY_BOT_NAMES"),
+            mention_probability=_number(
+                "BOT_REPLY_POLICY_MENTION_PROBABILITY", 0.85, low=0.0, high=1.0
+            ),
+            ambient_probability=_number(
+                "BOT_REPLY_POLICY_AMBIENT_PROBABILITY", 0.25, low=0.0, high=1.0
+            ),
+            question_probability_floor=_number(
+                "BOT_REPLY_POLICY_QUESTION_PROBABILITY", 0.70, low=0.0, high=1.0
+            ),
+            after_reply_probability=_number(
+                "BOT_REPLY_POLICY_AFTER_REPLY_PROBABILITY", 0.85, low=0.0, high=1.0
+            ),
+            after_reply_duration_seconds=int(_number(
+                "BOT_REPLY_POLICY_AFTER_REPLY_SECONDS", 180, low=0, high=3600
+            )),
+            daily_group_limit=int(_number(
+                "BOT_REPLY_POLICY_DAILY_GROUP_LIMIT", 20, low=0, high=1000
+            )),
+            daily_user_limit=int(_number(
+                "BOT_REPLY_POLICY_DAILY_USER_LIMIT", 6, low=0, high=1000
+            )),
+            decay_half_life_seconds=int(_number(
+                "BOT_REPLY_POLICY_DECAY_HALF_LIFE_SECONDS", 900, low=30, high=86400
+            )),
+            pursuit_window_seconds=int(_number(
+                "BOT_REPLY_POLICY_PURSUIT_WINDOW_SECONDS", 300, low=30, high=86400
+            )),
+            decay_strength=_number(
+                "BOT_REPLY_POLICY_DECAY_STRENGTH", 0.45, low=0.0, high=10.0
+            ),
+            repeat_multiplier=_number(
+                "BOT_REPLY_POLICY_REPEAT_MULTIPLIER", 0.20, low=0.0, high=1.0
+            ),
         )

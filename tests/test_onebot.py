@@ -104,6 +104,25 @@ class OneBotTests(unittest.TestCase):
             gateway.on_event = handler
         return gateway
 
+    def test_media_placeholder_cannot_be_sent_without_real_media(self):
+        gateway = self.gateway(None)
+        with self.assertRaisesRegex(ValueError, "media placeholder"):
+            asyncio.run(gateway.send(group_id="42", text="[图片]"))
+
+    def test_media_placeholder_is_dropped_when_real_image_exists(self):
+        gateway = self.gateway(None)
+        calls = []
+
+        async def call(action, params, **_kwargs):
+            calls.append((action, params))
+            return {}
+
+        gateway.call = call
+        asyncio.run(gateway.send(group_id="42", text="[图片]", image="https://img/1"))
+        self.assertEqual(calls[0][1]["message"], [
+            {"type": "image", "data": {"file": "https://img/1"}}
+        ])
+
     # --- recorded inbound frames -----------------------------------------
 
     def test_recorded_group_frames_arrive_in_order(self):

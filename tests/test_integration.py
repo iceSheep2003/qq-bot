@@ -222,6 +222,9 @@ class AssemblyTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         root = Path(self.temp.name)
+        # Assembly tests must not read the operator's private task file.
+        schedules = root / "schedules.json"
+        schedules.write_text('{"jobs": []}', encoding="utf-8")
         # A populated catalogue, because a contributor with nothing to say is
         # absent from the prompt entirely — the memes extension would
         # otherwise be indistinguishable from an unregistered one here.
@@ -240,6 +243,7 @@ class AssemblyTests(unittest.TestCase):
                 "BOT_MODEL_API_KEY": "x",
                 "BOT_EXAM_DATE": "2026-12-19",
                 "BOT_DB_PATH": str(root / "bot.sqlite3"),
+                "BOT_SCHEDULES_PATH": str(schedules),
                 "BOT_MOOD_DB_PATH": str(root / "emotion.sqlite3"),
                 "BOT_MEMES_PATH": str(memes),
                 "BOT_EXTENSIONS": ALL_EXTENSIONS,

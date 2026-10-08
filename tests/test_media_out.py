@@ -428,6 +428,11 @@ class GatewayAtTests(unittest.TestCase):
             [p["type"] for p in message], ["text", "image", "record"]
         )
 
+    def test_native_qq_face_is_sent_as_face_segment(self):
+        message = self._send(group_id="42", text="好耶", qq_face="78")
+        self.assertEqual([part["type"] for part in message], ["text", "face"])
+        self.assertEqual(message[-1]["data"], {"id": "78"})
+
 
 if __name__ == "__main__":
     unittest.main()

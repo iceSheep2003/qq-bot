@@ -94,6 +94,8 @@ _EXTRA_COLUMNS = (
     ("embedding_model", "TEXT"),
     ("merged_into", "INTEGER"),
     ("updated_at", "INTEGER NOT NULL DEFAULT 0"),
+    ("persona_summary", "TEXT NOT NULL DEFAULT ''"),
+    ("mention_policy", "TEXT NOT NULL DEFAULT 'soft_echo'"),
 )
 
 
@@ -205,6 +207,101 @@ def migrate(db) -> None:
     db.executescript(_TRIGGERS)
     _backfill(db)
     db.executescript(_INDEXES)
+    db.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS memory_extraction_state (
+          scope TEXT PRIMARY KEY,
+          last_message_id INTEGER NOT NULL DEFAULT 0,
+          updated_at INTEGER NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS memory_extraction_runs (
+          id INTEGER PRIMARY KEY,
+          scope TEXT NOT NULL,
+          start_message_id INTEGER NOT NULL,
+          end_message_id INTEGER NOT NULL,
+          message_count INTEGER NOT NULL,
+          strategy_version TEXT NOT NULL,
+          model_name TEXT NOT NULL DEFAULT '',
+          status TEXT NOT NULL,
+          raw_result TEXT NOT NULL DEFAULT '',
+          accepted_count INTEGER NOT NULL DEFAULT 0,
+          rejected_count INTEGER NOT NULL DEFAULT 0,
+          error TEXT NOT NULL DEFAULT '',
+          started_at INTEGER NOT NULL,
+          finished_at INTEGER
+        );
+        CREATE INDEX IF NOT EXISTS memory_extraction_runs_scope
+          ON memory_extraction_runs(scope,id DESC);
+
+        CREATE TABLE IF NOT EXISTS memory_evidence (
+          id INTEGER PRIMARY KEY,
+          memory_id INTEGER NOT NULL REFERENCES memories(id) ON DELETE CASCADE,
+          event_id TEXT NOT NULL,
+          user_id TEXT NOT NULL DEFAULT '',
+          excerpt TEXT NOT NULL DEFAULT '',
+          observed_at INTEGER NOT NULL DEFAULT 0,
+          weight REAL NOT NULL DEFAULT 1.0,
+          created_at INTEGER NOT NULL,
+          UNIQUE(memory_id,event_id)
+        );
+        CREATE INDEX IF NOT EXISTS memory_evidence_memory
+          ON memory_evidence(memory_id,id);
+
+        CREATE TABLE IF NOT EXISTS memory_revisions (
+          id INTEGER PRIMARY KEY,
+          memory_id INTEGER NOT NULL REFERENCES memories(id) ON DELETE CASCADE,
+          action TEXT NOT NULL,
+          old_content TEXT NOT NULL DEFAULT '',
+          new_content TEXT NOT NULL DEFAULT '',
+          reason TEXT NOT NULL DEFAULT '',
+          source_event_id TEXT,
+          created_at INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS memory_revisions_memory
+          ON memory_revisions(memory_id,id DESC);
+
+        CREATE TABLE IF NOT EXISTS memory_topics (
+          id INTEGER PRIMARY KEY,
+          scope TEXT NOT NULL,
+          canonical_name TEXT NOT NULL,
+          summary TEXT NOT NULL DEFAULT '',
+          status TEXT NOT NULL DEFAULT 'active',
+          confidence REAL NOT NULL DEFAULT 0.5,
+          first_seen_at INTEGER NOT NULL,
+          last_seen_at INTEGER NOT NULL,
+          mention_count INTEGER NOT NULL DEFAULT 1,
+          UNIQUE(scope,canonical_name)
+        );
+        CREATE INDEX IF NOT EXISTS memory_topics_scope_activity
+          ON memory_topics(scope,last_seen_at DESC);
+        CREATE TABLE IF NOT EXISTS memory_topic_links (
+          memory_id INTEGER NOT NULL REFERENCES memories(id) ON DELETE CASCADE,
+          topic_id INTEGER NOT NULL REFERENCES memory_topics(id) ON DELETE CASCADE,
+          weight REAL NOT NULL DEFAULT 1.0,
+          created_at INTEGER NOT NULL,
+          PRIMARY KEY(memory_id,topic_id)
+        );
+
+        CREATE TABLE IF NOT EXISTS memory_proposals (
+          id INTEGER PRIMARY KEY,
+          run_id INTEGER REFERENCES memory_extraction_runs(id) ON DELETE SET NULL,
+          scope TEXT NOT NULL,
+          subject_user_id TEXT NOT NULL,
+          content TEXT NOT NULL,
+          fact_type TEXT NOT NULL,
+          confidence REAL NOT NULL,
+          importance INTEGER NOT NULL,
+          topic TEXT NOT NULL DEFAULT '',
+          status TEXT NOT NULL,
+          reason TEXT NOT NULL DEFAULT '',
+          memory_id INTEGER REFERENCES memories(id) ON DELETE SET NULL,
+          created_at INTEGER NOT NULL,
+          decided_at INTEGER
+        );
+        CREATE INDEX IF NOT EXISTS memory_proposals_scope
+          ON memory_proposals(scope,id DESC);
+        """
+    )
 
 
 class MemoryStore(SqliteRepository):
@@ -223,6 +320,183 @@ class MemoryStore(SqliteRepository):
         self.embedder = embedder
         return self
 
+    # ---------------------------------------------------------- extraction audit
+
+    def extraction_cursor(self, scope: str) -> int:
+        row = self.db.execute(
+            "SELECT last_message_id FROM memory_extraction_state WHERE scope=?",
+            (scope,),
+        ).fetchone()
+        return int(row[0]) if row else 0
+
+    def start_extraction(
+        self, scope: str, start_message_id: int, end_message_id: int,
+        message_count: int, *, strategy_version: str, model_name: str = "",
+        now: int | None = None,
+    ) -> int:
+        now = int(now or time.time())
+        cursor = self.db.execute(
+            "INSERT INTO memory_extraction_runs(scope,start_message_id,end_message_id,"
+            "message_count,strategy_version,model_name,status,started_at) "
+            "VALUES(?,?,?,?,?,?,'running',?)",
+            (scope, start_message_id, end_message_id, message_count,
+             strategy_version, model_name, now),
+        )
+        return int(cursor.lastrowid)
+
+    def finish_extraction(
+        self, run_id: int, *, status: str, raw_result: str = "",
+        accepted_count: int = 0, rejected_count: int = 0, error: str = "",
+        advance_to: int | None = None, now: int | None = None,
+    ) -> None:
+        now = int(now or time.time())
+        with self.transaction():
+            row = self.db.execute(
+                "SELECT scope FROM memory_extraction_runs WHERE id=?", (run_id,)
+            ).fetchone()
+            self.db.execute(
+                "UPDATE memory_extraction_runs SET status=?,raw_result=?,"
+                "accepted_count=?,rejected_count=?,error=?,finished_at=? WHERE id=?",
+                (status, raw_result[:20000], accepted_count, rejected_count,
+                 error[:1000], now, run_id),
+            )
+            if row is not None and advance_to is not None:
+                self.db.execute(
+                    "INSERT INTO memory_extraction_state(scope,last_message_id,updated_at) "
+                    "VALUES(?,?,?) ON CONFLICT(scope) DO UPDATE SET "
+                    "last_message_id=MAX(last_message_id,excluded.last_message_id),"
+                    "updated_at=excluded.updated_at",
+                    (row[0], int(advance_to), now),
+                )
+
+    def extraction_runs(self, scope: str | None = None, limit: int = 50) -> list[dict]:
+        if scope:
+            rows = self.db.execute(
+                "SELECT * FROM memory_extraction_runs WHERE scope=? ORDER BY id DESC LIMIT ?",
+                (scope, max(1, int(limit))),
+            ).fetchall()
+        else:
+            rows = self.db.execute(
+                "SELECT * FROM memory_extraction_runs ORDER BY id DESC LIMIT ?",
+                (max(1, int(limit)),),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+    def record_proposal(self, run_id: int | None, scope: str, proposal) -> int:
+        now = int(time.time())
+        cursor = self.db.execute(
+            "INSERT INTO memory_proposals(run_id,scope,subject_user_id,content,"
+            "fact_type,confidence,importance,topic,status,created_at) "
+            "VALUES(?,?,?,?,?,?,?,?, 'pending',?)",
+            (run_id, scope, proposal.subject_user_id, proposal.content,
+             proposal.fact_type, proposal.confidence, proposal.importance,
+             proposal.topic, now),
+        )
+        return int(cursor.lastrowid)
+
+    def decide_proposal(
+        self, proposal_id: int, status: str, reason: str,
+        memory_id: int | None = None,
+    ) -> None:
+        self.db.execute(
+            "UPDATE memory_proposals SET status=?,reason=?,memory_id=?,decided_at=? WHERE id=?",
+            (status, reason[:500], memory_id, int(time.time()), proposal_id),
+        )
+
+    # ---------------------------------------------------------- provenance/topics
+
+    def attach_evidence(self, memory_id: int, evidence) -> int:
+        """Attach source observations idempotently to one memory."""
+        added = 0
+        now = int(time.time())
+        with self.transaction():
+            for item in evidence:
+                cursor = self.db.execute(
+                    "INSERT OR IGNORE INTO memory_evidence(memory_id,event_id,user_id,"
+                    "excerpt,observed_at,weight,created_at) VALUES(?,?,?,?,?,?,?)",
+                    (int(memory_id), item.event_id, item.user_id,
+                     item.excerpt[:500], int(item.observed_at),
+                     max(0.0, min(1.0, float(item.weight))), now),
+                )
+                added += cursor.rowcount or 0
+        return added
+
+    def evidence(self, memory_id: int) -> list[dict]:
+        rows = self.db.execute(
+            "SELECT * FROM memory_evidence WHERE memory_id=? ORDER BY observed_at,id",
+            (int(memory_id),),
+        ).fetchall()
+        return [dict(row) for row in rows]
+
+    def record_revision(
+        self, memory_id: int, action: str, *, old_content: str = "",
+        new_content: str = "", reason: str = "", source_event_id: str | None = None,
+    ) -> None:
+        self.db.execute(
+            "INSERT INTO memory_revisions(memory_id,action,old_content,new_content,"
+            "reason,source_event_id,created_at) VALUES(?,?,?,?,?,?,?)",
+            (int(memory_id), action, old_content, new_content, reason[:500],
+             source_event_id, int(time.time())),
+        )
+
+    def revisions(self, memory_id: int) -> list[dict]:
+        rows = self.db.execute(
+            "SELECT * FROM memory_revisions WHERE memory_id=? ORDER BY id DESC",
+            (int(memory_id),),
+        ).fetchall()
+        return [dict(row) for row in rows]
+
+    def upsert_topic(
+        self, scope: str, name: str, *, summary: str = "",
+        confidence: float = 0.5, seen_at: int | None = None,
+    ) -> int | None:
+        name = " ".join(name.strip().split())[:100]
+        if not name:
+            return None
+        now = int(seen_at or time.time())
+        existing = self.db.execute(
+            "SELECT summary FROM memory_topics WHERE scope=? AND canonical_name=?",
+            (scope, name),
+        ).fetchone()
+        compiled = str(existing[0] or "") if existing else ""
+        incoming = " ".join(summary.strip().split())[:300]
+        if incoming and incoming not in compiled:
+            parts = [part.strip() for part in compiled.split("；") if part.strip()]
+            parts.append(incoming)
+            compiled = "；".join(parts[-3:])[:1000]
+        self.db.execute(
+            "INSERT INTO memory_topics(scope,canonical_name,summary,confidence,"
+            "first_seen_at,last_seen_at,mention_count) VALUES(?,?,?,?,?,?,1) "
+            "ON CONFLICT(scope,canonical_name) DO UPDATE SET "
+            "summary=CASE WHEN excluded.summary!='' THEN excluded.summary ELSE summary END,"
+            "confidence=MAX(confidence,excluded.confidence),last_seen_at=MAX(last_seen_at,excluded.last_seen_at),"
+            "mention_count=mention_count+1",
+            (scope, name, compiled, max(0.0, min(1.0, confidence)), now, now),
+        )
+        row = self.db.execute(
+            "SELECT id FROM memory_topics WHERE scope=? AND canonical_name=?",
+            (scope, name),
+        ).fetchone()
+        return int(row[0]) if row else None
+
+    def link_topic(self, memory_id: int, topic_id: int, weight: float = 1.0) -> None:
+        self.db.execute(
+            "INSERT INTO memory_topic_links(memory_id,topic_id,weight,created_at) "
+            "VALUES(?,?,?,?) ON CONFLICT(memory_id,topic_id) DO UPDATE SET "
+            "weight=MAX(weight,excluded.weight)",
+            (int(memory_id), int(topic_id), max(0.0, min(1.0, weight)), int(time.time())),
+        )
+
+    def topics(self, scope: str | None = None, limit: int = 100) -> list[dict]:
+        clause, params = ("WHERE t.scope=?", (scope,)) if scope else ("", ())
+        rows = self.db.execute(
+            "SELECT t.*,count(l.memory_id) AS memory_count FROM memory_topics t "
+            "LEFT JOIN memory_topic_links l ON l.topic_id=t.id "
+            f"{clause} GROUP BY t.id ORDER BY t.last_seen_at DESC LIMIT ?",
+            (*params, max(1, int(limit))),
+        ).fetchall()
+        return [dict(row) for row in rows]
+
     # ------------------------------------------------------------------ write
 
     def observe(
@@ -239,6 +513,8 @@ class MemoryStore(SqliteRepository):
         visibility: str = "group",
         expires_at: int | None = None,
         supersede: bool = False,
+        persona_summary: str = "",
+        mention_policy: str = "soft_echo",
         now: int | None = None,
     ) -> dict:
         """Idempotent write. Returns an outcome describing what happened.
@@ -256,6 +532,11 @@ class MemoryStore(SqliteRepository):
             raise ValueError(f"unknown visibility: {visibility}")
         now = int(now or time.time())
         confidence = max(0.0, min(1.0, float(confidence)))
+        mention_policy = (
+            mention_policy if mention_policy in
+            {"direct", "soft_echo", "tone_only", "avoid_unless_asked"}
+            else "soft_echo"
+        )
         status = ACTIVE if confidence >= CANDIDATE_CONFIDENCE else CANDIDATE
         key = dedupe_key(scope, subject_user_id, content)
         # Network call, deliberately outside the write transaction.
@@ -266,7 +547,11 @@ class MemoryStore(SqliteRepository):
                 "SELECT * FROM memories WHERE dedupe_key=?", (key,)
             ).fetchone()
             if row is not None:
-                return self._reinforce_row(row, confidence, status, now)
+                return self._reinforce_row(
+                    row, confidence, status, now,
+                    persona_summary=persona_summary,
+                    mention_policy=mention_policy,
+                )
             retired = 0
             if supersede:
                 retired = self._retire_similar(scope, subject_user_id, content, now=now)
@@ -274,8 +559,8 @@ class MemoryStore(SqliteRepository):
                 "INSERT INTO memories(scope,user_id,content,importance,source_event_id,"
                 "created_at,fact_type,confidence,status,visibility,origin_user_id,"
                 "expires_at,last_accessed_at,access_count,dedupe_key,embedding,"
-                "embedding_model,updated_at) "
-                "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,NULL,0,?,?,?,?)",
+                "embedding_model,updated_at,persona_summary,mention_policy) "
+                "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,NULL,0,?,?,?,?,?,?)",
                 (
                     scope,
                     subject_user_id,
@@ -293,6 +578,8 @@ class MemoryStore(SqliteRepository):
                     _encode_vector(embedding) if embedding else None,
                     self._embedding_name() if embedding else None,
                     now,
+                    persona_summary.strip()[:120],
+                    mention_policy,
                 ),
             )
         return {
@@ -324,13 +611,22 @@ class MemoryStore(SqliteRepository):
         )
         return int(outcome["memory_id"])
 
-    def _reinforce_row(self, row, confidence: float, status: str, now: int) -> dict:
+    def _reinforce_row(
+        self, row, confidence: float, status: str, now: int, *,
+        persona_summary: str = "", mention_policy: str = "soft_echo",
+    ) -> dict:
         merged = min(1.0, max(float(row["confidence"]), confidence) + REINFORCE_STEP)
         new_status = ACTIVE if merged >= CANDIDATE_CONFIDENCE else status
         self.db.execute(
             "UPDATE memories SET confidence=?, status=?, updated_at=?, "
-            "last_accessed_at=?, access_count=access_count+1 WHERE id=?",
-            (merged, new_status, now, now, row["id"]),
+            "last_accessed_at=?, access_count=access_count+1,"
+            "persona_summary=CASE WHEN ?!='' THEN ? ELSE persona_summary END,"
+            "mention_policy=? WHERE id=?",
+            (
+                merged, new_status, now, now,
+                persona_summary.strip(), persona_summary.strip()[:120],
+                mention_policy, row["id"],
+            ),
         )
         return {
             "outcome": "reinforced",
@@ -466,10 +762,32 @@ class MemoryStore(SqliteRepository):
                 existing["vector"] = row["vector"]
             else:
                 rows[row["id"]] = row
+        for row in self._topic_rows(scope, query, subject_user_id, include_candidates, now, limit):
+            rows.setdefault(row["id"], row)
         for row in rows.values():
             # Raw blobs are not JSON serialisable and the recall tool dumps rows.
             row.pop("embedding", None)
         return list(rows.values())
+
+    def _topic_rows(
+        self, scope: str, query: str, subject_user_id: str | None,
+        include_candidates: bool, now: int, limit: int,
+    ) -> list[dict]:
+        tokens = self._tokens(query)
+        if not tokens:
+            return []
+        where, params = self._filters(scope, subject_user_id, include_candidates, now)
+        matched = " OR ".join("t.canonical_name LIKE ? OR t.summary LIKE ?" for _ in tokens)
+        patterns = [value for token in tokens for value in (f"%{token}%", f"%{token}%")]
+        rows = self.db.execute(
+            "SELECT m.*,NULL AS lexical,NULL AS vector,'topic' AS match "
+            "FROM memory_topics t JOIN memory_topic_links l ON l.topic_id=t.id "
+            "JOIN memories m ON m.id=l.memory_id "
+            f"WHERE t.scope=? AND ({matched}) AND {where} "
+            "ORDER BY l.weight DESC,t.last_seen_at DESC LIMIT ?",
+            (scope, *patterns, *params, max(1, int(limit))),
+        ).fetchall()
+        return [dict(row) for row in rows]
 
     def search_memories(
         self, scope: str, query: str, limit: int = 5, **kwargs

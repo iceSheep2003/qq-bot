@@ -26,6 +26,7 @@ from qunbot.scheduling import (
     next_occurrence,
 )
 from qunbot.scheduling.runner import JobRunner
+from qunbot.scheduling.management import ScheduleManagementService
 from support import Store
 
 
@@ -73,6 +74,58 @@ class SchedulingTestCase(unittest.TestCase):
         ).fetchone()
         self.assertIsNotNone(row, "no run was recorded")
         return dict(row)
+
+
+class ScheduleManagementTests(SchedulingTestCase):
+    def manager(self, *jobs):
+        path = self.schedules(*jobs)
+        scheduler = Scheduler(self.store, "Asia/Shanghai", frozenset({"chat"}))
+        scheduler.sync_config(path, frozenset({"42"}))
+
+        async def runner(_job):
+            return None
+
+        return ScheduleManagementService(
+            scheduler, runner, path, frozenset({"42"}), ()
+        )
+
+    def test_create_update_disable_and_delete_keep_json_as_source_of_truth(self):
+        manager = self.manager()
+        created = manager.create({
+            "id": "lunch", "name": "午间问候", "group_id": "42",
+            "kind": "cron", "value": "30 12 * * *", "action": "chat",
+            "prompt": "午休啦", "enabled": True, "payload": {},
+        })
+        self.assertEqual(created["name"], "午间问候")
+        self.assertEqual(manager.jobs()[0]["source"], "config")
+        manager.set_enabled("lunch", False)
+        self.assertEqual(manager.jobs()[0]["enabled"], 0)
+        self.assertFalse(json.loads(manager.files.path.read_text())["jobs"][0]["enabled"])
+        manager.delete("lunch")
+        self.assertEqual(json.loads(manager.files.path.read_text())["jobs"], [])
+        self.assertEqual(manager.jobs(), [])
+        self.assertEqual(self.store.job_by_key("lunch")["enabled"], 0)  # history row retained
+
+    def test_invalid_group_and_past_one_shot_never_reach_the_file(self):
+        manager = self.manager()
+        before = manager.files.path.read_text()
+        with self.assertRaisesRegex(ValueError, "白名单"):
+            manager.create({
+                "id": "bad", "group_id": "99", "kind": "cron",
+                "value": "0 12 * * *", "action": "chat", "prompt": "x",
+            })
+        with self.assertRaisesRegex(ValueError, "future"):
+            manager.create({
+                "id": "past", "group_id": "42", "kind": "at",
+                "value": "2020-01-01T00:00:00+08:00", "action": "chat", "prompt": "x",
+            })
+        self.assertEqual(manager.files.path.read_text(), before)
+
+    def test_preview_uses_scheduler_timezone(self):
+        manager = self.manager()
+        values = manager.preview("cron", "0 7 * * *")
+        self.assertEqual(len(values), 3)
+        self.assertTrue(all(local(value, "Asia/Shanghai").hour == 7 for value in values))
 
 
 class DstTests(SchedulingTestCase):

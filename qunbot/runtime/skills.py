@@ -2,7 +2,7 @@
 
 A skill is *text*, never code. There is no import, no subprocess and no
 filesystem callback anywhere in this module: a ``SKILL.md`` can only put words
-into the dynamic suffix for the turn that selected it. That is a structural
+into either the stable prefix or the dynamic suffix. That is a structural
 property — :class:`Skill` holds strings and nothing callable — and it is what
 lets the bot load instructions written by a deployer without that becoming an
 execution surface.
@@ -27,6 +27,7 @@ and an ASCII trigger like ``meme`` fires inside ``memento``. Matching here is:
 from __future__ import annotations
 
 import logging
+import json
 import re
 import unicodedata
 from dataclasses import dataclass
@@ -102,6 +103,7 @@ class Skill:
     triggers: tuple[str, ...]
     body: str
     priority: int = 0
+    always_on: bool = False
 
     def matches(self, text: str, *, proactive: bool = False) -> int:
         """Score this skill against already-normalized ``text``.
@@ -158,6 +160,70 @@ def _parse_triggers(value: str) -> tuple[str, ...]:
     return tuple(seen)
 
 
+def _selected_sections(body: str, names: tuple[str, ...]) -> str:
+    """Take named sections from an installed upstream skill, unchanged."""
+    lines = body.splitlines()
+    selected: list[str] = []
+    wanted = set(names)
+    copying = False
+    for line in lines:
+        heading = re.match(r"^(#{1,6})\s+(.+?)\s*$", line)
+        if heading:
+            level, title = len(heading.group(1)), heading.group(2).strip()
+            if level == 2:
+                copying = title in wanted
+        if copying:
+            selected.append(line)
+    return "\n".join(selected).strip()
+
+
+def _bot_adapter(path: Path, fields: dict[str, str], body: str) -> tuple[str, tuple[str, ...], str, int, bool] | None:
+    """A local policy for using a third-party skill in this chat bot.
+
+    Upstream files remain intact. The adapter can only select text already in
+    SKILL.md; it cannot load scripts or arbitrary relative paths into a turn.
+    """
+    adapter_path = path.parent / "bot-adapter.json"
+    if not adapter_path.exists():
+        return None
+    try:
+        config = json.loads(adapter_path.read_text(encoding="utf-8"))
+        if not isinstance(config, dict):
+            raise ValueError("adapter must be a JSON object")
+        names = tuple(str(value) for value in config.get("sections", ()))
+        triggers = config.get("triggers", ())
+        if not isinstance(triggers, list):
+            raise ValueError("adapter requires a trigger list")
+        excerpts = _selected_sections(body, names) if names else ""
+        if names and (not excerpts or any(f"## {name}" not in excerpts for name in names)):
+            raise ValueError("adapter names a missing skill section")
+        body_file = str(config.get("body_file") or "")
+        if body_file:
+            # No path traversal or executable asset: only a sibling Markdown
+            # excerpt explicitly installed by the deployer may enter a prompt.
+            if Path(body_file).name != body_file or not body_file.endswith(".md"):
+                raise ValueError("adapter body_file must be a sibling Markdown file")
+            supplemental = (path.parent / body_file).read_text(encoding="utf-8")
+            excerpts = "\n\n".join(part for part in (excerpts, supplemental.strip()) if part)
+        if not excerpts:
+            raise ValueError("adapter has no selected text")
+        maximum = max(300, min(6000, int(config.get("max_chars", 4000))))
+        intro = str(config.get("intro", "")).strip()
+        combined = f"{intro}\n\n{excerpts}".strip()
+        if len(combined) > maximum:
+            raise ValueError("adapter selection exceeds max_chars")
+        description = str(config.get("description") or fields.get("description", "")).strip()
+        trigger_text = ",".join(str(item) for item in triggers)
+        priority = int(config.get("priority", 0))
+        always_on = config.get("always_on", False)
+        if not isinstance(always_on, bool):
+            raise ValueError("always_on must be boolean")
+        return description, _parse_triggers(trigger_text), combined, priority, always_on
+    except (OSError, ValueError, TypeError) as exc:
+        log.warning("Invalid bot adapter %s: %s", adapter_path, exc)
+        return None
+
+
 class SkillCatalog:
     """Instruction-only skills; no arbitrary code execution.
 
@@ -197,12 +263,23 @@ class SkillCatalog:
                 priority = int(fields.get("priority", "0") or 0)
             except ValueError:
                 priority = 0
+            adapter = _bot_adapter(path, fields, body)
+            always_on = False
+            if adapter is not None:
+                description, triggers, body, priority, always_on = adapter
+            elif (path.parent / "bot-adapter.json").exists():
+                # A broken adapter must not fall back to loading the entire
+                # third-party skill, including its Codex-specific workflow.
+                continue
+            else:
+                triggers = _parse_triggers(fields.get("triggers", ""))
             skill = Skill(
                 name=name,
                 description=description,
-                triggers=_parse_triggers(fields.get("triggers", "")),
+                triggers=triggers,
                 body=body.strip(),
                 priority=priority,
+                always_on=always_on,
             )
             by_name[name] = skill
             skills.append(skill)
@@ -223,6 +300,8 @@ class SkillCatalog:
         order = {id(skill): index for index, skill in enumerate(self.skills)}
         scored: list[tuple[int, int, int, Skill]] = []
         for skill in self.skills:
+            if skill.always_on:
+                continue
             score = skill.matches(haystack, proactive=proactive)
             if score > 0:
                 # priority first, then match strength, then declaration order —
@@ -233,4 +312,8 @@ class SkillCatalog:
         return [item[3] for item in scored[:MAX_SELECTED]]
 
     def catalog_text(self) -> str:
-        return "\n".join(f"- {s.name}: {s.description}" for s in self.skills)
+        return "\n".join(f"- {s.name}: {s.description}" for s in self.skills if not s.always_on)
+
+    def stable_instructions(self) -> str:
+        """Operator-enabled, always-on guidance kept identical across turns."""
+        return "\n\n".join(f"{s.name}:\n{s.body}" for s in self.skills if s.always_on)

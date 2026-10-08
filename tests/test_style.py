@@ -13,6 +13,7 @@ from qunbot.domain import MessageEvent
 from qunbot.extensions.features import FeatureHost
 from qunbot.extensions.style_echo import register, validate
 from qunbot.extensions.style_echo.config import StyleEchoConfig
+from qunbot.extensions.style_echo.group import GroupStyle
 from qunbot.extensions.style_echo.guidance import (
     FORBIDDEN_MARKERS,
     GUIDANCE_PREFIX,
@@ -129,6 +130,7 @@ class ConsentTests(StoreTestCase):
         self.assertFalse(config.collecting)
         self.assertFalse(config.accepts(ALLOWED))
 
+
     def test_worker_only_scans_deployer_groups(self):
         echo = self.echo(make_config(), [row(ALLOWED, "在的呀")], groups=("42",))
         echo.run_once()
@@ -153,6 +155,40 @@ class ConsentTests(StoreTestCase):
         echo = self.echo(make_config(max_samples=5), rows)
         echo.collect("group:42")
         self.assertEqual(self.store.count("group:42", ALLOWED), 5)
+
+
+class GroupRhythmTests(StoreTestCase):
+    def test_three_speakers_produce_a_note_without_storing_raw_samples(self):
+        rows = [
+            row("1", "今天状态不错呀"),
+            row("2", "我也刚刷完一套题啦"),
+            row("3", "这群今天挺热闹嘛"),
+            row("1", "早上那道题还挺绕的"),
+            row("2", "我先去吃个饭啦"),
+            row("3", "回来继续收拾错题呀"),
+        ]
+        group = GroupStyle(
+            make_config(allowed_users=frozenset(), min_samples=5),
+            Rows(rows), frozenset({"42"}), now=lambda: 1_000_000,
+        )
+        group.refresh("group:42")
+        note = group.guidance(event("1"))
+        self.assertIn("表达风格参考", note)
+        self.assertNotIn("今天状态不错呀", note)
+        self.assertNotIn("常用疑问语气收尾", note)
+        self.assertEqual(self.store.total(), 0)
+
+    def test_one_speaker_cannot_define_group_rhythm(self):
+        rows = [row("1", f"只有我在说话呀{i}") for i in range(10)]
+        group = GroupStyle(
+            make_config(allowed_users=frozenset(), min_samples=5),
+            Rows(rows), frozenset({"42"}), now=lambda: 1_000_000,
+        )
+        group.refresh("group:42")
+        self.assertIsNone(group.guidance(event("1")))
+        self.assertIsNone(group.guidance(
+            MessageEvent("e2", "group:99", "99", "1", "某人", "你好", (), True, (), 0)
+        ))
 
 
 class DeletionTests(StoreTestCase):
@@ -333,12 +369,17 @@ class RegisterTests(StoreTestCase):
         self.assertEqual(host.workers, [])
         self.assertEqual(host.closers, [])
 
-    def test_enabled_without_consent_registers_nothing(self):
+    def test_enabled_without_individual_roster_registers_group_mode(self):
         with mock.patch.dict("os.environ", env(BOT_STYLE_ECHO_ALLOWED_USERS=""), clear=True):
             host = self.host()
             register(host, self.config(), None)
-        self.assertEqual(host.context.names(), [])
-        self.assertEqual(host.workers, [])
+        try:
+            self.assertEqual(host.context.names(), ["style_echo"])
+            self.assertEqual(len(host.workers), 1)
+            self.assertEqual(len(host.observers), 1)
+            self.assertEqual(self.store.total(), 0)
+        finally:
+            self.close(host)
 
     def test_register_contributes_derived_bounded_context(self):
         with mock.patch.dict("os.environ", env(), clear=True):
@@ -419,6 +460,7 @@ class RegisterTests(StoreTestCase):
             status = validate()
         self.assertFalse(status["collecting"])
         self.assertEqual(status["allowed_users"], 0)
+        self.assertEqual(status["mode"], "group")
 
     def test_package_never_references_or_writes_the_persona_file(self):
         package = (

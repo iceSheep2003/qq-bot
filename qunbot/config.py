@@ -68,6 +68,11 @@ class Config:
     onebot_max_lanes: int = 32
     onebot_request_timeout: float = 20.0
     onebot_max_frame_kb: int = 1024
+    # Short-term room scene. These three independent bounds keep the window
+    # adaptive without allowing a busy group to explode prompt cost.
+    conversation_window_messages: int = 40
+    conversation_window_seconds: int = 300
+    conversation_window_chars: int = 4800
     # Reasoning budget sent to the provider, or "" to send no field. A chat bot
     # spends most of its latency thinking: measured against the local proxy, a
     # short reply cost ~1500 reasoning tokens at the default and ~830 at "low",
@@ -146,6 +151,12 @@ class Config:
                 "BOT_ONEBOT_REQUEST_TIMEOUT must be positive, "
                 f"got {self.onebot_request_timeout}"
             )
+        if not 4 <= self.conversation_window_messages <= 80:
+            raise ConfigError("BOT_CONVERSATION_WINDOW_MESSAGES must be 4..80")
+        if not 30 <= self.conversation_window_seconds <= 3600:
+            raise ConfigError("BOT_CONVERSATION_WINDOW_SECONDS must be 30..3600")
+        if not 400 <= self.conversation_window_chars <= 12000:
+            raise ConfigError("BOT_CONVERSATION_WINDOW_CHARS must be 400..12000")
         # Checked here rather than at the first reply: a typo would otherwise
         # surface as slow turns with no explanation.
         normalize_reasoning_effort(self.model_reasoning_effort)
@@ -194,6 +205,15 @@ class Config:
                 1.0, float(os.getenv("BOT_ONEBOT_REQUEST_TIMEOUT", "20.0"))
             ),
             onebot_max_frame_kb=max(1, integer("BOT_ONEBOT_MAX_FRAME_KB", 1024)),
+            conversation_window_messages=integer(
+                "BOT_CONVERSATION_WINDOW_MESSAGES", 40
+            ),
+            conversation_window_seconds=integer(
+                "BOT_CONVERSATION_WINDOW_SECONDS", 300
+            ),
+            conversation_window_chars=integer(
+                "BOT_CONVERSATION_WINDOW_CHARS", 4800
+            ),
             extensions=(
                 ids("BOT_EXTENSIONS")
                 if "BOT_EXTENSIONS" in os.environ

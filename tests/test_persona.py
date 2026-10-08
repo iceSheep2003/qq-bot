@@ -289,7 +289,10 @@ class RegistrationTests(unittest.TestCase):
         self.assertEqual(host.context.names(), [])
         self.assertEqual(host.observers, [])
         self.assertEqual(host.closers, [])
-        self.assertEqual(persona.validate(), {"enabled": False, "ttl_minutes": 30})
+        self.assertEqual(
+            persona.validate(),
+            {"enabled": False, "ttl_minutes": 30, "proposals_enabled": False},
+        )
 
     def test_enabled_contributes_as_low_priority_derived_context(self):
         host = self.host()

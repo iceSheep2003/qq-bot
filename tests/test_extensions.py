@@ -144,7 +144,7 @@ class ManifestTableTests(unittest.TestCase):
 
     def test_job_extensions_declare_the_actions_they_register(self):
         registered = build_registry(config("scheduled_chat")).actions()
-        self.assertEqual(registered, {"chat", "continuation"})
+        self.assertEqual(registered, {"chat", "deliver", "continuation"})
         for manifest in MANIFESTS.values():
             if manifest.kind is ExtensionKind.JOB:
                 with self.subTest(extension=manifest.name):
@@ -287,7 +287,11 @@ class ResolvePlanTests(FakeModuleMixin):
         self.assertEqual([m.name for m in plan.background], ["proactive_chat"])
         self.assertEqual(
             plan.actions(),
-            {"chat": "scheduled_chat", "continuation": "scheduled_chat"},
+            {
+                "chat": "scheduled_chat",
+                "deliver": "scheduled_chat",
+                "continuation": "scheduled_chat",
+            },
         )
 
 
@@ -793,14 +797,14 @@ class LoaderInterfaceTests(unittest.TestCase):
         self.assertIsInstance(host.tools, ToolRegistry)
         self.assertEqual(host.tools.schemas(), [])
 
-    def test_enabled_skills_is_unchanged_by_the_manifest_move(self):
+    def test_enabled_skills_includes_the_group_social_playbook(self):
         self.assertEqual(
             enabled_skills(config()),
-            frozenset({"group-chat"}),
+            frozenset({"group-chat", "goutoujunshi", "goutoujunshi-conversation"}),
         )
         self.assertEqual(
             enabled_skills(config("memes", "voice", "proactive_chat")),
-            frozenset({"group-chat", "meme", "voice", "proactive-chat"}),
+            frozenset({"group-chat", "goutoujunshi", "goutoujunshi-conversation", "meme", "voice", "proactive-chat"}),
         )
 
     def test_validate_features_reports_every_enabled_feature(self):
@@ -955,6 +959,36 @@ class SkillTriggerTests(unittest.TestCase):
         self.skill("good", "name: good\ndescription: 描述\ntriggers: 你好")
         catalog = self.catalog()
         self.assertEqual(catalog.catalog_text(), "- good: 描述")
+
+    def test_installed_goutoujunshi_uses_only_group_chat_excerpt(self):
+        installed = Path(__file__).resolve().parents[1] / "skills"
+        catalog = self.catalog_class(installed, frozenset({"group-chat", "goutoujunshi"}))
+        self.assertNotIn("goutoujunshi", [s.name for s in catalog.select("408 怎么复习 群聊")])
+        self.assertNotIn("goutoujunshi", [s.name for s in catalog.select("我想表白喜欢的人 群聊")])
+        skill = catalog.by_name("goutoujunshi")
+        self.assertTrue(skill.always_on)
+        self.assertIn("goutoujunshi", catalog.stable_instructions())
+        self.assertIn("一句话只做一件事", catalog.stable_instructions())
+        self.assertIn("不凭一句话给别人扣“PUA”帽子", skill.body)
+        self.assertNotIn("先让我认识你和局面", skill.body)
+        self.assertNotIn("memory_store.py", skill.body)
+
+    def test_conversation_playbook_loads_for_every_group_scene(self):
+        installed = Path(__file__).resolve().parents[1] / "skills"
+        catalog = self.catalog_class(installed, enabled_skills(config()))
+        for text in ("408 怎么复习 群聊", "今晚吃啥 群聊", "我想表白喜欢的人 群聊", "那她呢 群聊"):
+            self.assertIn("goutoujunshi-conversation", [s.name for s in catalog.select(text)])
+        self.assertNotIn("goutoujunshi-conversation", [s.name for s in catalog.select("今晚吃啥")])
+
+    def test_adapter_cannot_read_outside_its_skill_directory(self):
+        self.skill("bad", "name: bad\ndescription: d\ntriggers: 你好")
+        (self.root / "bad" / "bot-adapter.json").write_text(
+            '{"sections":[],"triggers":["你好"],"body_file":"../secret.md"}',
+            encoding="utf-8",
+        )
+        with self.assertLogs("qunbot.runtime.skills", level="WARNING"):
+            catalog = self.catalog()
+        self.assertIsNone(catalog.by_name("bad"))
 
     def test_a_skill_is_text_and_cannot_do_anything(self):
         """The instruction-only guarantee, checked structurally.

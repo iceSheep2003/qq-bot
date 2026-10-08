@@ -1,0 +1,11 @@
+{
+  "description": "狗头军师官方 Skill：常驻的情绪承接与社交校准原则。",
+  "always_on": true,
+  "triggers": [],
+  "sections": [],
+  "body_file": "bot-core.md",
+  "intro": "狗头军师的群聊版社交直觉。用它在幕后判断，不要报理论名、念步骤或变成咨询师。",
+  "max_chars": 4000,
+  "source": "https://github.com/shengjidaguai-china/goutoujunshi",
+  "revision": "6db7354a4002dc7c448a9c87ffdad8132570c9d3"
+}

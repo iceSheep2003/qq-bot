@@ -66,12 +66,13 @@ class ReplyMediaProcessor:
         return parse_outbound(text, allowed_at=allowed_at)
 
     async def compose_message(
-        self, text: str, *, allowed_at: Collection[str] | None = None
+        self, text: str, *, allowed_at: Collection[str] | None = None,
+        voice_style: str = "neutral",
     ) -> OutboundMessage:
         """Parse, then resolve each media part. Never raises for media faults."""
-        return await self.resolve(self.parse(text, allowed_at=allowed_at))
+        return await self.resolve(self.parse(text, allowed_at=allowed_at), voice_style=voice_style)
 
-    async def resolve(self, message: OutboundMessage) -> OutboundMessage:
+    async def resolve(self, message: OutboundMessage, *, voice_style: str = "neutral") -> OutboundMessage:
         resolved = []
         for part in message.parts:
             if isinstance(part, Image):
@@ -86,7 +87,7 @@ class ReplyMediaProcessor:
                         Image(source=source, tag=part.tag or part.ref, ref=part.ref)
                     )
             elif isinstance(part, Voice):
-                source = part.source or await self._synthesize(part.text)
+                source = part.source or await self._synthesize(part.text, voice_style=voice_style)
                 if source and not valid_voice_source(source):
                     log.warning("Dropping invalid voice source")
                     source = ""
@@ -105,12 +106,15 @@ class ReplyMediaProcessor:
             log.exception("Meme lookup failed for tag %r", tag)
             return ""
 
-    async def _synthesize(self, text: str) -> str:
+    async def _synthesize(self, text: str, *, voice_style: str = "neutral") -> str:
         # No provider configured (voice disabled) means no client exists and no
         # request is attempted; the reply is simply text.
         if self.speech is None or not text:
             return ""
         try:
+            styled = getattr(self.speech, "synthesize_styled", None)
+            if callable(styled):
+                return await styled(text[:300], voice_style) or ""
             return await self.speech.synthesize(text[:300]) or ""
         except Exception:
             log.exception("Speech synthesis failed; sending text fallback")

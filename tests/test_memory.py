@@ -18,7 +18,7 @@ from support import Store
 from qunbot.domain import MessageEvent
 from qunbot.memory import dedupe, ranking, text
 from qunbot.memory.embeddings import HashingEmbedder, embeddings_from_env
-from qunbot.memory.models import MemoryItem, RetrievalHit
+from qunbot.memory.models import MemoryEvidence, MemoryItem, RetrievalHit
 from qunbot.memory.service import MemoryService
 from qunbot.runtime.agent import Agent
 from qunbot.runtime.skills import SkillCatalog
@@ -125,6 +125,8 @@ class MemoryStoreTests(unittest.TestCase):
                 "dedupe_key",
                 "embedding",
                 "updated_at",
+                "persona_summary",
+                "mention_policy",
             ):
                 self.assertIn(column, columns)
             store = MemoryStore(database)
@@ -503,6 +505,20 @@ class MemoryServiceTests(unittest.TestCase):
         row = self.store.list_memories(SCOPE)[0]
         self.assertEqual(row["access_count"], 1)
 
+    def test_structured_recall_separates_fact_from_persona_use(self):
+        self.service.remember(
+            SCOPE, "7", "小明不喜欢被连续追问",
+            fact_type="boundary", visibility="group",
+            persona_summary="说完重点就停一下，给他留空间",
+            mention_policy="tone_only",
+        )
+        context = self.service.related_context(SCOPE, "连续追问")
+        item = context["items"][0]
+        self.assertEqual(item["fact"], "小明不喜欢被连续追问")
+        self.assertEqual(item["persona_hint"], "说完重点就停一下，给他留空间")
+        self.assertEqual(item["mention_policy"], "tone_only")
+        self.assertIn("禁止说出记忆内容", context["usage_rule"])
+
     def test_related_focus_comes_from_the_latest_message(self):
         self.store.add_message("e1", SCOPE, "7", "小明", "user", "你好")
         self.service.remember(SCOPE, "7", "小明喜欢蓝莓蛋糕", visibility="personal")
@@ -544,8 +560,14 @@ class MemoryServiceTests(unittest.TestCase):
         self.assertEqual(injected, ["小明不喜欢蓝莓蛋糕"])
 
     def test_explicit_forget_api(self):
-        memory_id = self.service.remember(SCOPE, "7", "小明喜欢蓝莓蛋糕")["memory_id"]
+        memory_id = self.service.remember(
+            SCOPE, "7", "小明喜欢蓝莓蛋糕",
+            evidence=(MemoryEvidence("m1", "7", "我喜欢蓝莓蛋糕", 10),),
+            topic="甜品偏好",
+        )["memory_id"]
+        self.assertEqual(len(self.store.evidence(memory_id)), 1)
         self.assertEqual(self.service.forget_memory(memory_id), 1)
+        self.assertEqual(self.store.evidence(memory_id), [])
         self.assertEqual(self.service.stats(SCOPE)["total"], 0)
         self.service.remember(SCOPE, "8", "小红喜欢草莓")
         self.assertEqual(self.service.forget_scope(SCOPE), 1)
@@ -580,6 +602,44 @@ class MemoryServiceTests(unittest.TestCase):
         self.assertEqual(rows[0]["visibility"], "personal")
         self.assertEqual(rows[0]["user_id"], "7")
 
+    def test_extract_records_batch_evidence_topic_and_revision(self):
+        self.store.add_message("m1", SCOPE, "7", "小明", "user", "我准备考计算机统考")
+        self.store.add_message("m2", SCOPE, "7", "小明", "user", "最近主要在复习408")
+        model = FakeModel(json.dumps([{
+            "user_id": "7", "fact": "小明正在准备计算机统考",
+            "fact_type": "event", "confidence": 0.85, "importance": 4,
+            "topic": "计算机考研", "evidence_event_ids": ["m1", "m2"],
+        }], ensure_ascii=False))
+        service = MemoryService(model, self.store, self.store, embeddings=False)
+        asyncio.run(service.extract(SCOPE))
+
+        memory = self.store.list_memories(SCOPE)[0]
+        self.assertEqual([row["event_id"] for row in self.store.evidence(memory["id"])], ["m1", "m2"])
+        self.assertEqual(self.store.topics(SCOPE)[0]["canonical_name"], "计算机考研")
+        self.assertEqual(self.store.topics(SCOPE)[0]["memory_count"], 1)
+        self.assertEqual(self.store.revisions(memory["id"])[0]["action"], "inserted")
+        run = self.store.extraction_runs(SCOPE)[0]
+        self.assertEqual(run["status"], "succeeded")
+        self.assertEqual(run["accepted_count"], 1)
+        self.assertEqual(self.store.extraction_cursor(SCOPE), 2)
+        detail = service.memory_detail(memory["id"])
+        self.assertEqual(len(detail["evidence"]), 2)
+        self.assertEqual(service.overview(SCOPE)["topics"], 1)
+
+    def test_extraction_is_incremental_and_does_not_resend_old_messages(self):
+        self.store.add_message("m1", SCOPE, "7", "小明", "user", "我喜欢蓝莓蛋糕")
+        model = FakeModel("[]")
+        service = MemoryService(model, self.store, self.store, embeddings=False)
+        asyncio.run(service.extract(SCOPE))
+        asyncio.run(service.extract(SCOPE))
+        self.assertEqual(model.calls, 1)
+        self.store.add_message("m2", SCOPE, "7", "小明", "user", "我也喜欢芝士")
+        asyncio.run(service.extract(SCOPE))
+        self.assertEqual(model.calls, 2)
+        runs = self.store.extraction_runs(SCOPE)
+        self.assertEqual(runs[0]["start_message_id"], 2)
+        self.assertEqual(runs[0]["end_message_id"], 2)
+
     def test_extract_marks_group_level_facts_shared(self):
         self.store.add_message("m1", SCOPE, "7", "小明", "user", "每周五开黑")
         model = FakeModel(
@@ -601,6 +661,9 @@ class MemoryServiceTests(unittest.TestCase):
         )
         asyncio.run(service.extract(SCOPE))
         self.assertEqual(self.store.list_memories(SCOPE), [])
+        run = self.store.extraction_runs(SCOPE)[0]
+        self.assertEqual(run["status"], "failed")
+        self.assertEqual(self.store.extraction_cursor(SCOPE), 0)
 
     def test_extract_low_confidence_becomes_candidate(self):
         self.store.add_message("m1", SCOPE, "7", "小明", "user", "我好像要去北京")
@@ -681,7 +744,7 @@ class StablePrefixTests(unittest.TestCase):
         service.remember(SCOPE, "7", "小明喜欢蓝莓蛋糕", visibility="group")
         agent = self.agent(service)
         messages = agent.build_messages(
-            MessageEvent("e1", SCOPE, "42", "7", "小明", "蓝莓蛋糕", (), True, (), 0)
+            MessageEvent("e1", SCOPE, "42", "7", "小明", "小明你喜欢什么口味的蛋糕呀", (), True, (), 0)
         )
         self.assertEqual(messages[0]["content"], agent.stable_prefix())
         self.assertNotIn("蓝莓蛋糕", messages[0]["content"])

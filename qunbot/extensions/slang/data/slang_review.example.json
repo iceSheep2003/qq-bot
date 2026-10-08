@@ -13,15 +13,32 @@
     "file keeps the previous decisions and logs loudly rather than clearing",
     "them.",
     "",
+    "'meanings' is where you say what a term means in this group. A term with",
+    "no meaning is never injected — a bare word teaches the model nothing, so",
+    "approving without defining gets you nothing. Write the definition in your",
+    "own words, not the model's.",
+    "",
+    "A human meaning outranks anything inferred later: a re-learning pass cannot",
+    "overwrite it. To hand a term back to the model, write null for it (see",
+    "'reset' below) — that clears the override and lets inference resume.",
+    "",
     "The top-level lists apply to every group. A group that wants its own",
     "decisions overrides them under 'scopes' by scope key (group:<群号>)."
   ],
   "approve": ["上大分", "开摆"],
+  "meanings": {
+    "上大分": "本群指考得好、游戏大胜，或只是单纯拿到了好处",
+    "开摆": "放弃努力、摆烂，语气通常是自嘲"
+  },
   "reject": ["示例词，请删掉"],
   "reset": [],
   "scopes": {
     "group:123456789": {
       "approve": ["本群独有的说法"],
+      "meanings": {
+        "本群独有的说法": "这个群里它特指……（写清楚，否则不会被注入）",
+        "交给模型继续推断的词": null
+      },
       "reject": ["这个群不要说的词"]
     }
   }

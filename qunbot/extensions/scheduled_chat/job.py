@@ -20,8 +20,10 @@ action carries a private timer.
 from __future__ import annotations
 
 import time
+from collections.abc import Mapping
 
 from ...domain import JobSkipped
+from ...replies import ReplyDraft
 from ...scheduling import guards
 from ...scheduling.registry import JobRuntime, JobSuggestion, suggestion
 from .engine import DEFAULT_PROMPT, ProactiveChat, mood_gate
@@ -52,22 +54,75 @@ class ChatJobHandler:
         ]
 
     async def run(self, bot: JobRuntime, job: dict) -> None:
-        policy, group_id = bot.policy, job["group_id"]
+        group_id = job["group_id"]
         scope = f"group:{group_id}"
-        guards.enforce_daily_limit(
-            bot, group_id, source="cron", limit=policy.job_daily_limit
-        )
-        guards.enforce_cooldown(bot, scope)
-        recent = guards.enforce_group_awake(bot, scope)
+        # A configured cron job is an operator command, not an opportunistic
+        # water-the-group attempt.  It runs at its time regardless of whether
+        # the room is active or the bot spoke recently.
         event = bot.job_event(job, int(time.time()))
         async with bot.scope_lock(scope):
             reply = await bot.agent.reply(event, proactive=True)
-            guards.enforce_fresh_text(
-                (reply.text or "").strip(), recent, max_chars=policy.job_max_chars
-            )
-            clean = await bot.send_reply(group_id, None, reply.text.strip())
-            if clean:
-                guards.record(bot, job, event, clean, "cron")
+            # Preserve the structured channel decision.  Flattening this to
+            # reply.text silently turned scheduled voice/meme replies into
+            # text-only messages.
+            draft = getattr(reply, "draft", None)
+            if draft is not None and callable(getattr(bot, "send_draft", None)):
+                clean = await bot.send_draft(group_id, None, draft, event=event)
+            else:
+                clean = await bot.send_reply(group_id, None, reply.text.strip())
+            if not clean:
+                raise JobSkipped("scheduled model produced no output")
+            guards.record(bot, job, event, clean, "cron")
+
+
+class DeliveryJobHandler:
+    """Deliver an operator-authored media draft without asking the model.
+
+    This is the deterministic cron primitive for announcements and deployment
+    probes.  It is only reachable from trusted schedule configuration/database
+    rows; chat users have no command surface that can create one.
+    """
+
+    action = "deliver"
+
+    def suggested_jobs(self) -> list[JobSuggestion]:
+        return []
+
+    @staticmethod
+    def validate_payload(payload: Mapping) -> None:
+        text = payload.get("text")
+        channels = payload.get("channels", ["text"])
+        if not isinstance(text, str) or not text.strip() or len(text) > 300:
+            raise ValueError("deliver payload.text must contain 1-300 characters")
+        if (
+            not isinstance(channels, list)
+            or not channels
+            or any(item not in {"text", "voice", "meme"} for item in channels)
+        ):
+            raise ValueError("deliver payload.channels must contain text, voice and/or meme")
+        if "meme" in channels and not str(payload.get("meme_tag") or "").strip():
+            raise ValueError("deliver payload.meme_tag is required for meme")
+
+    async def run(self, bot: JobRuntime, job: dict) -> None:
+        group_id = job["group_id"]
+        scope = f"group:{group_id}"
+        payload = dict(bot.job_spec(job).payload)
+        self.validate_payload(payload)
+        text = payload["text"].strip()
+        channels = tuple(dict.fromkeys(payload.get("channels", ["text"])))
+        event = bot.job_event(job, int(time.time()))
+        draft = ReplyDraft(
+            text=text,
+            channels=channels,
+            voice_text=str(payload.get("voice_text") or text).strip()[:300],
+            meme_tag=str(payload.get("meme_tag") or "").strip()[:40],
+            intent="scheduled_delivery",
+        )
+        async with bot.scope_lock(scope):
+            clean = await bot.send_draft(group_id, None, draft, event=event)
+            if not clean:
+                raise JobSkipped("media delivery produced no output")
+            guards.record(bot, job, event, clean, "cron")
 
 
 class ContinuationJobHandler:
@@ -120,4 +175,5 @@ def register_jobs(registry, _config) -> None:
     Config must not grow feature fields.
     """
     registry.register(ChatJobHandler())
+    registry.register(DeliveryJobHandler())
     registry.register(ContinuationJobHandler())

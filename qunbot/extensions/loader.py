@@ -200,6 +200,7 @@ class _Snapshot:
     closers: int
     binders: int
     workers: int
+    inbound: int
     # The singleton slots are compared by identity rather than by presence, so
     # one extension silently *replacing* another's media source or reply policy
     # counts as touching that surface.
@@ -215,8 +216,9 @@ class _Snapshot:
             observers=len(host.observers),
             tools=len(host.tools.names()) if host.tools is not None else 0,
             closers=len(host.closers),
-            binders=len(host.binders),
+            binders=len(host.binders) + len(host.management_binders),
             workers=len(host.workers),
+            inbound=len(host.inbound_handlers),
             meme=host.meme_source,
             speech=host.speech_source,
             gate=host.proactive_gate,
@@ -242,6 +244,8 @@ class _Snapshot:
             touched.add(Contribution.BINDER)
         if after.workers > self.workers:
             touched.add(Contribution.BACKGROUND)
+        if after.inbound > self.inbound:
+            touched.add(Contribution.INBOUND)
         if self._replaced(self.meme, after.meme) or self._replaced(
             self.speech, after.speech
         ):
@@ -458,7 +462,7 @@ def _entry_callable(manifest: ExtensionManifest, default_attribute: str):
 
 
 def enabled_skills(config: Config) -> frozenset[str]:
-    names = {"group-chat"}
+    names = {"group-chat", "goutoujunshi", "goutoujunshi-conversation"}
     for extension in getattr(config, "extensions", ()) or ():
         manifest = MANIFESTS.get(extension)
         if manifest is not None:
@@ -536,6 +540,12 @@ def bind_features(features: FeatureHost, service) -> None:
     """Run each feature's wiring callback now that the service exists."""
     for bind in features.binders:
         bind(service)
+
+
+def bind_management(features: FeatureHost, management) -> None:
+    """Bind owner-only application services without widening conversation APIs."""
+    for bind in features.management_binders:
+        bind(management)
 
 
 async def close_features(features: FeatureHost) -> None:

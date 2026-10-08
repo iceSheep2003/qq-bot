@@ -265,6 +265,10 @@ class Scheduler:
             action = str(entry.get("action", DEFAULT_ACTION)).strip() or DEFAULT_ACTION
             prompt = str(entry.get("prompt", "")).strip()
             payload = entry.get("payload")
+            # ``None`` preserves the historical behavior for old files: a
+            # completed one-shot without an explicit flag stays disabled on
+            # restart. WebUI-managed entries always write the flag.
+            enabled = bool(entry["enabled"]) if "enabled" in entry else None
             self._validate_schedule(kind, value, prompt, action, key, payload)
             configured.append(
                 (
@@ -276,6 +280,7 @@ class Scheduler:
                     action,
                     self._next_run(kind, value, now, past_is_ok=True),
                     check_payload(payload, key=key),
+                    enabled,
                 )
             )
 

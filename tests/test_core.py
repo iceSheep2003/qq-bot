@@ -4,6 +4,7 @@ import asyncio
 import tempfile
 import time
 import unittest
+from dataclasses import replace
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -11,6 +12,7 @@ from zoneinfo import ZoneInfo
 import httpx
 
 from qunbot.runtime.agent import Agent
+from qunbot.adapters.model import prefix_fingerprint
 from qunbot.domain import JobSkipped, MessageEvent
 from qunbot.adapters.events import parse_message
 from qunbot.extensions.media import ReplyMediaProcessor
@@ -62,6 +64,12 @@ class CoreTests(unittest.TestCase):
     def tearDown(self):
         self.store.db.close()
         self.temp.cleanup()
+
+    def test_deployed_persona_is_a_general_group_member(self):
+        persona = (Path(__file__).resolve().parents[1] / "config" / "persona.md").read_text(encoding="utf-8")
+        self.assertIn("一名普通成员", persona)
+        self.assertNotIn("ending_walker03 的助理", persona)
+        self.assertNotIn("完整走过一遍计算机考研", persona)
 
     def test_onebot_parse_and_at(self):
         raw = {
@@ -148,6 +156,57 @@ class CoreTests(unittest.TestCase):
         self.assertFalse(
             any(ch.isdigit() for ch in narration), f"narration leaked a score: {narration}"
         )
+
+    def test_persona_file_replacement_reloads_on_next_turn(self):
+        agent = Agent(
+            FakeModel(), self.store, self.store,
+            MemoryService(FakeModel(), self.store, self.store),
+            SkillCatalog(self.root / "skills"), built_in_tools(self.store), self.persona,
+        )
+        self.assertIn("固定人格", agent.stable_prefix())
+        replacement = self.root / "new-persona.md"
+        replacement.write_text("固定人格\n新的表达示例", encoding="utf-8")
+        replacement.replace(self.persona)
+        self.assertIn("新的表达示例", agent.stable_prefix())
+        self.assertEqual(agent.stable_prefix(), agent.stable_prefix())
+
+    def test_relevant_social_skill_is_selected_without_changing_the_cache_prefix(self):
+        installed = Path(__file__).resolve().parents[1] / "skills"
+        agent = Agent(
+            FakeModel(), self.store, self.store,
+            MemoryService(FakeModel(), self.store, self.store),
+            SkillCatalog(installed, frozenset({"group-chat", "goutoujunshi", "goutoujunshi-conversation"})),
+            built_in_tools(self.store), self.persona,
+        )
+        message = replace(event(1, at_bot=True), text="他是不是在PUA我")
+        messages = agent.build_messages(message)
+        self.assertEqual(messages[0]["role"], "system")
+        self.assertEqual(len([m for m in messages if m["role"] == "system"]), 1)
+        self.assertIn("本轮技能若存在", messages[0]["content"])
+        self.assertIn("goutoujunshi-conversation", messages[-1]["content"])
+        self.assertIn("本轮技能", messages[-1]["content"])
+        exam = agent.build_messages(replace(event(2, at_bot=True), text="408怎么复习"))
+        self.assertIn("goutoujunshi-conversation", exam[-1]["content"])
+        self.assertEqual(prefix_fingerprint(messages).prefix_hash,
+                         prefix_fingerprint(exam).prefix_hash)
+
+    def test_bait_cue_reaches_normal_prompt_without_exposing_tools(self):
+        class CaptureModel(FakeModel):
+            def __init__(self): self.calls = []
+            async def complete(self, messages, tools=None, *, temperature=0.7):
+                self.calls.append((messages, tools))
+                return {"choices": [{"message": {"content": '{"text":"这活派得挺顺手呀。","channels":["text"]}'}}]}
+
+        model = CaptureModel()
+        agent = Agent(
+            model, self.store, self.store,
+            MemoryService(model, self.store, self.store),
+            SkillCatalog(self.root / "skills"), built_in_tools(self.store), self.persona,
+        )
+        reply = asyncio.run(agent.reply(replace(event(1, at_bot=True), social_cue="task_bait")))
+        self.assertEqual(reply.text, "这活派得挺顺手呀。")
+        self.assertEqual(model.calls[0][1], [])
+        self.assertIn("社交判断提示", model.calls[0][0][-1]["content"])
 
     def test_private_message_is_ignored_when_disabled(self):
         agent = Agent(
@@ -380,12 +439,11 @@ class ScheduleTests(unittest.TestCase):
         with self.assertRaises(JobSkipped):
             asyncio.run(self.job_runner.run(self.job(action="poster", prompt="")))
 
-    def test_chat_job_is_skipped_when_group_is_quiet(self):
+    def test_configured_chat_job_runs_when_group_is_quiet(self):
         sender = FakeSender()
         service = self.service(sender)
-        with self.assertRaises(JobSkipped):
-            asyncio.run(self.job_runner.run(self.job()))
-        self.assertEqual(sender.sent, [])
+        asyncio.run(self.job_runner.run(self.job()))
+        self.assertEqual([m["text"] for m in sender.sent], ["收到。"])
 
     def test_chat_job_posts_when_group_is_lively(self):
         self.store.add_message("m1", "group:42", "7", "小明", "user", "今天数学好难")
@@ -395,14 +453,13 @@ class ScheduleTests(unittest.TestCase):
         self.assertEqual([m["text"] for m in sender.sent], ["收到。"])
         self.assertEqual(self.store.proactive_count_since("42", 0, "cron"), 1)
 
-    def test_chat_job_respects_cooldown_after_a_reply(self):
+    def test_configured_chat_job_ignores_conversation_cooldown(self):
         self.store.add_message("m1", "group:42", "7", "小明", "user", "在吗")
         sender = FakeSender()
         service = self.service(sender)
         service.last_reply["group:42"] = time.time()
-        with self.assertRaises(JobSkipped):
-            asyncio.run(self.job_runner.run(self.job()))
-        self.assertEqual(sender.sent, [])
+        asyncio.run(self.job_runner.run(self.job()))
+        self.assertEqual([m["text"] for m in sender.sent], ["收到。"])
 
     def test_quota_pools_do_not_starve_each_other(self):
         self.store.log_proactive("42", "随机主动", "random")
@@ -411,14 +468,13 @@ class ScheduleTests(unittest.TestCase):
         self.assertEqual(self.store.proactive_count_since("42", 0, "cron"), 0)
         self.assertEqual(self.store.proactive_count_since("42", 0), 2)
 
-    def test_chat_job_stops_at_its_own_daily_limit(self):
+    def test_explicit_chat_schedule_is_its_own_frequency_limit(self):
         self.store.add_message("m1", "group:42", "7", "小明", "user", "在吗")
         sender = FakeSender()
         service = self.service(sender, policy=self.policy(job_daily_limit=1))
         asyncio.run(self.job_runner.run(self.job()))
-        with self.assertRaises(JobSkipped):
-            asyncio.run(self.job_runner.run(self.job(run_id=2)))
-        self.assertEqual(len(sender.sent), 1)
+        asyncio.run(self.job_runner.run(self.job(run_id=2)))
+        self.assertEqual(len(sender.sent), 2)
 
     def test_handlers_are_registered_explicitly(self):
         registry = JobHandlerRegistry()

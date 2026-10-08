@@ -77,6 +77,7 @@ class Contribution(str, enum.Enum):
     BINDER = "binder"                  # deferred wiring callback
     MEDIA = "media"                    # meme catalogue / speech source
     PROACTIVE_GATE = "proactive_gate"  # veto over unprompted messages
+    INBOUND = "inbound_handler"        # raw OneBot notice/request observer
 
 
 class ExtensionKind(str, enum.Enum):
@@ -255,7 +256,7 @@ def _register(manifest: ExtensionManifest) -> ExtensionManifest:
 _register(
     ExtensionManifest(
         name="scheduled_chat",
-        version="1.0.0",
+        version="1.1.0",
         kind=ExtensionKind.JOB,
         entry="qunbot.extensions.scheduled_chat.job:register_jobs",
         contributes=frozenset({Contribution.JOB_ACTION}),
@@ -264,7 +265,7 @@ _register(
         # configuration enables scheduled_chat but not proactive_chat —
         # hosting the engine in the tick extension would make the default
         # configuration import a disabled package.
-        actions=("chat", "continuation"),
+        actions=("chat", "deliver", "continuation"),
         skills=frozenset({"proactive-chat"}),
         description="定时闲聊：注册 chat（定时）与 continuation（间隔续聊）两个动作",
     )
@@ -273,7 +274,7 @@ _register(
 _register(
     ExtensionManifest(
         name="exam_poster",
-        version="1.0.0",
+        version="1.1.0",
         kind=ExtensionKind.JOB,
         entry="qunbot.extensions.exam_poster.job:register_jobs",
         contributes=frozenset({Contribution.JOB_ACTION}),
@@ -347,26 +348,34 @@ _register(
 _register(
     ExtensionManifest(
         name="persona",
-        version="1.0.0",
+        version="1.1.0",
         kind=ExtensionKind.FEATURE,
         entry="qunbot.extensions.persona",
         contributes=frozenset(
-            {Contribution.CONTEXT, Contribution.OBSERVER, Contribution.CLOSER}
+            {
+                Contribution.CONTEXT,
+                Contribution.OBSERVER,
+                Contribution.CLOSER,
+                # The suggestion queue's worker. It adds rows to a table a
+                # deployer reads and nothing else — no provider, no observer,
+                # no write to the persona file.
+                Contribution.BACKGROUND,
+            }
         ),
         prefers=("mood",),
         max_context_providers=1,
         max_context_chars=200,
-        description="每轮临时性格指引：有界上下文 + 回复后观察者",
+        description="每轮临时性格指引：有界上下文 + 回复后观察者 + 人设建议队列",
     )
 )
 
 _register(
     ExtensionManifest(
         name="reply_policy",
-        version="1.0.0",
+        version="1.1.0",
         kind=ExtensionKind.FEATURE,
         entry="qunbot.extensions.reply_policy",
-        contributes=frozenset({Contribution.REPLY_POLICY}),
+        contributes=frozenset({Contribution.REPLY_POLICY, Contribution.BINDER}),
         max_context_providers=0,
         description="可替换的回复决策策略：只换一个决策，不加任何上下文",
     )
@@ -427,6 +436,90 @@ _register(
         max_context_chars=400,
         max_workers=1,
         description="时间/天气/记忆回放：三个可分别禁用的上下文提供者",
+    )
+)
+
+# Imported at the composition root only: manifests need the same concrete Flag
+# values as the runtime registry in order to compare declared and registered
+# permissions.  Feature packages themselves still depend only on the host API.
+from ..runtime.tools import ToolPermission
+
+_register(
+    ExtensionManifest(
+        name="qq_admin",
+        version="1.0.0",
+        kind=ExtensionKind.FEATURE,
+        entry="qunbot.extensions.qq_admin",
+        contributes=frozenset(
+            {Contribution.TOOL, Contribution.BINDER, Contribution.INBOUND}
+        ),
+        skills=frozenset({"group-files", "qq-admin"}),
+        tools=(
+            ToolDeclaration(
+                "list_group_files",
+                permissions=ToolPermission.READ_GROUP,
+                quota_per_minute=3,
+                description="列出当前群根目录文件",
+            ),
+            ToolDeclaration(
+                "mute_group_member",
+                permissions=ToolPermission.MODERATE_GROUP,
+                quota_per_minute=2,
+                description="由本地管理员授权禁言/解禁成员",
+            ),
+            ToolDeclaration(
+                "set_group_essence",
+                permissions=ToolPermission.MODERATE_GROUP,
+                quota_per_minute=2,
+                description="由本地管理员授权设置/取消群精华",
+            ),
+            ToolDeclaration(
+                "propose_group_title",
+                permissions=ToolPermission.MODERATE_GROUP,
+                quota_per_minute=1,
+                description="由 Bot 提出头衔，经本人同意或群友投票后授予",
+            ),
+        ),
+        max_context_providers=0,
+        description="QQ 群治理：群文件查询、受控禁言/精华、入群审核和欢迎",
+    )
+)
+
+_register(
+    ExtensionManifest(
+        name="qq_channel",
+        version="1.0.0",
+        kind=ExtensionKind.FEATURE,
+        entry="qunbot.extensions.qq_channel",
+        contributes=frozenset({Contribution.TOOL, Contribution.CLOSER}),
+        skills=frozenset({"qq-channel"}),
+        tools=(
+            ToolDeclaration(
+                "query_qq_channel", permissions=ToolPermission.READ_GROUP,
+                quota_per_minute=6, description="查询 QQ 官方频道",
+            ),
+            ToolDeclaration(
+                "write_qq_channel", permissions=ToolPermission.MODERATE_GROUP,
+                quota_per_minute=2, description="受控写入 QQ 官方频道",
+            ),
+        ),
+        max_context_providers=0,
+        description="QQ 开放平台频道：Token 缓存、只读查询和白名单写操作",
+    )
+)
+
+_register(
+    ExtensionManifest(
+        name="webui",
+        version="1.0.0",
+        kind=ExtensionKind.FEATURE,
+        entry="qunbot.extensions.webui",
+        contributes=frozenset({
+            Contribution.BACKGROUND, Contribution.CLOSER, Contribution.BINDER,
+        }),
+        max_workers=1,
+        max_context_providers=0,
+        description="本机所有者配置台：显式配置 schema、密钥遮罩与原子写入",
     )
 )
 

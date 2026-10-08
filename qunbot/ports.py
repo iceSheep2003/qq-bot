@@ -31,6 +31,17 @@ class ReplyResult(Protocol):
     text: str
 
 
+class ReplyPlanner(Protocol):
+    async def plan(self, draft: Any, event: MessageEvent | None = None) -> Any: ...
+
+
+class ReplyDelivery(Protocol):
+    async def dispatch(
+        self, plan: Any, *, group_id: str | None, user_id: str | None,
+        allowed_at: frozenset[str] = frozenset(),
+    ) -> Any: ...
+
+
 class ReplyDecisionPolicy(Protocol):
     """Decides whether a turn warrants a reply at all.
 
@@ -43,6 +54,14 @@ class ReplyDecisionPolicy(Protocol):
     async def decide(
         self, event: MessageEvent, *, recent: list[ConversationRow]
     ) -> bool: ...
+
+
+class TurnGuard(Protocol):
+    """Classify likely bait before a turn; it cannot mutate configuration."""
+
+    async def decide(
+        self, event: MessageEvent, *, recent: list[ConversationRow]
+    ) -> Any: ...
 
 
 class AgentRunner(Protocol):
@@ -82,6 +101,9 @@ class ConversationRepository(Protocol):
         content: str,
     ) -> bool: ...
     def recent(self, scope: str, limit: int = 24) -> list[ConversationRow]: ...
+    def after_id(
+        self, scope: str, message_id: int, limit: int = 100
+    ) -> list[ConversationRow]: ...
     def message_count(self, scope: str) -> int: ...
 
 
@@ -160,7 +182,14 @@ class MemoryIndex(Protocol):
 
 class MemoryCoordinator(Protocol):
     def related(self, scope: str, query: str, limit: int = 4) -> list[str]: ...
+    def related_context(self, scope: str, query: str, limit: int = 4) -> dict: ...
     async def extract(self, scope: str) -> None: ...
+    def overview(self, scope: str | None = None) -> dict[str, Any]: ...
+    def memory_detail(self, memory_id: int) -> dict[str, Any] | None: ...
+    def topics(self, scope: str | None = None, limit: int = 100) -> list[dict]: ...
+    def extraction_runs(
+        self, scope: str | None = None, limit: int = 50
+    ) -> list[dict]: ...
 
 
 class ActivityRepository(Protocol):
@@ -168,6 +197,9 @@ class ActivityRepository(Protocol):
         self, group_id: str, since: int, source: str | None = None
     ) -> int: ...
     def last_proactive(self, group_id: str) -> int: ...
+    def proactive_count_prefix_since(
+        self, group_id: str, since: int, source_prefix: str
+    ) -> int: ...
     def log_proactive(
         self, group_id: str, content: str, source: str = "random"
     ) -> None: ...
@@ -219,7 +251,28 @@ class MessageSender(Protocol):
         at_user: str | None = None,
         image: str | None = None,
         voice: str | None = None,
+        qq_face: str | None = None,
+        reply_to: str | None = None,
     ) -> SendReceipt: ...
+
+
+class MessageReactionSender(Protocol):
+    async def react_to_message(
+        self, message_id: str, emoji_id: str, *, set_reaction: bool = True
+    ) -> Any: ...
+
+
+class MessageReactionPolicy(Protocol):
+    def decide(self, event: MessageEvent) -> Any: ...
+
+
+class NativeInteractionSender(Protocol):
+    async def send_native(self, group_id: str, kind: str) -> Any: ...
+    async def poke_group(self, group_id: str, user_id: str) -> Any: ...
+
+
+class LightInteractionPolicyPort(Protocol):
+    def decide(self, event: MessageEvent, recent: list[dict]) -> Any: ...
 
 
 class OutboundParts(Protocol):
@@ -233,7 +286,8 @@ class OutboundParts(Protocol):
 class MediaProcessor(Protocol):
     async def compose(self, text: str) -> tuple[str, str | None, str | None]: ...
     async def compose_message(
-        self, text: str, *, allowed_at: frozenset[str] | None = None
+        self, text: str, *, allowed_at: frozenset[str] | None = None,
+        voice_style: str = "neutral",
     ) -> OutboundParts: ...
 
 
@@ -245,6 +299,39 @@ class SkillProvider(Protocol):
 class ToolProvider(Protocol):
     def schemas(self) -> list[dict]: ...
     def call(self, name: str, args: dict[str, Any], event: MessageEvent) -> str: ...
+
+
+class ConversationIntelligencePort(Protocol):
+    """Local, model-free group-topic analysis."""
+
+    def observe(self, event: MessageEvent) -> None: ...
+    def frame(self, event: MessageEvent) -> Any: ...
+    def latest_frame(self, scope: str) -> Any | None: ...
+
+
+class PromptSessionRepository(Protocol):
+    def load(self, scope: str, limit: int = 1000) -> list[dict]: ...
+    def append(self, scope: str, messages: list[dict]) -> None: ...
+    def clear(self, scope: str) -> int: ...
+    def compaction_candidate(
+        self, scope: str, *, max_messages: int = 80,
+        max_chars: int = 32000, tail_messages: int = 24,
+    ) -> dict[str, Any] | None: ...
+    def replace_compacted(
+        self, scope: str, *, expected_sequence: int,
+        snapshot: dict, tail: list[dict],
+    ) -> bool: ...
+
+
+class ConversationCompactionPort(Protocol):
+    async def compact_if_needed(
+        self, scope: str, current_event_id: str = ""
+    ) -> bool: ...
+
+
+class TopicObservationRepository(Protocol):
+    def add(self, event: MessageEvent) -> None: ...
+    def recent(self, scope: str, limit: int = 200) -> list[MessageEvent]: ...
 
 
 class ContextProvider(Protocol):

@@ -13,7 +13,11 @@ from typing import Any
 #: Subject used for facts that belong to the whole conversation, not a person.
 GROUP_SUBJECT = "_group_"
 
-FACT_TYPES = ("fact", "preference", "relation", "event", "boundary")
+FACT_TYPES = (
+    "fact", "preference", "relation", "event", "boundary", "open_loop", "promise"
+)
+
+MENTION_POLICIES = ("direct", "soft_echo", "tone_only", "avoid_unless_asked")
 
 STATUS_ACTIVE = "active"
 STATUS_CANDIDATE = "candidate"
@@ -38,6 +42,8 @@ class MemoryItem:
     scope: str
     subject_user_id: str
     content: str
+    persona_summary: str = ""
+    mention_policy: str = "soft_echo"
     fact_type: str = "fact"
     confidence: float = 1.0
     importance: int = 1
@@ -67,6 +73,8 @@ class MemoryItem:
             scope=str(get("scope", "") or ""),
             subject_user_id=str(get("user_id", GROUP_SUBJECT) or GROUP_SUBJECT),
             content=str(get("content", "") or ""),
+            persona_summary=str(get("persona_summary", "") or ""),
+            mention_policy=str(get("mention_policy", "soft_echo") or "soft_echo"),
             fact_type=str(get("fact_type", "fact") or "fact"),
             confidence=float(get("confidence", 1.0) or 0.0),
             importance=int(get("importance", 1) or 1),
@@ -105,3 +113,31 @@ class RetrievalHit:
             f"memory {self.item.id} from {self.item.source_event_id or 'unknown source'} "
             f"score={self.score:.3f} because {'; '.join(self.reasons) or 'no signal'}"
         )
+
+
+@dataclass(frozen=True)
+class MemoryEvidence:
+    """One source observation supporting a memory proposal."""
+
+    event_id: str
+    user_id: str
+    excerpt: str
+    observed_at: int = 0
+    weight: float = 1.0
+
+
+@dataclass(frozen=True)
+class MemoryProposal:
+    """Model output before persistence policy accepts or rejects it."""
+
+    subject_user_id: str
+    content: str
+    persona_summary: str = ""
+    mention_policy: str = "soft_echo"
+    fact_type: str = "fact"
+    confidence: float = 0.65
+    importance: int = 1
+    visibility: str = VISIBILITY_PERSONAL
+    topic: str = ""
+    evidence_event_ids: tuple[str, ...] = ()
+    supersedes: bool = False

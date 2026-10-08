@@ -40,6 +40,8 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from ...domain import MessageEvent
+from ...content import is_media_placeholder
+from ...replies.repetition import repeats_recent
 from ...storage.continuation import ContinuationStore
 from .policy import GroupPolicySet, ProactiveConfig, in_quiet_hours
 
@@ -127,6 +129,13 @@ class ProactiveChat:
         human = [row for row in recent if row["role"] == "user"]
         if len(human) < policy.min_messages:
             return self._not_now(group_id, scope, now, "group has not spoken enough")
+        latest_text = str(human[-1].get("content") or "").strip()
+        if (
+            is_media_placeholder(latest_text)
+            or latest_text.startswith("[戳一戳]")
+            or latest_text == "+1"
+        ):
+            return self._not_now(group_id, scope, now, "latest event is not a conversational turn")
 
         # The conversation table is the clock: the newest human message opens
         # the quiet window this decision is about.
@@ -192,6 +201,7 @@ class ProactiveChat:
             False,
             (),
             now,
+            origin="operator",
         )
         async with bot.scope_lock(scope):
             reply = await bot.agent.reply(event, proactive=True)
@@ -207,7 +217,7 @@ class ProactiveChat:
                     now,
                     f"reply longer than {policy.max_chars} characters",
                 )
-            if any(text == row["content"] for row in recent):
+            if repeats_recent(text, recent):
                 return self._attempt(
                     group_id, scope, now, "reply repeated a recent message"
                 )
@@ -215,9 +225,15 @@ class ProactiveChat:
             if not clean:
                 return self._attempt(group_id, scope, now, "the reply was not sent")
             bot.activity.log_proactive(group_id, clean, "random")
-            bot.conversations.add_message(
-                event.event_id, scope, "bot", "Bot", "assistant", clean
-            )
+            record = getattr(bot, "record_outbound", None)
+            if not callable(record):
+                record = getattr(bot, "record_assistant_turn", None)
+            if callable(record):
+                record(event, clean, event_id=event.event_id)
+            else:
+                bot.conversations.add_message(
+                    event.event_id, scope, "bot", "Bot", "assistant", clean
+                )
             bot.last_reply[scope] = time.time()
             self.store.close_window(scope, group_id, int(time.time()), "posted")
             return Decision(True, "posted", clean)

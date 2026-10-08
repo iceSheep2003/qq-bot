@@ -7,6 +7,23 @@
 # qunbot/extensions/slang/data/, which is source, not state.
 /data/
 *.sqlite3
+*.sqlite3-shm
+*.sqlite3-wal
+*.db
+*.log
+/outputs/
+/config/schedules.json
+/config/proactive_groups.json
+/config/slang_review.json
+# Third-party media stays local; retain provenance without redistributing files.
+/memes/astrbot-official-01/*
+!/memes/astrbot-official-01/SOURCE.md
+/qunbot/extensions/exam_poster/campuses/
+.DS_Store
+.pytest_cache/
+*.egg-info/
+/build/
+/dist/
 __pycache__/
 *.pyc
 

@@ -32,6 +32,7 @@ from qunbot.extensions import reply_policy as package
 from qunbot.extensions.features import FeatureHost
 from qunbot.extensions.loader import build_features
 from qunbot.extensions.reply_policy import (
+    AdaptiveReplyPolicy,
     Decision,
     MentionOnlyPolicy,
     ReplyPolicyConfig,
@@ -200,7 +201,8 @@ class ReplyPolicyRegistrationTests(unittest.TestCase):
         with patch.dict(os.environ, env, clear=True):
             host = FeatureHost()
             package.register(host, None, None)
-        self.assertIsInstance(host.reply_policy, RoomReadingPolicy)
+        self.assertIsInstance(host.reply_policy, AdaptiveReplyPolicy)
+        self.assertEqual(len(host.binders), 1)
 
     def test_enabled_mention_only_installs_the_old_rule(self):
         env = {"BOT_REPLY_POLICY_ENABLED": "true"}
@@ -380,6 +382,165 @@ class RoomReadingPolicyTests(unittest.TestCase):
         self.assertEqual(len(_history(event, recent)), 1)
 
 
+class AdaptiveReplyPolicyTests(unittest.TestCase):
+    def runtime(self, tmp, config, *, random_value=0.0, affection=0):
+        root = Path(tmp)
+        root.mkdir(parents=True, exist_ok=True)
+        store = Store(root / "adaptive.sqlite3")
+        policy = AdaptiveReplyPolicy(config, random_value=lambda: random_value)
+        policy.bind(SimpleNamespace(
+            activity=store.activity,
+            people=SimpleNamespace(
+                profile=lambda _group, _user: {"affection": affection}
+            ),
+            today_start=lambda: 0,
+        ))
+        return policy, store
+
+    def test_a_mention_is_probabilistic_not_an_unlimited_right(self):
+        config = ReplyPolicyConfig(mention_probability=0.85)
+        with tempfile.TemporaryDirectory() as tmp:
+            policy, store = self.runtime(tmp, config, random_value=0.90)
+            try:
+                self.assertFalse(asyncio.run(policy.decide(
+                    group_event("@Bot 回我", at_bot=True), recent=[]
+                )))
+                self.assertIn("衰退后不回复", policy.last.reason)
+            finally:
+                store.db.close()
+
+    def test_recent_repeated_questions_decay_before_the_model_call(self):
+        config = ReplyPolicyConfig(
+            mention_probability=1.0,
+            decay_half_life_seconds=900,
+            decay_strength=0.45,
+            repeat_multiplier=0.20,
+        )
+        recent = [
+            row(f"old-{i}", content="怎么还不回我", created_at=BASE_TIME - i * 10)
+            for i in range(1, 4)
+        ]
+        with tempfile.TemporaryDirectory() as tmp:
+            policy, store = self.runtime(tmp, config, random_value=0.10)
+            try:
+                self.assertFalse(asyncio.run(policy.decide(
+                    group_event("怎么还不回我", at_bot=True), recent=recent
+                )))
+                self.assertIn("repeated=True", policy.last.reason)
+            finally:
+                store.db.close()
+
+    def test_fresh_question_has_a_floor_despite_unanswered_chatter(self):
+        config = ReplyPolicyConfig(
+            threshold=0.25,
+            ambient_probability=0.55,
+            question_probability_floor=0.90,
+            decay_strength=0.45,
+        )
+        recent = [
+            row(f"chatter-{i}", content=f"刚才随口说的第{i}句", created_at=BASE_TIME - i * 10)
+            for i in range(1, 4)
+        ]
+        with tempfile.TemporaryDirectory() as tmp:
+            policy, store = self.runtime(tmp, config, random_value=0.80)
+            try:
+                self.assertTrue(asyncio.run(policy.decide(
+                    group_event("这个应该怎么解决？"), recent=recent
+                )))
+                self.assertIn("p=0.900", policy.last.reason)
+            finally:
+                store.db.close()
+
+    def test_recent_bot_reply_promotes_a_coherent_followup(self):
+        config = ReplyPolicyConfig(
+            ambient_probability=0.25,
+            after_reply_probability=0.90,
+            after_reply_duration_seconds=180,
+        )
+        recent = [
+            row("old-user", content="还活着么", created_at=BASE_TIME - 70),
+            row("bot-answer", role="assistant", user="bot", content="在的，怎么了",
+                created_at=BASE_TIME - 60),
+        ]
+        with tempfile.TemporaryDirectory() as tmp:
+            policy, store = self.runtime(tmp, config, random_value=0.50)
+            try:
+                self.assertTrue(asyncio.run(policy.decide(
+                    group_event("那你是bot还是人类", timestamp=BASE_TIME), recent=recent
+                )))
+                self.assertIn("continued=True", policy.last.reason)
+            finally:
+                store.db.close()
+
+    def test_answered_messages_do_not_create_pursuit_pressure(self):
+        config = ReplyPolicyConfig(after_reply_probability=0.90)
+        recent = [
+            row("u1", content="第一问", created_at=BASE_TIME - 80),
+            row("b1", role="assistant", user="bot", content="第一答", created_at=BASE_TIME - 70),
+        ]
+        with tempfile.TemporaryDirectory() as tmp:
+            policy, store = self.runtime(tmp, config)
+            try:
+                pressure, repeated = policy._pressure(group_event("第二问"), recent)
+                self.assertEqual(pressure, 0.0)
+                self.assertFalse(repeated)
+            finally:
+                store.db.close()
+
+    def test_messages_outside_pursuit_window_have_zero_pressure(self):
+        config = ReplyPolicyConfig(
+            pursuit_window_seconds=180,
+            decay_half_life_seconds=900,
+        )
+        recent = [
+            row("old-1", content="之前的问题", created_at=BASE_TIME - 181),
+            row("old-2", content="再问一次", created_at=BASE_TIME - 600),
+        ]
+        with tempfile.TemporaryDirectory() as tmp:
+            policy, store = self.runtime(tmp, config)
+            try:
+                pressure, repeated = policy._pressure(
+                    group_event("现在的新问题", timestamp=BASE_TIME), recent
+                )
+                self.assertEqual(pressure, 0.0)
+                self.assertFalse(repeated)
+            finally:
+                store.db.close()
+
+    def test_affection_changes_admission_probability(self):
+        config = ReplyPolicyConfig(mention_probability=0.70)
+        with tempfile.TemporaryDirectory() as tmp:
+            warm, warm_store = self.runtime(
+                str(Path(tmp) / "warm"), config, random_value=0.75, affection=100
+            )
+            cold, cold_store = self.runtime(
+                str(Path(tmp) / "cold"), config, random_value=0.75, affection=-100
+            )
+            event = group_event("@Bot 在吗", at_bot=True)
+            try:
+                self.assertTrue(asyncio.run(warm.decide(event, recent=[])))
+                self.assertFalse(asyncio.run(cold.decide(event, recent=[])))
+            finally:
+                warm_store.db.close()
+                cold_store.db.close()
+
+    def test_successful_deliveries_consume_the_per_user_daily_quota(self):
+        config = ReplyPolicyConfig(
+            mention_probability=1.0, daily_group_limit=10, daily_user_limit=1
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            policy, store = self.runtime(tmp, config)
+            first = group_event("第一次", at_bot=True)
+            second = group_event("第二次", at_bot=True)
+            try:
+                self.assertTrue(asyncio.run(policy.decide(first, recent=[])))
+                policy.record_delivery(first, "回复")
+                self.assertFalse(asyncio.run(policy.decide(second, recent=[])))
+                self.assertIn("该用户今日接话额度", policy.last.reason)
+            finally:
+                store.db.close()
+
+
 # ---------------------------------------------------------------------------
 # ConversationService integration
 # ---------------------------------------------------------------------------
@@ -416,7 +577,7 @@ class ReplyPolicyServiceTests(unittest.TestCase):
             finally:
                 store.db.close()
 
-    def test_a_broken_policy_falls_back_to_the_default(self):
+    def test_a_broken_admission_policy_fails_closed_before_the_model(self):
         class Exploding:
             async def decide(self, event, *, recent):
                 raise RuntimeError("policy exploded")
@@ -432,8 +593,7 @@ class ReplyPolicyServiceTests(unittest.TestCase):
 
             with self.assertLogs("qunbot.runtime.service", level="ERROR"):
                 asyncio.run(run_both())
-            # Default rule: answer when addressed, stay quiet otherwise.
-            self.assertEqual(agent.calls, [addressed.event_id])
+            self.assertEqual(agent.calls, [])
             try:
                 asyncio.run(service_.aclose(timeout=0.1))
             finally:
@@ -565,7 +725,10 @@ class ReplyPolicyBoundaryTests(unittest.TestCase):
                         )
 
     def test_package_only_imports_the_core_layers_it_needs(self):
-        allowed = {"__future__", "asyncio", "dataclasses", "os", "typing"}
+        allowed = {
+            "__future__", "asyncio", "dataclasses", "difflib", "math",
+            "os", "random", "re", "typing",
+        }
         for path in sorted(PACKAGE_ROOT.glob("*.py")):
             tree = ast.parse(path.read_text(encoding="utf-8"))
             for node in ast.walk(tree):

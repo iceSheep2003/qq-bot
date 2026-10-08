@@ -77,6 +77,24 @@ class MessageEvent:
     # ``nickname``: a person can set a different card per group, so this is
     # stored per group and never promoted to the global profile.
     card: str = ""
+    # Platform facts used by the local conversation-intelligence layer.
+    platform_message_id: str = ""
+    reply_to_message_id: str = ""
+    reply_to_user_id: str = ""
+    # Resolved quoted material is platform data, not an instruction. It is
+    # fetched only when the original message is outside the local scene.
+    quoted_text: str = ""
+    quoted_image_urls: tuple[str, ...] = ()
+    # Ephemeral capability list assembled from the local recent scene. It is
+    # not persisted as conversation content; the quote policy uses it solely
+    # to reject model-invented platform IDs.
+    recent_message_ids: tuple[str, ...] = ()
+    # Human and assistant turns are conversational facts. Operator events are
+    # trusted control-plane instructions and must never become group chatter.
+    origin: Literal["human", "assistant", "operator"] = "human"
+    # Trusted, turn-local classification from the guard. Never copied from
+    # platform text or persisted as a group member's instruction.
+    social_cue: str = ""
 
 
 # --------------------------------------------------------------------------- #

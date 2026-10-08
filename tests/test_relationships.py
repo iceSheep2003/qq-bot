@@ -17,6 +17,7 @@ from qunbot.relationships import (
     Stage,
     parse_proposal,
 )
+from qunbot.relationships.evaluator import DECAY_INTERVAL_SECONDS
 from qunbot.runtime.agent import Agent
 from qunbot.runtime.service import BotPolicy, ConversationService
 from qunbot.runtime.skills import SkillCatalog
@@ -133,6 +134,180 @@ class PolicyTests(unittest.TestCase):
             with self.subTest(delta=bad):
                 with self.assertRaises(ValueError):
                     policy_.validate_delta(bad)
+
+
+class DecayTests(unittest.TestCase):
+    """Dormancy pulls a relationship back toward neutral — when asked to."""
+
+    DAY = 86400
+    HALF_LIFE = 30 * DAY
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.root = Path(self.temp.name)
+        self.store = Store(self.root / "bot.sqlite3")
+        self.people = self.store.people
+
+    def tearDown(self):
+        self.store.db.close()
+        self.temp.cleanup()
+
+    def enable(self, *, half_life=None, grace=0):
+        self.people.policy = RelationshipPolicy(
+            decay_half_life_seconds=self.HALF_LIFE if half_life is None else half_life,
+            decay_grace_seconds=grace,
+        )
+
+    def seed(self, value, *, at=0, group="42", user="7"):
+        """A score with one applied interaction behind it, anchored at `at`."""
+        self.store.db.execute(
+            "INSERT INTO relations(group_id,user_id,affection,updated_at,decayed_at)"
+            " VALUES(?,?,?,?,0)"
+            " ON CONFLICT(group_id,user_id) DO UPDATE SET"
+            " affection=excluded.affection, updated_at=excluded.updated_at",
+            (group, user, value, at),
+        )
+        self.store.db.execute(
+            "INSERT INTO affection_events(group_id,user_id,delta,reason,created_at,"
+            "source,status,value_after) VALUES(?,?,?,?,?,?,?,?)",
+            (group, user, value, "初始", at, "manual", "applied", value),
+        )
+
+    def score(self, group="42", user="7"):
+        return self.people.profile(group, user)["affection"]
+
+    def test_decay_is_off_by_default(self):
+        """A score drifting down on its own is a deployer's choice, not a default."""
+        self.seed(60)
+        self.assertEqual(self.people.decay_dormant(now=10**9), [])
+        self.assertEqual(self.score(), 60)
+
+    def test_a_dormant_score_halves_over_one_half_life(self):
+        self.enable()
+        self.seed(60)
+        self.people.decay_dormant(now=self.HALF_LIFE)
+        self.assertEqual(self.score(), 30)
+
+    def test_a_score_inside_the_grace_window_is_left_alone(self):
+        self.enable(grace=7 * self.DAY)
+        self.seed(60)
+        self.people.decay_dormant(now=3 * self.DAY)
+        self.assertEqual(self.score(), 60)
+
+    def test_a_second_pass_at_the_same_moment_moves_nothing_further(self):
+        """The clock is the last decay, so decay cannot compound by re-running."""
+        self.enable()
+        self.seed(60)
+        self.people.decay_dormant(now=self.HALF_LIFE)
+        once = self.score()
+        self.people.decay_dormant(now=self.HALF_LIFE)
+        self.assertEqual(self.score(), once)
+
+    def test_two_half_steps_reach_the_same_place_as_one_full_step(self):
+        self.enable()
+        self.seed(64)
+        self.people.decay_dormant(now=self.HALF_LIFE // 2)
+        self.people.decay_dormant(now=self.HALF_LIFE)
+        self.assertEqual(self.score(), 32)
+
+    def test_a_negative_score_decays_toward_neutral_not_past_it(self):
+        self.enable()
+        self.seed(-60)
+        self.people.decay_dormant(now=self.HALF_LIFE * 4)
+        self.assertEqual(self.score(), -4)
+
+    def test_a_stage_change_is_reported_and_audited(self):
+        self.enable()
+        self.seed(60)
+        changed = self.people.decay_dormant(now=self.HALF_LIFE)
+        self.assertEqual(
+            [(row["from_stage"], row["to_stage"]) for row in changed],
+            [("trusted", "close")],
+        )
+        latest = self.people.history("42", "7", 1)[0]
+        self.assertEqual(latest["status"], "decayed")
+        self.assertIn("长期未互动", latest["reason"])
+
+    def test_a_drift_inside_a_stage_is_applied_silently(self):
+        self.enable()
+        self.seed(20)
+        changed = self.people.decay_dormant(now=self.HALF_LIFE)
+        self.assertEqual(changed, [])
+        self.assertEqual(self.score(), 10)
+        self.assertEqual(self.people.history("42", "7", 1)[0]["status"], "applied")
+
+    def test_a_decay_does_not_reset_the_interaction_cooldown(self):
+        """A decay writes status='decayed' precisely so this stays true."""
+        self.enable()
+        self.seed(60)
+        self.people.decay_dormant(now=self.HALF_LIFE)
+        # 60s after the decay, but the last *interaction* was HALF_LIFE ago.
+        result = self.people.apply_proposal(
+            AffectionProposal("42", "7", 2, "帮忙带饭", "evaluator", "e9"),
+            now=self.HALF_LIFE + 60,
+        )
+        self.assertTrue(result["accepted"], result.get("rejected"))
+
+    def test_a_decay_does_not_eat_the_daily_event_budget(self):
+        self.enable()
+        self.seed(60)
+        self.people.decay_dormant(now=self.HALF_LIFE)
+        counted = self.store.db.execute(
+            "SELECT count(*) FROM affection_events WHERE status='applied'"
+        ).fetchone()[0]
+        self.assertEqual(counted, 1)
+
+
+class RecordingPeople:
+    """A people repository that records sweeps instead of doing them."""
+
+    def __init__(self):
+        self.sweeps: list[int] = []
+
+    def decay_dormant(self, *, now):
+        self.sweeps.append(now)
+        return []
+
+
+class DecaySweepTests(unittest.TestCase):
+    """The evaluator schedules the sweep; the store does the work."""
+
+    BASE = 10**6
+
+    def _evaluator(self, people, *, half_life):
+        return AffectionEvaluator(
+            StubModel(), people, RelationshipPolicy(decay_half_life_seconds=half_life)
+        )
+
+    def test_the_sweep_never_runs_when_decay_is_off(self):
+        people = RecordingPeople()
+        self._evaluator(people, half_life=0).decay_dormant(now=self.BASE)
+        self.assertEqual(people.sweeps, [])
+
+    def test_the_sweep_runs_at_most_once_per_interval(self):
+        people = RecordingPeople()
+        evaluator = self._evaluator(people, half_life=2592000)
+        evaluator.decay_dormant(now=self.BASE)
+        evaluator.decay_dormant(now=self.BASE + 60)
+        self.assertEqual(len(people.sweeps), 1)
+        evaluator.decay_dormant(now=self.BASE + DECAY_INTERVAL_SECONDS)
+        self.assertEqual(len(people.sweeps), 2)
+
+    def test_a_failing_sweep_is_swallowed(self):
+        class Broken:
+            def decay_dormant(self, *, now):
+                raise RuntimeError("database went away")
+
+        evaluator = self._evaluator(Broken(), half_life=2592000)
+        with self.assertLogs("qunbot.relationships.evaluator", level="ERROR"):
+            self.assertEqual(evaluator.decay_dormant(now=self.BASE), [])
+
+    def test_a_port_without_a_sweep_is_not_an_error(self):
+        class Bare:
+            """The PeopleRepository port does not promise a sweep."""
+
+        evaluator = self._evaluator(Bare(), half_life=2592000)
+        self.assertEqual(evaluator.decay_dormant(now=self.BASE), [])
 
 
 class ProposalParsingTests(unittest.TestCase):

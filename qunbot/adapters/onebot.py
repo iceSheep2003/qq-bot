@@ -23,6 +23,8 @@ from dataclasses import dataclass
 
 from websockets.asyncio.server import ServerConnection, serve
 
+from ..content import is_media_placeholder
+
 log = logging.getLogger(__name__)
 
 # Frames are capped so a hostile peer cannot make the process allocate without
@@ -375,10 +377,17 @@ class OneBotGateway:
         at_user: str | None = None,
         image: str | None = None,
         voice: str | None = None,
+        qq_face: str | None = None,
+        reply_to: str | None = None,
         allowed_at: Collection[str] | None = None,
     ) -> dict:
         if bool(group_id) == bool(user_id):
             raise ValueError("exactly one of group_id or user_id is required")
+        if is_media_placeholder(text):
+            if not any((image, voice, qq_face)):
+                raise ValueError("refusing to send a media placeholder without media")
+            log.warning("Dropping transcript-only media placeholder from outbound message")
+            text = ""
         try:
             target = int(group_id or user_id)
             at_qq = int(at_user) if at_user else None
@@ -395,12 +404,23 @@ class OneBotGateway:
                 log.warning("Dropping @ target %s: not a known group member", at_qq)
                 at_qq = None
         message = []
+        if reply_to:
+            try:
+                reply_id = int(reply_to)
+            except (TypeError, ValueError) as error:
+                raise OneBotError(f"non-numeric reply message id: {reply_to!r}") from error
+            if group_id:
+                message.append({"type": "reply", "data": {"id": str(reply_id)}})
         if at_qq is not None and group_id:
             message.append({"type": "at", "data": {"qq": str(at_qq)}})
         if text:
             message.append({"type": "text", "data": {"text": text[:3000]}})
         if image:
             message.append({"type": "image", "data": {"file": image}})
+        if qq_face:
+            if not str(qq_face).isdigit():
+                raise ValueError("QQ face id must be numeric")
+            message.append({"type": "face", "data": {"id": str(qq_face)}})
         if voice:
             message.append({"type": "record", "data": {"file": voice}})
         if not message:
@@ -411,4 +431,75 @@ class OneBotGateway:
                 "group_id" if group_id else "user_id": target,
                 "message": message,
             },
+        )
+
+    async def resolve_quote(self, message_id: str, *, max_depth: int = 3) -> dict:
+        """Resolve a bounded quoted-message chain through NapCat ``get_msg``."""
+        current = str(message_id or "")
+        texts: list[str] = []
+        images: list[str] = []
+        seen: set[str] = set()
+        for _ in range(max(1, min(3, max_depth))):
+            if not current or current in seen or not current.lstrip("-").isdigit():
+                break
+            seen.add(current)
+            data = await self.call("get_msg", {"message_id": int(current)})
+            parts = data.get("message") or []
+            if not isinstance(parts, list):
+                raw = str(data.get("raw_message") or "").strip()
+                if raw:
+                    texts.append(raw[:1200])
+                break
+            next_id = ""
+            chunk = "".join(
+                str(part.get("data", {}).get("text", ""))
+                for part in parts if part.get("type") == "text"
+            ).strip()
+            if chunk:
+                texts.append(chunk[:1200])
+            for part in parts:
+                payload = part.get("data", {})
+                if part.get("type") == "image" and payload.get("url"):
+                    url = str(payload["url"])
+                    if url not in images:
+                        images.append(url)
+                if part.get("type") == "reply" and not next_id:
+                    next_id = str(payload.get("id") or "")
+            current = next_id
+        return {"text": "\n↳ ".join(texts)[:2400], "image_urls": tuple(images[:2])}
+
+    async def react_to_message(
+        self, message_id: str, emoji_id: str, *, set_reaction: bool = True
+    ) -> dict:
+        """Attach/cancel a QQ reaction on an existing message."""
+        try:
+            target = int(message_id)
+        except (TypeError, ValueError) as error:
+            raise OneBotError(f"non-numeric OneBot message id: {message_id!r}") from error
+        if not str(emoji_id).isdigit():
+            raise OneBotError(f"non-numeric QQ reaction id: {emoji_id!r}")
+        params = {"message_id": target, "emoji_id": str(emoji_id)}
+        # Current NapCat defaults to adding when this field is absent; sending
+        # it explicitly also works with adapters that expose cancellation.
+        if not set_reaction:
+            params["set"] = False
+        return await self.call("set_msg_emoji_like", params)
+
+    async def poke_group(self, group_id: str, user_id: str) -> dict:
+        try:
+            group, user = int(group_id), int(user_id)
+        except (TypeError, ValueError) as error:
+            raise OneBotError("group_poke requires numeric group and user ids") from error
+        return await self.call("group_poke", {"group_id": group, "user_id": user})
+
+    async def send_native(self, group_id: str, kind: str) -> dict:
+        if kind not in {"dice", "rps"}:
+            raise OneBotError(f"unsupported native interaction: {kind!r}")
+        try:
+            group = int(group_id)
+        except (TypeError, ValueError) as error:
+            raise OneBotError(f"non-numeric group id: {group_id!r}") from error
+        return await self.call(
+            "send_group_msg",
+            {"group_id": group, "message": [{"type": kind, "data": {}}]},
         )

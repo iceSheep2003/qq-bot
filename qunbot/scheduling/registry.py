@@ -21,6 +21,7 @@ from ..ports import (
     MessageSender,
 )
 from .spec import JobSpec
+from ..replies import ReplyDraft
 
 if TYPE_CHECKING:
     from ..runtime.service import BotPolicy
@@ -67,10 +68,18 @@ class JobRuntime(Protocol):
     async def send_reply(
         self, group_id: str | None, user_id: str | None, text: str
     ) -> str: ...
+    async def send_draft(
+        self,
+        group_id: str | None,
+        user_id: str | None,
+        draft: ReplyDraft,
+        event: MessageEvent | None = None,
+    ) -> str: ...
     def today_start(self) -> int: ...
     def local_today(self) -> date: ...
     def job_event(self, job: dict, now: int) -> MessageEvent: ...
     def job_spec(self, job: dict) -> JobSpec: ...
+    def record_outbound(self, trigger: MessageEvent, text: str, *, event_id: str) -> None: ...
 
 
 class JobHandler(Protocol):

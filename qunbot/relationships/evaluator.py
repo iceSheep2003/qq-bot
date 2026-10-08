@@ -20,12 +20,17 @@ from __future__ import annotations
 import json
 import logging
 import re
+import time
 
 from ..domain import MessageEvent
 from ..ports import ChatModel, PeopleRepository
 from .state import AffectionProposal, RelationshipPolicy
 
 log = logging.getLogger(__name__)
+
+# How often the dormancy sweep may run. Far shorter than any half-life worth
+# configuring, and long enough that it never lands twice in one burst of talk.
+DECAY_INTERVAL_SECONDS = 3600
 
 SYSTEM_PROMPT = (
     "你只评估一次互动是否让这个群友和你的关系发生了清晰变化，不是评价对方人品。"
@@ -89,6 +94,33 @@ class AffectionEvaluator:
         self.model, self.people = model, people
         self.policy = policy or RelationshipPolicy()
         self.auto_enabled = auto_enabled
+        self._last_decay = 0.0
+
+    def decay_dormant(self, *, now: float | None = None) -> list[dict]:
+        """Sweep dormant relationships, at most once per interval.
+
+        Throttled here rather than run on a timer: this object already runs on
+        the observation pool after a reply, so the sweep costs nothing on the
+        reply path and needs no new wiring. Once an hour is already far more
+        often than a half-life measured in weeks needs.
+
+        A failure is logged and swallowed — decay is housekeeping, and it must
+        not take an observation with it.
+        """
+        if int(self.policy.decay_half_life_seconds) <= 0:
+            return []
+        sweep = time.time() if now is None else float(now)
+        if sweep - self._last_decay < DECAY_INTERVAL_SECONDS:
+            return []
+        sweep_fn = getattr(self.people, "decay_dormant", None)
+        if sweep_fn is None:
+            return []
+        self._last_decay = sweep
+        try:
+            return sweep_fn(now=int(sweep))
+        except Exception:
+            log.exception("affection dormancy sweep failed")
+            return []
 
     async def observe(self, event: MessageEvent, bot_reply: str) -> None:
         if not self.auto_enabled or not event.group_id or not event.text.strip():
@@ -99,6 +131,7 @@ class AffectionEvaluator:
         recorder = getattr(self.people, "observe_group_member", None)
         if recorder is not None:
             recorder(event.group_id, event.user_id, event.nickname)
+        self.decay_dormant()
         result = await self.model.complete(
             [
                 {"role": "system", "content": SYSTEM_PROMPT},
@@ -126,6 +159,22 @@ class AffectionEvaluator:
         if proposal is None:
             return
         self.record(proposal)
+
+    async def observe_draft(self, event: MessageEvent, bot_reply: str, draft) -> None:
+        """Apply the main reply's bounded proposal without another model call."""
+        if not self.auto_enabled or not event.group_id:
+            return
+        state = getattr(draft, "state_observations", None) or {}
+        raw = state.get("relationship")
+        if not isinstance(raw, dict):
+            return
+        proposal = parse_proposal(
+            json.dumps(raw, ensure_ascii=False), group_id=event.group_id,
+            user_id=event.user_id, source_event_id=event.event_id,
+            source="main_reply",
+        )
+        if proposal is not None and proposal.delta:
+            self.record(proposal)
 
     def record(self, proposal: AffectionProposal) -> dict:
         """Hand a proposal to the repository. Never raises for a policy rejection."""

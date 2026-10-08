@@ -40,7 +40,7 @@ class ExtensionBoundaryTests(unittest.TestCase):
         # "chat" action and the post-message interval "continuation" action.
         self.assertEqual(
             build_registry(self.config("scheduled_chat")).actions(),
-            {"chat", "continuation"},
+            {"chat", "deliver", "continuation"},
         )
         self.assertEqual(build_registry(self.config()).actions(), set())
 

@@ -32,6 +32,7 @@ call over a stray key would be worse than ignoring it.
 from __future__ import annotations
 
 import enum
+import inspect
 import json
 import logging
 import time
@@ -73,6 +74,8 @@ class ToolPermission(enum.Flag):
     READ_MEMORY = enum.auto()        # read the current scope's long-term memory
     READ_CONVERSATION = enum.auto()  # read the current scope's transcript
     SEND_MESSAGE = enum.auto()       # produce something the bot will send
+    READ_GROUP = enum.auto()         # read current-group metadata/files
+    MODERATE_GROUP = enum.auto()     # bounded OneBot moderation via policy gate
 
     # Privileged: never grantable to an extension tool.
     MODIFY_AFFECTION = enum.auto()   # write a group member's relationship score
@@ -83,7 +86,10 @@ class ToolPermission(enum.Flag):
 
     @classmethod
     def grantable(cls) -> ToolPermission:
-        return cls.READ_MEMORY | cls.READ_CONVERSATION | cls.SEND_MESSAGE
+        return (
+            cls.READ_MEMORY | cls.READ_CONVERSATION | cls.SEND_MESSAGE
+            | cls.READ_GROUP | cls.MODERATE_GROUP
+        )
 
     @classmethod
     def privileged(cls) -> ToolPermission:
@@ -341,7 +347,41 @@ class ToolRegistry:
             event.scope,
             event.user_id,
         )
-        return tool.handler(args, event)
+        result = tool.handler(args, event)
+        if inspect.isawaitable(result):
+            raise RuntimeError(
+                f"tool {tool.name} is asynchronous; use ToolRegistry.acall"
+            )
+        return str(result)
+
+    async def acall(self, name: str, args: dict[str, Any], event: MessageEvent) -> str:
+        """Async-capable twin of :meth:`call` for platform-backed tools."""
+        tool = self._tools.get(name)
+        if tool is None:
+            self._record(name, "unknown", False, "unknown tool", event)
+            return "unknown tool"
+        try:
+            _validate_arguments(tool, args)
+        except ValueError as exc:
+            self._record(tool.name, tool.source, False, str(exc), event)
+            raise
+        remaining, retry_after = self._spend(tool, event.scope)
+        if remaining < 0:
+            self._record(tool.name, tool.source, False, "quota exceeded", event)
+            return (
+                f"tool {tool.name} quota exceeded "
+                f"({tool.quota_per_minute}/min in this conversation); "
+                f"retry in {retry_after:.0f}s"
+            )
+        self._record(tool.name, tool.source, True, "ok", event)
+        log.info(
+            "Tool call %s (source=%s scope=%s user=%s)",
+            tool.name, tool.source, event.scope, event.user_id,
+        )
+        result = tool.handler(args, event)
+        if inspect.isawaitable(result):
+            result = await result
+        return str(result)
 
     def _spend(self, tool: Tool, scope: str) -> tuple[int, float]:
         """Consume one call from the window. Returns (remaining, retry_after).

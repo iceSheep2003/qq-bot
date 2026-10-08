@@ -7,6 +7,7 @@ dependencies = [
     "websockets>=13,<17",
     "httpx>=0.27,<1",
     "croniter>=2,<7",
+    "Markdown>=3.7,<4",
 ]
 
 [project.optional-dependencies]
@@ -17,3 +18,7 @@ qunbot = "qunbot.app:main"
 
 [tool.setuptools.packages.find]
 include = ["qunbot*"]
+
+[tool.setuptools.package-data]
+"qunbot.extensions.webui" = ["static/*", "docs/*.md"]
+"qunbot.identity_guard" = ["rules.json"]

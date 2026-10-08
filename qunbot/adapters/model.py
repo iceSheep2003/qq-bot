@@ -332,9 +332,12 @@ class PrefixFingerprint:
     prefix_bytes: int
     sequence_hash: str
     message_count: int
+    tools_hash: str
 
 
-def prefix_fingerprint(messages: list[dict]) -> PrefixFingerprint:
+def prefix_fingerprint(
+    messages: list[dict], tools: list[dict] | None = None
+) -> PrefixFingerprint:
     prefix: list[dict] = []
     for message in messages:
         if message.get("role") != "system":
@@ -345,11 +348,15 @@ def prefix_fingerprint(messages: list[dict]) -> PrefixFingerprint:
         f"{m.get('role')}:{hashlib.sha256(_canonical(m)).hexdigest()[:12]}"
         for m in messages
     )
+    tool_bytes = _canonical(tools or [])
+    tools_hash = hashlib.sha256(tool_bytes).hexdigest()[:16]
+    effective_prefix = prefix_bytes + b"\x00tools\x00" + tool_bytes
     return PrefixFingerprint(
-        prefix_hash=hashlib.sha256(prefix_bytes).hexdigest()[:16],
-        prefix_bytes=len(prefix_bytes),
+        prefix_hash=hashlib.sha256(effective_prefix).hexdigest()[:16],
+        prefix_bytes=len(effective_prefix),
         sequence_hash=hashlib.sha256(sequence.encode("utf-8")).hexdigest()[:16],
         message_count=len(messages),
+        tools_hash=tools_hash,
     )
 
 
@@ -369,6 +376,7 @@ class ModelCallMetrics:
     attempts: int
     duration_ms: int
     tools_offered: int
+    tools_hash: str
 
     def as_dict(self) -> dict:
         return {f.name: getattr(self, f.name) for f in fields(self)}
@@ -561,7 +569,7 @@ class ModelClient:
         if not self.api_key:
             raise ModelConfigError("BOT_MODEL_API_KEY is not configured")
 
-        fingerprint = prefix_fingerprint(messages)
+        fingerprint = prefix_fingerprint(messages, tools)
         prefix_changed = (
             self._last_prefix_hash is not None
             and self._last_prefix_hash != fingerprint.prefix_hash
@@ -640,6 +648,7 @@ class ModelClient:
                     attempts=attempt,
                     duration_ms=int((self._clock() - started) * 1000),
                     tools_offered=len(tools or ()),
+                    tools_hash=fingerprint.tools_hash,
                 )
             )
             data["usage"] = usage

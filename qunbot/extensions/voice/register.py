@@ -2,13 +2,13 @@
 
 import os
 
-from .sources import DashScopeSpeechSource, HttpSpeechSource
+from .sources import CosyVoiceSpeechSource, DashScopeSpeechSource, HttpSpeechSource, QwenAudioSpeechSource
 
 
 def _settings() -> tuple[str, str, str, str, str]:
     provider = os.getenv("BOT_TTS_PROVIDER", "openai").lower()
-    if provider not in {"openai", "dashscope"}:
-        raise ValueError("BOT_TTS_PROVIDER must be openai or dashscope")
+    if provider not in {"openai", "dashscope", "cosyvoice", "qwen_audio"}:
+        raise ValueError("BOT_TTS_PROVIDER must be openai, dashscope, cosyvoice, or qwen_audio")
     values = (
         os.getenv("BOT_TTS_BASE_URL", "").rstrip("/"),
         os.getenv("BOT_TTS_API_KEY", ""),
@@ -22,7 +22,12 @@ def _settings() -> tuple[str, str, str, str, str]:
 
 def register(host, _config, _model) -> None:
     provider, url, key, model, voice = _settings()
-    source = DashScopeSpeechSource if provider == "dashscope" else HttpSpeechSource
+    source = {
+        "dashscope": DashScopeSpeechSource,
+        "cosyvoice": CosyVoiceSpeechSource,
+        "qwen_audio": QwenAudioSpeechSource,
+        "openai": HttpSpeechSource,
+    }[provider]
     speech = source(url, key, model, voice)
     host.speech_source = speech
     host.closers.append(speech.close)

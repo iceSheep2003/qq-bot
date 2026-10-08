@@ -42,6 +42,15 @@ class ConversationStore(SqliteRepository):
         ).fetchall()
         return [dict(row) for row in reversed(rows)]
 
+    def after_id(self, scope: str, message_id: int, limit: int = 100) -> list[dict]:
+        """Return an incremental user-message batch, oldest first."""
+        rows = self.db.execute(
+            "SELECT * FROM messages WHERE scope=? AND role='user' AND id>? "
+            "ORDER BY id LIMIT ?",
+            (scope, max(0, int(message_id)), max(1, int(limit))),
+        ).fetchall()
+        return [dict(row) for row in rows]
+
     def message_count(self, scope: str) -> int:
         return int(
             self.db.execute(

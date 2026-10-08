@@ -54,6 +54,17 @@ class FakeSender:
         self.sent.append(kwargs)
         return {}
 
+    async def react_to_message(self, message_id, emoji_id, **kwargs):
+        self.sent.append({"reaction": emoji_id, "message_id": message_id, **kwargs})
+        return {}
+
+
+class AlwaysReact:
+    def decide(self, _event):
+        return SimpleNamespace(
+            react=True, emoji_id="76", name="赞", reason="test"
+        )
+
 
 class RecordingObserver:
     """A post-reply observer that can be slow, can fail, and records calls."""
@@ -176,6 +187,25 @@ class ServiceTests(unittest.TestCase):
         self.assertEqual(agent.calls, [])
         self.assertEqual(self.store.message_count("group:42"), 1)
 
+    def test_reaction_is_independent_from_text_reply_admission(self):
+        sender, agent = FakeSender(), FakeAgent()
+        service = self.service(
+            agent=agent,
+            sender=sender,
+            reaction_policy=AlwaysReact(),
+            reaction_sender=sender,
+        )
+        item = event("123", at_bot=False)
+        item = MessageEvent(
+            **{**item.__dict__, "platform_message_id": "123", "text": "学完了"}
+        )
+        asyncio.run(service.handle_message(item))
+        self.assertEqual(
+            sender.sent,
+            [{"reaction": "76", "message_id": "123"}],
+        )
+        self.assertEqual(agent.calls, [])
+
     # --- turn execution --------------------------------------------------
 
     def test_one_group_is_serial_and_recorded_once(self):
@@ -196,7 +226,7 @@ class ServiceTests(unittest.TestCase):
         asyncio.run(run())
         self.assertEqual(agent.max_active, 1)
         self.assertEqual(agent.calls, ["1", "2"])
-        self.assertEqual([m["text"] for m in sender.sent], ["收到。", "收到。"])
+        self.assertEqual([m["text"] for m in sender.sent], ["收到。"])
 
     def test_different_groups_run_in_parallel(self):
         agent, sender = FakeAgent(), FakeSender()
@@ -218,13 +248,13 @@ class ServiceTests(unittest.TestCase):
         self.assertEqual(agent.max_active, 2)
         self.assertEqual(len(sender.sent), 2)
 
-    def test_a_failed_model_call_sends_an_apology_once(self):
+    def test_a_failed_model_call_does_not_send_a_canned_reply(self):
         agent, sender = FakeAgent(), FakeSender()
         agent.fail = True
         service = self.service(agent=agent, sender=sender)
         with self.assertLogs("qunbot.runtime.service", level="ERROR"):
             asyncio.run(service.handle_message(event("1")))
-        self.assertEqual([m["text"] for m in sender.sent], ["我刚才没能完成回复，稍后再试吧。"])
+        self.assertEqual(sender.sent, [])
         self.assertEqual(self.store.message_count("group:42"), 1)
 
     def test_a_duplicate_frame_does_not_reply_twice(self):

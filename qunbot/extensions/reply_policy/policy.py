@@ -198,6 +198,13 @@ class RoomReadingPolicy:
             elif engaged:
                 add(0.3, "刚参与过这段对话")
 
+        # A meaningful message immediately after the bot's turn is ordinarily
+        # a continuation even without an @ or question mark. Chinese group
+        # chat often omits punctuation ("那你是bot还是人类"), so requiring an
+        # explicit question signal cuts a live conversation in half.
+        if continues_bot_turn and text and not self._is_filler(text) and not event.at_users:
+            add(0.45, "直接接着 Bot 的上一句")
+
         if _is_question(text):
             add(0.45, "有人在提问")
             if continues_bot_turn:

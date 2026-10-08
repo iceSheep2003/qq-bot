@@ -455,6 +455,20 @@ class GateTests(ContinuationTestCase):
         with mock.patch("random.random", return_value=0.0):
             self.assertTrue(self.decide(config=self.open_config).posted)
 
+    def test_proactive_prompt_is_an_operator_event(self):
+        agent = StubAgent(text="今天先休息")
+        bot = self.bot(agent=agent)
+        decision = self.decide(bot=bot, config=self.open_config)
+        self.assertTrue(decision.posted)
+        self.assertEqual(agent.events[0][0].origin, "operator")
+
+    def test_poke_only_window_never_calls_the_model(self):
+        self.seed(count=1, age=900, content="[戳一戳] 戳了戳你")
+        agent = StubAgent()
+        decision = self.decide(bot=self.bot(agent=agent), config=self.open_config)
+        self.assertEqual(decision.reason, "latest event is not a conversational turn")
+        self.assertEqual(agent.events, [])
+
     def test_daily_quota_is_its_own_pool(self):
         self.store.activity.log_proactive(GROUP, "随机发言", "random")
         self.store.activity.log_proactive(GROUP, "随机发言", "random")
@@ -885,7 +899,9 @@ class SchedulerIntegrationTests(ContinuationTestCase):
     def test_register_jobs_wires_both_strategies(self):
         registry = JobHandlerRegistry()
         register_jobs(registry, SimpleNamespace(extensions=frozenset({"scheduled_chat"})))
-        self.assertEqual(registry.actions(), frozenset({"chat", "continuation"}))
+        self.assertEqual(
+            registry.actions(), frozenset({"chat", "deliver", "continuation"})
+        )
         self.assertEqual(
             sorted(item.id for _, item in registry.suggested_jobs()),
             sorted(["continue-quiet", "water-noon", "water-night"]),

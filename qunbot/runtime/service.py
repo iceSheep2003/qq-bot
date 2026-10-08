@@ -21,9 +21,10 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 import time
 from collections import OrderedDict
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
@@ -33,12 +34,23 @@ from ..ports import (
     AffectionObserver,
     AgentRunner,
     ConversationRepository,
+    ConversationIntelligencePort,
     MediaProcessor,
+    MessageReactionPolicy,
+    MessageReactionSender,
+    LightInteractionPolicyPort,
+    NativeInteractionSender,
     MessageSender,
     PeopleRepository,
+    PromptSessionRepository,
     ReplyDecisionPolicy,
+    ReplyDelivery,
     ReplyObserver,
+    ReplyPlanner,
+    TurnGuard,
 )
+from ..replies import DefaultReplyPlanner, ReplyDispatcher, ReplyDraft, parse_reply_draft
+from ..replies.repetition import repeats_recent
 
 log = logging.getLogger(__name__)
 
@@ -78,6 +90,15 @@ class ObservationStats:
     failed: int = 0
 
 
+@dataclass(frozen=True)
+class _DraftObserver:
+    observer: object
+    draft: object
+
+    async def observe(self, event: MessageEvent, bot_reply: str) -> None:
+        await self.observer.observe_draft(event, bot_reply, self.draft)
+
+
 class ConversationService:
     def __init__(
         self,
@@ -91,7 +112,16 @@ class ConversationService:
         media: MediaProcessor | None = None,
         observers: tuple[ReplyObserver, ...] = (),
         *,
+        reply_planner: ReplyPlanner | None = None,
+        reply_dispatcher: ReplyDelivery | None = None,
+        conversation_intelligence: ConversationIntelligencePort | None = None,
         reply_policy: ReplyDecisionPolicy | None = None,
+        turn_guard: TurnGuard | None = None,
+        reaction_policy: MessageReactionPolicy | None = None,
+        reaction_sender: MessageReactionSender | None = None,
+        light_interaction_policy: LightInteractionPolicyPort | None = None,
+        native_interaction_sender: NativeInteractionSender | None = None,
+        prompt_sessions: PromptSessionRepository | None = None,
         observation_backlog: int | None = None,
         observation_workers: int | None = None,
         observation_dedupe: int | None = None,
@@ -102,10 +132,19 @@ class ConversationService:
         self.sender, self.policy = sender, policy
         self.affection = affection
         self.media = media
+        self.reply_planner = reply_planner or DefaultReplyPlanner()
+        self.reply_dispatcher = reply_dispatcher or ReplyDispatcher(sender, media)
+        self.conversation_intelligence = conversation_intelligence
         self.observers = observers
         # None means the built-in "@ me only" rule; an injected policy replaces
         # it. Advisory only — a failure falls back to the default.
         self.reply_policy = reply_policy
+        self.turn_guard = turn_guard
+        self.reaction_policy = reaction_policy
+        self.reaction_sender = reaction_sender
+        self.light_interaction_policy = light_interaction_policy
+        self.native_interaction_sender = native_interaction_sender
+        self.prompt_sessions = prompt_sessions
         self.scope_locks: dict[str, asyncio.Lock] = {}
         self.last_reply: dict[str, float] = {}
         self.extracting: set[str] = set()
@@ -179,9 +218,86 @@ class ConversationService:
         """Full inbound path: ingest, decide, execute. Entry point for app.py."""
         if not await self.ingest(event):
             return
+        if await self.maybe_light_interaction(event):
+            return
+        await self.maybe_react(event)
         if not await self.decide_reply(event):
             return
+        guarded_event = await self.apply_turn_guard(event)
+        if guarded_event is None:
+            return
+        event = guarded_event
         await self.execute_turn(event)
+
+    async def maybe_react(self, event: MessageEvent) -> bool:
+        """Best-effort lightweight presence; never controls text admission."""
+        if self.reaction_policy is None or self.reaction_sender is None:
+            return False
+        try:
+            decision = self.reaction_policy.decide(event)
+            if not getattr(decision, "react", False):
+                return False
+            await self.reaction_sender.react_to_message(
+                event.platform_message_id, str(decision.emoji_id)
+            )
+            log.info(
+                "Reacted event=%s emoji=%s(%s) reason=%s",
+                event.event_id, decision.name, decision.emoji_id, decision.reason,
+            )
+            return True
+        except Exception:
+            # A decorative platform gesture must never suppress or delay the
+            # actual conversation path when NapCat rejects an emoji ID.
+            log.exception("Message reaction failed event=%s", event.event_id)
+            return False
+
+    async def maybe_light_interaction(self, event: MessageEvent) -> bool:
+        """Handle repetition and tiny native games without spending API tokens."""
+        if self.light_interaction_policy is None or self.native_interaction_sender is None:
+            return False
+        try:
+            decision = self.light_interaction_policy.decide(
+                event, self.conversations.recent(event.scope, 8)
+            )
+            if not getattr(decision, "active", False):
+                return False
+            if decision.kind == "repeat":
+                await self.sender.send(group_id=event.group_id, text=decision.text)
+                transcript = decision.text
+            elif decision.kind in {"dice", "rps"}:
+                await self.native_interaction_sender.send_native(
+                    str(event.group_id), decision.kind
+                )
+                transcript = "[骰子]" if decision.kind == "dice" else "[猜拳]"
+            else:
+                return False
+            self.record_assistant_turn(
+                event, transcript, event_id=f"local:{decision.kind}:{event.event_id}"
+            )
+            self.last_reply[event.scope] = time.time()
+            log.info("Local interaction event=%s kind=%s", event.event_id, decision.kind)
+            return True
+        except Exception:
+            log.exception("Local interaction failed event=%s", event.event_id)
+            return False
+
+    async def apply_turn_guard(self, event: MessageEvent) -> MessageEvent | None:
+        """Attach a trusted social cue or suppress repeated bait."""
+        if self.turn_guard is None:
+            return event
+        try:
+            decision = await self.turn_guard.decide(
+                event, recent=self.conversations.recent(event.scope, 16)
+            )
+        except Exception:
+            log.exception("Turn guard failed; continuing without a social cue")
+            return event
+        action = getattr(decision, "action", "ignore")
+        if action != "allow":
+            log.info("Turn ignored by identity guard: %s", getattr(decision, "reason", ""))
+            return None
+        cue = str(getattr(decision, "category", ""))
+        return replace(event, social_cue=cue) if cue else event
 
     async def ingest(self, event: MessageEvent) -> bool:
         """Filter, deduplicate and record. Returns whether it was stored.
@@ -209,6 +325,8 @@ class ConversationService:
             self.people.observe_group_member(
                 event.group_id, event.user_id, event.nickname, event.card
             )
+        if self.conversation_intelligence is not None:
+            self.conversation_intelligence.observe(event)
         self._maybe_extract(event.scope)
         return True
 
@@ -224,16 +342,23 @@ class ConversationService:
         if self.reply_policy is None:
             return not event.group_id or event.at_bot
         try:
-            return bool(
+            decision = bool(
                 await self.reply_policy.decide(
                     event, recent=self.conversations.recent(event.scope, 12)
                 )
             )
+            detail = getattr(getattr(self.reply_policy, "last", None), "reason", "")
+            log.info(
+                "Reply admission event=%s scope=%s allowed=%s reason=%s",
+                event.event_id, event.scope, decision, detail,
+            )
+            return decision
         except Exception:
-            # A broken policy must not cost the bot its manners: fall back to
-            # answering when addressed.
-            log.exception("Reply decision policy failed; using the default")
-            return not event.group_id or event.at_bot
+            # An installed admission policy is also the API-spend boundary.
+            # Failing open here would let a broken quota/decay extension turn
+            # every mention into an unbounded model call.
+            log.exception("Reply decision policy failed; refusing the model call")
+            return False
 
     # --- use case 3: turn execution --------------------------------------
 
@@ -244,22 +369,38 @@ class ConversationService:
                 reply = await self.agent.reply(event)
             except Exception:
                 log.exception("Model call failed")
-                await self.sender.send(
-                    group_id=event.group_id,
-                    user_id=None if event.group_id else event.user_id,
-                    text="我刚才没能完成回复，稍后再试吧。",
-                )
                 return None
-            if not reply.text:
+            draft = getattr(reply, "draft", None) or parse_reply_draft(reply.text)
+            if not draft.text and not draft.channels:
                 return None
-            clean = await self.send_reply(
-                event.group_id,
-                None if event.group_id else event.user_id,
-                reply.text,
-                event,
+            planning_event = event
+            if self.conversation_intelligence is not None and event.group_id:
+                frame = self.conversation_intelligence.latest_frame(event.scope)
+                if frame is not None:
+                    ids = tuple(
+                        item.platform_message_id
+                        for item in frame.recent_window
+                        if item.platform_message_id
+                    )
+                    planning_event = replace(event, recent_message_ids=ids)
+            plan = await self.reply_planner.plan(draft, planning_event)
+            # A model can still imitate the room even when the lightweight
+            # repeat policy did not fire. Treat exact echoes as repeats at the
+            # final model boundary: only an explicit ``+1`` event may produce
+            # one. This protects both normal read-the-room replies and
+            # proactive turns from accidentally parroting a member.
+            if event.group_id and self._is_unrequested_echo(event, plan.semantic_text):
+                log.info("Suppressing unrequested model echo event=%s", event.event_id)
+                return None
+            delivered = await self.reply_dispatcher.dispatch(
+                plan,
+                group_id=event.group_id,
+                user_id=None if event.group_id else event.user_id,
+                allowed_at=self._roster(event),
             )
-            if not clean:
+            if not delivered.sent:
                 return None
+            clean = delivered.transcript
             self.conversations.add_message(
                 f"reply:{event.event_id}",
                 event.scope,
@@ -268,9 +409,71 @@ class ConversationService:
                 "assistant",
                 clean,
             )
+            commit = getattr(self.agent, "commit_delivered_reply", None)
+            if callable(commit):
+                commit(reply, event, clean)
+            self._observe_assistant(event, clean, f"reply:{event.event_id}")
             self.last_reply[event.scope] = time.time()
-            self.dispatch_post_reply(event, clean)
+            record = getattr(self.reply_policy, "record_delivery", None)
+            if callable(record):
+                record(event, clean)
+            self.dispatch_post_reply(event, clean, draft)
             return clean
+
+    def _is_unrequested_echo(self, event: MessageEvent, text: str) -> bool:
+        if self._normalize_repeat_marker(event.text) == "+1":
+            return False
+        try:
+            recent = self.conversations.recent(event.scope, 32)
+        except Exception:
+            return False
+        return repeats_recent(text, recent)
+
+    @staticmethod
+    def _normalize_repeat_marker(text: str) -> str:
+        return re.sub(r"\s+", "", str(text or "")).lower()
+
+    def record_assistant_turn(
+        self, trigger: MessageEvent, text: str, *, event_id: str
+    ) -> None:
+        """Persist and index one actual outbound turn through one boundary."""
+        self.conversations.add_message(
+            event_id, trigger.scope, "bot", "Bot", "assistant", text
+        )
+        if self.prompt_sessions is not None and text.strip():
+            try:
+                self.prompt_sessions.append(
+                    trigger.scope, [{"role": "assistant", "content": text.strip()}]
+                )
+            except Exception:
+                log.exception("Could not sync local assistant turn event=%s", event_id)
+        self._observe_assistant(trigger, text, event_id)
+
+    def _observe_assistant(
+        self, trigger: MessageEvent, text: str, event_id: str
+    ) -> None:
+        if self.conversation_intelligence is None or not trigger.group_id:
+            return
+        reply_to = trigger.platform_message_id
+        if trigger.origin == "operator":
+            latest = self.conversation_intelligence.latest_frame(trigger.scope)
+            reply_to = latest.focus.platform_message_id if latest is not None else ""
+        self.conversation_intelligence.observe(MessageEvent(
+            event_id=event_id,
+            scope=trigger.scope,
+            group_id=trigger.group_id,
+            user_id="bot",
+            nickname="Kinna",
+            text=text,
+            image_urls=(),
+            at_bot=False,
+            at_users=(),
+            timestamp=int(time.time()),
+            platform_message_id=event_id,
+            reply_to_message_id=reply_to,
+            reply_to_user_id=trigger.user_id if trigger.origin != "operator" else "",
+            origin="assistant",
+        ))
 
     async def send_reply(
         self,
@@ -279,27 +482,37 @@ class ConversationService:
         text: str,
         event: MessageEvent | None = None,
     ) -> str:
-        """Parse the reply into structured parts, resolve media, then send.
+        """Compatibility entry point for jobs that still produce plain text.
 
         ``event`` supplies the roster an ``[[at:...]]`` marker is allowed to
         reference. Without it no @ target is granted, so a caller that cannot
         prove who is in the group never lets the model address anyone.
         """
-        if self.media is None:
-            await self.sender.send(group_id=group_id, user_id=user_id, text=text)
-            return text
-        message = await self.media.compose_message(
-            text, allowed_at=self._roster(event) if event else frozenset()
+        return await self.send_draft(
+            group_id, user_id, parse_reply_draft(text), event=event
         )
-        kwargs = message.send_kwargs()
-        # Voice goes in its own frame: the platform rejects mixing a record
-        # segment with image/text in one message.
-        voice = kwargs.pop("voice", None)
-        if kwargs.get("text") or kwargs.get("image"):
-            await self.sender.send(group_id=group_id, user_id=user_id, **kwargs)
-        if voice:
-            await self.sender.send(group_id=group_id, user_id=user_id, voice=voice)
-        return message.text
+
+    async def send_draft(
+        self,
+        group_id: str | None,
+        user_id: str | None,
+        draft: ReplyDraft,
+        event: MessageEvent | None = None,
+    ) -> str:
+        """Deliver a structured model reply through the shared media pipeline.
+
+        Scheduled and proactive turns must retain the model's channel decision
+        (text/meme/voice) instead of flattening it back to plain text.  This is
+        the same delivery boundary used by ordinary inbound turns.
+        """
+        plan = await self.reply_planner.plan(draft, event)
+        result = await self.reply_dispatcher.dispatch(
+            plan,
+            group_id=group_id,
+            user_id=user_id,
+            allowed_at=self._roster(event) if event else frozenset(),
+        )
+        return result.transcript if result.sent else ""
 
     @staticmethod
     def _roster(event: MessageEvent | None) -> frozenset[str]:
@@ -317,16 +530,30 @@ class ConversationService:
 
     # --- use case 4: post-reply events -----------------------------------
 
-    def dispatch_post_reply(self, event: MessageEvent, bot_reply: str) -> None:
+    def dispatch_post_reply(
+        self, event: MessageEvent, bot_reply: str, draft: object | None = None
+    ) -> None:
         """Queue best-effort observations. Never awaited by the caller."""
         if self.affection and self.policy.affection_auto_enabled and event.group_id:
+            observer = self._observer_for_draft(self.affection, draft)
             self.submit_observation(
-                f"affection:{event.event_id}", self.affection, event, bot_reply
+                f"affection:{event.event_id}", observer, event, bot_reply
             )
         for index, observer in enumerate(self.observers):
+            observer = self._observer_for_draft(observer, draft)
             self.submit_observation(
                 f"observer:{index}:{event.event_id}", observer, event, bot_reply
             )
+
+    @staticmethod
+    def _observer_for_draft(observer: object, draft: object | None):
+        if (
+            draft is not None
+            and getattr(draft, "state_observations", None) is not None
+            and callable(getattr(observer, "observe_draft", None))
+        ):
+            return _DraftObserver(observer, draft)
+        return observer
 
     def submit_observation(
         self,

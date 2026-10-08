@@ -11,6 +11,7 @@ from __future__ import annotations
 import ast
 import asyncio
 import json
+import sqlite3
 import sys
 import tempfile
 import unittest
@@ -32,6 +33,7 @@ from qunbot.extensions.slang import (
     validate,
 )
 from qunbot.extensions.slang import mining
+from qunbot.extensions.slang.gloss import GlossEngine, GlossError
 from qunbot.extensions.slang.review import (
     Review,
     ReviewFile,
@@ -125,6 +127,10 @@ class SlangTestCase(unittest.TestCase):
                 self.slang.recent_messages,
             )
         return self.worker.scan(scope)
+
+    def describe(self, term, text, *, scope: str = GROUP, source: str = "human"):
+        """Give a term a meaning, as a deployer or an inference pass would."""
+        self.slang.set_meaning(scope, term, text, source=source, stage=0, now=1)
 
     def review(self, payload, *, scopes=(GROUP,)):
         path = self.root / "slang_review.json"
@@ -296,26 +302,30 @@ class DiscoveryTests(SlangTestCase):
         row = self.slang.candidates(GROUP)[BREAKOUT]
         self.assertLessEqual(len(json.loads(row["samples"])), self.config.max_samples)
 
-    def test_a_single_occurrence_is_not_stored_by_default(self):
+    def test_a_single_occurrence_is_stored_but_not_promoted(self):
+        """Kept so its tally can grow, still invisible until it does."""
         self.speak(["这句话只出现过一次横竖撇捺"])
         self.worker.scan(GROUP)
-        self.assertEqual(self.slang.candidates(GROUP), {})
-
-    def test_singletons_can_be_recorded_when_a_deployer_asks(self):
-        self.speak(["这句话只出现过一次横竖撇捺"])
-        worker = SlangWorker(
-            self.slang,
-            replace(self.config, min_occurrences=1),
-            [GROUP],
-            self.slang.recent_messages,
-        )
-        worker.scan(GROUP)
         recorded = self.slang.candidates(GROUP)
         self.assertTrue(recorded)
         for row in recorded.values():
             with self.subTest(term=row["term"]):
                 self.assertEqual(row["status"], "candidate")
                 self.assertLess(row["confidence"], self.config.understand_confidence)
+
+        index = TermIndex(self.slang, self.config)
+        self.assertEqual(index.usable(GROUP), ([], []))
+
+    def test_the_storage_floor_can_be_raised_to_discard_singletons(self):
+        self.speak(["这句话只出现过一次横竖撇捺"])
+        worker = SlangWorker(
+            self.slang,
+            replace(self.config, store_occurrences=2),
+            [GROUP],
+            self.slang.recent_messages,
+        )
+        worker.scan(GROUP)
+        self.assertEqual(self.slang.candidates(GROUP), {})
 
     def test_a_rescan_does_not_double_count(self):
         self.learn()
@@ -330,6 +340,513 @@ class DiscoveryTests(SlangTestCase):
     def test_scopes_do_not_bleed_into_each_other(self):
         self.learn(scope=GROUP)
         self.assertEqual(self.slang.candidates("group:43"), {})
+
+
+class AccumulationTests(SlangTestCase):
+    """Evidence has to survive the scan window to ever amount to anything.
+
+    Regression: the merge step dropped every term below the promotion floor
+    *before* writing it, so the next window started its tally at 1 again. A
+    term used once per window — a perfectly ordinary way for a group's word to
+    spread — could never reach the floor, and was invisible forever.
+    """
+
+    def _one_per_window(self, windows: int) -> dict:
+        for window in range(windows):
+            self.store.conversations.add_message(
+                f"w{window}",
+                GROUP,
+                f"u{window}",
+                "小明",
+                "user",
+                "今天上大分",
+            )
+            self.worker.scan(GROUP)
+        return self.slang.candidates(GROUP)
+
+    def test_a_term_used_once_per_window_accumulates(self):
+        rows = self._one_per_window(3)
+        self.assertIn(BREAKOUT, rows)
+        self.assertEqual(rows[BREAKOUT]["occurrences"], 3)
+
+    def _unreviewed_index(self) -> TermIndex:
+        """Trust anything with enough evidence, so the floor is the only gate."""
+        self.describe(BREAKOUT, "赢了、拿到好处")
+        index = TermIndex(
+            self.slang,
+            replace(self.config, allow_unreviewed=True, understand_confidence=0.0),
+        )
+        index.refresh(GROUP)
+        return index
+
+    def test_a_single_window_sighting_stays_under_the_floor(self):
+        rows = self._one_per_window(1)
+        self.assertEqual(rows[BREAKOUT]["occurrences"], 1)
+        understood, _ = self._unreviewed_index().usable(GROUP)
+        self.assertNotIn(BREAKOUT, understood)
+
+    def test_an_accumulated_term_promotes_past_the_floor(self):
+        self._one_per_window(3)
+        understood, _ = self._unreviewed_index().usable(GROUP)
+        self.assertIn(BREAKOUT, understood)
+
+
+class DecayTests(SlangTestCase):
+    """Confidence is evidence about now, not a high-water mark.
+
+    Without decay the top-N was decided by accumulated history, so a term that
+    was briefly famous months ago kept a prompt slot against whatever the group
+    is actually saying today.
+    """
+
+    def _candidate(self, term=BREAKOUT, *, confidence=1.0, occurrences=5, last_seen=0):
+        self.slang.upsert(
+            GROUP,
+            term,
+            occurrences=occurrences,
+            seen_users=["u"],
+            seen_days=["d"],
+            samples=[],
+            confidence=confidence,
+            now=last_seen,
+        )
+
+    def test_confidence_halves_over_one_half_life(self):
+        self._candidate(last_seen=0)
+        self.slang.decay(GROUP, now=1000, half_life=1000)
+        self.assertAlmostEqual(
+            self.slang.candidates(GROUP)[BREAKOUT]["confidence"], 0.5, places=6
+        )
+
+    def test_a_reviewed_row_never_decays(self):
+        self._candidate()
+        self.slang.set_status(GROUP, BREAKOUT, "approved")
+        self.assertEqual(self.slang.decay(GROUP, now=10**9, half_life=1000), 0)
+        self.assertEqual(self.slang.candidates(GROUP)[BREAKOUT]["confidence"], 1.0)
+
+    def test_a_recent_row_is_not_rewritten_for_a_rounding_error(self):
+        self._candidate(last_seen=1000)
+        self.assertEqual(
+            self.slang.decay(GROUP, now=1000, half_life=2592000), 0
+        )
+
+    def test_decay_never_goes_negative(self):
+        self._candidate(confidence=0.5)
+        self.slang.decay(GROUP, now=10**9, half_life=1000)
+        self.assertGreaterEqual(
+            self.slang.candidates(GROUP)[BREAKOUT]["confidence"], 0.0
+        )
+
+    def test_a_stale_term_loses_its_slot_to_a_current_one(self):
+        self._candidate("老梗", confidence=1.0, occurrences=20, last_seen=0)
+        self._candidate("新词", confidence=0.4, occurrences=3, last_seen=2000)
+        self.slang.decay(GROUP, now=2000, half_life=1000)
+        self.assertEqual(self.slang.top(GROUP, 1)[0]["term"], "新词")
+
+    def test_zero_half_life_is_refused_rather_than_dividing_by_it(self):
+        self._candidate()
+        self.assertEqual(self.slang.decay(GROUP, now=10**9, half_life=0), 0)
+
+
+class MigrationTests(SlangTestCase):
+    """An existing deployment gains the meaning columns without losing rows."""
+
+    LEGACY_TABLE = """
+        CREATE TABLE IF NOT EXISTS slang_candidates (
+          id INTEGER PRIMARY KEY,
+          scope TEXT NOT NULL,
+          term TEXT NOT NULL,
+          occurrences INTEGER NOT NULL DEFAULT 0,
+          seen_users TEXT NOT NULL DEFAULT '[]',
+          seen_days TEXT NOT NULL DEFAULT '[]',
+          first_seen INTEGER NOT NULL,
+          last_seen INTEGER NOT NULL,
+          samples TEXT NOT NULL DEFAULT '[]',
+          confidence REAL NOT NULL DEFAULT 0,
+          status TEXT NOT NULL DEFAULT 'candidate',
+          origin TEXT NOT NULL DEFAULT 'auto',
+          created_at INTEGER NOT NULL,
+          updated_at INTEGER NOT NULL,
+          UNIQUE(scope, term)
+        )
+    """
+
+    def _legacy_database(self, directory) -> Path:
+        path = Path(directory) / "old.sqlite3"
+        legacy = sqlite3.connect(path)
+        legacy.execute(self.LEGACY_TABLE)
+        legacy.execute(
+            "INSERT INTO slang_candidates(scope,term,occurrences,seen_users,"
+            "seen_days,first_seen,last_seen,samples,confidence,created_at,updated_at)"
+            " VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+            (GROUP, BREAKOUT, 9, '["u"]', '["d"]', 1, 1, "[]", 0.8, 1, 1),
+        )
+        legacy.commit()
+        legacy.close()
+        return path
+
+    def test_an_old_database_keeps_its_rows_and_gains_the_columns(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = self._legacy_database(directory)
+            database = SqliteDatabase(path)
+            try:
+                rows = SlangStore(database).candidates(GROUP)
+            finally:
+                database.close()
+
+        row = rows[BREAKOUT]
+        self.assertEqual(row["occurrences"], 9)
+        self.assertEqual(row["confidence"], 0.8)
+        self.assertEqual(row["meaning"], "")
+        self.assertEqual(row["meaning_source"], "")
+        self.assertEqual(row["inference_stage"], 0)
+
+    def test_the_added_columns_are_idempotent(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = self._legacy_database(directory)
+            for _ in range(2):
+                database = SqliteDatabase(path)
+                try:
+                    columns = [
+                        row[1]
+                        for row in database.db.execute(
+                            "PRAGMA table_info(slang_candidates)"
+                        )
+                    ]
+                finally:
+                    database.close()
+            self.assertEqual(len(columns), len(set(columns)))
+            self.assertIn("meaning", columns)
+
+
+class ScriptedModel:
+    """Replays canned replies in order, and counts what it was asked."""
+
+    def __init__(self, replies):
+        self.replies = list(replies)
+        self.calls = 0
+        self.seen: list[list[dict]] = []
+
+    async def complete(self, messages, tools=None, *, temperature=0.7):
+        self.calls += 1
+        self.seen.append(messages)
+        reply = self.replies.pop(0) if self.replies else "{}"
+        return {"choices": [{"message": {"content": reply}}], "usage": {}}
+
+
+JARGON = "上大分"
+
+
+class GlossTests(SlangTestCase):
+    """Three calls per batch, and the differential between them is the point."""
+
+    def _rows(self, *terms) -> list[dict]:
+        return [
+            {
+                "term": term,
+                "occurrences": 5,
+                "samples": json.dumps(
+                    [{"user_id": "u", "at": 1, "text": f"{term}真爽"}]
+                ),
+            }
+            for term in terms
+        ]
+
+    def _engine(self, *replies):
+        model = ScriptedModel(replies)
+        return GlossEngine(model, self.config), model
+
+    def _infer(self, engine, *terms):
+        return asyncio.run(engine.infer_batch(self._rows(*terms)))
+
+    def test_a_context_only_meaning_marks_the_term_as_jargon(self):
+        engine, model = self._engine(
+            '{"items":[{"term":"上大分","meaning":"赢了、拿到好处"}]}',
+            '{"items":[{"term":"上大分","meaning":"上大号"}]}',
+            '{"items":[{"term":"上大分","verdict":"jargon"}]}',
+        )
+        out = self._infer(engine, JARGON)
+        self.assertEqual(model.calls, 3)
+        self.assertTrue(out[0].is_jargon)
+        self.assertEqual(out[0].meaning, "赢了、拿到好处")
+
+    def test_a_term_defined_the_same_way_either_side_is_not_jargon(self):
+        engine, _ = self._engine(
+            '{"items":[{"term":"今天","meaning":"今天"}]}',
+            '{"items":[{"term":"今天","meaning":"今天"}]}',
+            '{"items":[{"term":"今天","verdict":"ordinary"}]}',
+        )
+        out = self._infer(engine, "今天")
+        self.assertFalse(out[0].is_jargon)
+        self.assertEqual(out[0].meaning, "")
+
+    def test_three_calls_serve_a_whole_batch_not_each_term(self):
+        engine, model = self._engine('{"items":[]}', '{"items":[]}', '{"items":[]}')
+        self._infer(engine, "甲", "乙", "丙", "丁")
+        self.assertEqual(model.calls, 3)
+
+    def test_the_standalone_call_never_sees_the_context(self):
+        """The two inferences must be independent, or nothing is differential.
+
+        If one call produced both answers it would anchor on the context it had
+        just read, report the same meaning twice, and call every term ordinary.
+        """
+        engine, model = self._engine(
+            '{"items":[{"term":"上大分","meaning":"赢了"}]}',
+            '{"items":[{"term":"上大分","meaning":"上大号"}]}',
+            '{"items":[{"term":"上大分","verdict":"jargon"}]}',
+        )
+        self._infer(engine, JARGON)
+        self.assertIn("真爽", model.seen[0][1]["content"])
+        self.assertNotIn("真爽", model.seen[1][1]["content"])
+
+    def test_a_prose_reply_is_refused_rather_than_guessed(self):
+        engine, _ = self._engine("我无法回答这个问题。")
+        with self.assertRaises(GlossError):
+            self._infer(engine, JARGON)
+
+    def test_an_unknown_verdict_reads_as_ordinary(self):
+        engine, _ = self._engine(
+            '{"items":[{"term":"上大分","meaning":"赢了"}]}',
+            '{"items":[{"term":"上大分","meaning":"上大号"}]}',
+            '{"items":[{"term":"上大分","verdict":"probably"}]}',
+        )
+        self.assertFalse(self._infer(engine, JARGON)[0].is_jargon)
+
+    def test_a_missing_term_in_the_reply_reads_as_ordinary(self):
+        engine, _ = self._engine('{"items":[]}', '{"items":[]}', '{"items":[]}')
+        self.assertFalse(self._infer(engine, JARGON)[0].is_jargon)
+
+
+class GlossBudgetTests(SlangTestCase):
+    """Nothing else caps the spend: the default client has no budget policy."""
+
+    def _worker(self, model, **overrides):
+        return SlangWorker(
+            self.slang,
+            replace(self.config, **overrides),
+            [GROUP],
+            self.slang.recent_messages,
+            model=model,
+        )
+
+    def _jargon_replies(self, times=1):
+        return [
+            '{"items":[{"term":"上大分","meaning":"赢了"}]}',
+            '{"items":[{"term":"上大分","meaning":"上大号"}]}',
+            '{"items":[{"term":"上大分","verdict":"jargon"}]}',
+        ] * times
+
+    def test_without_a_model_nothing_is_called_and_nothing_breaks(self):
+        worker = self._worker(None)
+        self.assertIsNone(worker.gloss)
+        self.assertEqual(asyncio.run(worker.gloss_pass(GROUP)), 0)
+
+    def test_the_switch_alone_stops_every_call(self):
+        model = ScriptedModel(self._jargon_replies())
+        self.learn()
+        worker = self._worker(model, gloss_enabled=False)
+        asyncio.run(worker.gloss_pass(GROUP))
+        self.assertEqual(model.calls, 0)
+
+    def test_a_zero_budget_stops_every_call(self):
+        model = ScriptedModel(self._jargon_replies())
+        self.learn()
+        worker = self._worker(model, gloss_max_per_scan=0)
+        asyncio.run(worker.gloss_pass(GROUP))
+        self.assertEqual(model.calls, 0)
+
+    def test_the_interval_refuses_a_second_pass(self):
+        model = ScriptedModel(self._jargon_replies(2))
+        self.learn()
+        worker = self._worker(model, gloss_batch_size=5, gloss_max_per_scan=5)
+        # There is work waiting, so a refusal can only come from the interval.
+        self.assertTrue(
+            self.slang.promotable(
+                GROUP, thresholds=self.config.infer_thresholds, limit=5
+            )
+        )
+        asyncio.run(worker.gloss_pass(GROUP))
+        self.assertEqual(model.calls, 3)
+        asyncio.run(worker.gloss_pass(GROUP))
+        self.assertEqual(model.calls, 3)
+
+    def test_a_failing_model_costs_one_attempt_not_one_per_scan(self):
+        model = ScriptedModel(["这不是 JSON"])
+        self.learn()
+        worker = self._worker(model, gloss_batch_size=5, gloss_max_per_scan=5)
+        with self.assertLogs("qunbot.extensions.slang.worker", level="ERROR"):
+            self.assertEqual(asyncio.run(worker.gloss_pass(GROUP)), 0)
+        attempts = model.calls
+        asyncio.run(worker.gloss_pass(GROUP))
+        self.assertEqual(model.calls, attempts)
+
+    def test_a_batch_that_is_judged_ordinary_is_retired(self):
+        self.learn()
+        worker = self._worker(
+            ScriptedModel(['{"items":[]}', '{"items":[]}', '{"items":[]}']),
+            gloss_batch_size=50,
+            gloss_max_per_scan=50,
+        )
+        asyncio.run(worker.gloss_pass(GROUP))
+        self.assertEqual(
+            self.slang.promotable(
+                GROUP, thresholds=self.config.infer_thresholds, limit=50
+            ),
+            [],
+        )
+
+
+class HumanMeaningTests(SlangTestCase):
+    """A deployer's correction outranks the model's inference."""
+
+    def _candidate(self):
+        self.slang.upsert(
+            GROUP,
+            BREAKOUT,
+            occurrences=5,
+            seen_users=["u"],
+            seen_days=["d"],
+            samples=[],
+            confidence=0.9,
+            now=1,
+        )
+
+    def test_a_human_meaning_outranks_an_inferred_one(self):
+        self._candidate()
+        self.assertTrue(
+            self.slang.set_meaning(
+                GROUP, BREAKOUT, "考得好", source="human", stage=0, now=1
+            )
+        )
+        self.assertFalse(
+            self.slang.set_meaning(
+                GROUP, BREAKOUT, "赢了", source="llm", stage=2, now=2
+            )
+        )
+        self.assertEqual(self.slang.candidates(GROUP)[BREAKOUT]["meaning"], "考得好")
+
+    def test_a_human_meaning_survives_relearning(self):
+        """`upsert` must not carry the meaning columns in its conflict clause."""
+        self._candidate()
+        self.slang.set_meaning(
+            GROUP, BREAKOUT, "考得好", source="human", stage=0, now=1
+        )
+        self.slang.upsert(
+            GROUP,
+            BREAKOUT,
+            occurrences=9,
+            seen_users=["u", "v"],
+            seen_days=["d"],
+            samples=[],
+            confidence=1.0,
+            now=5,
+        )
+        row = self.slang.candidates(GROUP)[BREAKOUT]
+        self.assertEqual(row["occurrences"], 9)
+        self.assertEqual(row["meaning"], "考得好")
+
+    def test_a_human_meaning_is_not_offered_for_inference(self):
+        self._candidate()
+        self.slang.set_meaning(
+            GROUP, BREAKOUT, "考得好", source="human", stage=0, now=1
+        )
+        self.assertEqual(
+            self.slang.promotable(GROUP, thresholds=(3,), limit=10), []
+        )
+        offered = self.slang.promotable(
+            GROUP, thresholds=(3,), limit=10, skip_human=False
+        )
+        self.assertEqual([row["term"] for row in offered], [BREAKOUT])
+
+    def test_a_deployer_can_hand_a_term_back_to_automatic_inference(self):
+        self._candidate()
+        self.slang.set_meaning(
+            GROUP, BREAKOUT, "考得好", source="human", stage=0, now=1
+        )
+        self.assertTrue(self.slang.clear_human_meaning(GROUP, BREAKOUT, now=2))
+        row = self.slang.candidates(GROUP)[BREAKOUT]
+        self.assertEqual(row["meaning_source"], "")
+        self.assertEqual(row["inference_stage"], 0)
+
+    def test_an_unknown_meaning_source_is_refused(self):
+        self._candidate()
+        with self.assertRaises(ValueError):
+            self.slang.set_meaning(
+                GROUP, BREAKOUT, "x", source="guess", stage=0, now=1
+            )
+
+
+class ReviewMeaningTests(SlangTestCase):
+    """The deployer writes definitions in the same file as the decisions."""
+
+    def test_a_deployer_supplied_meaning_is_recorded_as_human(self):
+        self.learn()
+        self.review({"approve": [BREAKOUT], "meanings": {BREAKOUT: "赢了、拿到好处"}})
+        row = self.slang.candidates(GROUP)[BREAKOUT]
+        self.assertEqual(row["meaning"], "赢了、拿到好处")
+        self.assertEqual(row["meaning_source"], "human")
+
+    def test_a_scoped_meaning_beats_a_global_one(self):
+        self.learn()
+        self.review(
+            {
+                "meanings": {BREAKOUT: "全局说法"},
+                "scopes": {GROUP: {"meanings": {BREAKOUT: "本群说法"}}},
+            }
+        )
+        self.assertEqual(
+            self.slang.candidates(GROUP)[BREAKOUT]["meaning"], "本群说法"
+        )
+
+    def test_null_hands_the_term_back_to_automatic_inference(self):
+        self.learn()
+        self.review({"meanings": {BREAKOUT: "人工写法"}})
+        self.assertEqual(
+            self.slang.candidates(GROUP)[BREAKOUT]["meaning_source"], "human"
+        )
+        self.review({"meanings": {BREAKOUT: None}})
+        row = self.slang.candidates(GROUP)[BREAKOUT]
+        self.assertEqual(row["meaning_source"], "")
+        self.assertEqual(row["inference_stage"], 0)
+
+    def test_a_reviewed_meaning_survives_a_later_inference_pass(self):
+        self.learn()
+        self.review({"meanings": {BREAKOUT: "人工写法"}})
+        # A model pass trying to revise it changes nothing.
+        self.assertFalse(
+            self.slang.set_meaning(
+                GROUP, BREAKOUT, "模型写法", source="llm", stage=3, now=99
+            )
+        )
+        self.assertEqual(
+            self.slang.candidates(GROUP)[BREAKOUT]["meaning"], "人工写法"
+        )
+
+    def test_a_meanings_block_of_the_wrong_shape_is_an_error(self):
+        with self.assertRaises(ValueError):
+            parse_review({"meanings": ["上大分"]})
+        with self.assertRaises(ValueError):
+            parse_review({"scopes": {GROUP: {"meanings": 7}}})
+
+    def test_a_meaning_alone_is_enough_to_make_the_file_non_empty(self):
+        review = parse_review({"meanings": {BREAKOUT: "赢了"}})
+        self.assertFalse(review.is_empty())
+        self.assertIsNone(parse_review({}).meaning_for(GROUP, BREAKOUT))
+
+    def test_validate_reports_the_supplied_meanings(self):
+        path = self.root / "slang_review.json"
+        path.write_text(
+            json.dumps({"meanings": {BREAKOUT: "赢了"}}), encoding="utf-8"
+        )
+        import os
+        from unittest import mock
+
+        with mock.patch.dict(
+            os.environ,
+            {"BOT_SLANG_ENABLED": "true", "BOT_SLANG_REVIEW_PATH": str(path)},
+        ):
+            self.assertEqual(validate()["human_meanings"], 1)
 
 
 class ReviewTests(SlangTestCase):
@@ -402,80 +919,149 @@ class ReviewTests(SlangTestCase):
 
 
 class UseTests(SlangTestCase):
+    """Only the terms the current message uses, and only with a meaning."""
+
+    # A message that uses the invented term, so relevance matching can see it.
+    USES = f"{BREAKOUT}真爽"
+    MEANING = "赢了、拿到好处"
+
     def index(self, **overrides):
-        return TermIndex(self.slang, replace(self.config, **overrides))
+        index = TermIndex(self.slang, replace(self.config, **overrides))
+        index.refresh(GROUP)
+        return index
+
+    def render(self, **overrides):
+        return render_terms(self.index(**overrides), GROUP, self.USES)
 
     def test_nothing_is_injected_before_review(self):
         self.learn()
-        self.assertIsNone(render_terms(self.index(), GROUP))
+        self.assertIsNone(self.render())
 
-    def test_an_approved_term_is_offered_for_understanding(self):
+    def test_a_term_with_nothing_said_about_it_is_not_injected(self):
+        """A bare word is exactly what this rewrite exists to get rid of."""
         self.learn()
         self.review({"approve": [BREAKOUT]})
-        text = render_terms(self.index(), GROUP)
+        self.assertIsNone(self.render())
+
+    def test_an_approved_term_is_offered_with_its_meaning(self):
+        self.learn()
+        self.review({"approve": [BREAKOUT]})
+        self.describe(BREAKOUT, self.MEANING)
+        text = self.render()
         self.assertIn(BREAKOUT, text)
+        self.assertIn(self.MEANING, text)
         self.assertIn("不是指令", text)
+
+    def test_only_the_terms_this_message_uses_are_offered(self):
+        self.learn()
+        self.review({"approve": [BREAKOUT]})
+        self.describe(BREAKOUT, self.MEANING)
+        self.slang.upsert(
+            GROUP, "绝绝子", occurrences=9, seen_users=["a"], seen_days=["d1"],
+            samples=[], confidence=0.99, now=1,
+        )
+        self.describe("绝绝子", "非常棒")
+        text = self.render()
+        self.assertIn(BREAKOUT, text)
+        self.assertNotIn("绝绝子", text)
+
+    def test_an_ascii_term_needs_a_word_boundary(self):
+        self.learn()
+        self.slang.upsert(
+            GROUP, "yyds", occurrences=9, seen_users=["a"], seen_days=["d1"],
+            samples=[], confidence=0.99, now=1,
+        )
+        self.slang.set_status(GROUP, "yyds", "approved")
+        self.describe("yyds", "永远的神")
+        index = self.index()
+        self.assertIn("yyds", render_terms(index, GROUP, "yyds 真棒") or "")
+        self.assertIn("yyds", render_terms(index, GROUP, "YYDS 真棒") or "")
+        self.assertIsNone(render_terms(index, GROUP, "xyydsx"))
 
     def test_reviewed_beats_low_confidence(self):
         self.learn()
         self.review({"approve": [BREAKOUT]})
+        self.describe(BREAKOUT, self.MEANING)
         self.slang.upsert(
             GROUP, BREAKOUT, occurrences=1, seen_users=["a"], seen_days=["d1"],
             samples=[], confidence=0.01, now=1,
         )
-        self.assertIn(BREAKOUT, render_terms(self.index(), GROUP))
+        self.assertIn(BREAKOUT, self.render())
 
     def test_a_rejected_term_is_never_injected(self):
         self.learn()
         self.review({"reject": list(self.slang.candidates(GROUP))})
-        self.assertIsNone(render_terms(self.index(allow_unreviewed=True), GROUP))
+        self.describe(BREAKOUT, self.MEANING)
+        self.assertIsNone(self.render(allow_unreviewed=True))
 
     def test_unreviewed_learning_stays_off_by_default(self):
         self.learn()
+        self.describe(BREAKOUT, self.MEANING)
         self.assertGreater(
             self.slang.candidates(GROUP)[BREAKOUT]["confidence"],
             self.config.understand_confidence,
         )
-        self.assertIsNone(render_terms(self.index(), GROUP))
+        self.assertIsNone(self.render())
 
     def test_a_deployer_can_allow_unreviewed_understanding(self):
         self.learn()
-        text = render_terms(self.index(allow_unreviewed=True), GROUP)
-        self.assertIn(BREAKOUT, text)
+        self.describe(BREAKOUT, self.MEANING)
+        self.assertIn(BREAKOUT, self.render(allow_unreviewed=True))
+
+    def test_an_unreviewed_term_still_needs_a_meaning(self):
+        self.learn()
+        self.assertIsNone(self.render(allow_unreviewed=True))
 
     def test_imitation_needs_review_confidence_and_an_explicit_opt_in(self):
         self.learn()
         self.review({"approve": [BREAKOUT]})
-        self.assertNotIn("可以用", render_terms(self.index(), GROUP) or "")
-        self.assertIn("可以用", render_terms(self.index(allow_imitation=True), GROUP))
+        self.describe(BREAKOUT, self.MEANING)
+        self.assertNotIn("可以用", self.render() or "")
+        self.assertIn("可以用", self.render(allow_imitation=True))
 
     def test_imitation_requires_confidence_even_when_reviewed(self):
         self.learn()
         self.review({"approve": [BREAKOUT]})
-        shy = self.index(allow_imitation=True, imitate_confidence=0.999)
-        self.assertNotIn("可以用", render_terms(shy, GROUP))
+        self.describe(BREAKOUT, self.MEANING)
+        shy = self.render(allow_imitation=True, imitate_confidence=0.999)
+        self.assertNotIn("可以用", shy)
 
     def test_imitation_never_reaches_an_unreviewed_term(self):
         self.learn()
-        permissive = self.index(allow_imitation=True, allow_unreviewed=True)
-        text = render_terms(permissive, GROUP)
+        self.describe(BREAKOUT, self.MEANING)
+        text = self.render(allow_imitation=True, allow_unreviewed=True)
         self.assertIn(BREAKOUT, text)
         self.assertNotIn("可以用", text)
 
-    def test_the_contribution_is_capped(self):
-        for index in range(40):
+    def test_the_contribution_is_capped_in_terms_and_in_characters(self):
+        terms = [f"词{index}" for index in range(40)]
+        for term in terms:
             self.slang.upsert(
-                GROUP, f"词{index}", occurrences=9, seen_users=["a"], seen_days=["d1"],
+                GROUP, term, occurrences=9, seen_users=["a"], seen_days=["d1"],
                 samples=[], confidence=0.99, now=1,
             )
-            self.slang.set_status(GROUP, f"词{index}", "approved")
-        text = render_terms(self.index(max_terms=5), GROUP)
-        self.assertEqual(text.count("、"), 4)
+            self.slang.set_status(GROUP, term, "approved")
+            self.describe(term, "某个说法")
+        index = TermIndex(self.slang, replace(self.config, max_terms=5))
+        index.refresh(GROUP)
+        text = render_terms(index, GROUP, " ".join(terms))
+        self.assertEqual(text.count("＝"), 5)
+        self.assertLessEqual(len(text), CONTEXT_MAX_CHARS)
+
+    def test_a_meaning_too_long_to_fit_is_dropped_rather_than_truncated(self):
+        self.learn()
+        self.review({"approve": [BREAKOUT]})
+        self.describe(BREAKOUT, "很长" * 40)
+        # The meaning is capped at max_meaning_chars, so the line still fits.
+        text = self.render(max_meaning_chars=8)
+        self.assertIn(BREAKOUT, text)
+        self.assertLessEqual(len(text), CONTEXT_MAX_CHARS)
 
     def test_the_prompt_never_carries_raw_message_text(self):
         self.learn()
         self.review({"approve": [BREAKOUT]})
-        text = render_terms(self.index(), GROUP)
+        self.describe(BREAKOUT, self.MEANING)
+        text = self.render()
         for row in self.slang.candidates(GROUP).values():
             for sample in json.loads(row["samples"]):
                 self.assertNotIn(sample["text"], text)
@@ -483,7 +1069,9 @@ class UseTests(SlangTestCase):
     def test_scopes_do_not_share_terms(self):
         self.learn()
         self.review({"approve": [BREAKOUT]})
-        self.assertIsNone(render_terms(self.index(), "group:43"))
+        self.describe(BREAKOUT, self.MEANING)
+        index = self.index()
+        self.assertIsNone(render_terms(index, "group:43", self.USES))
 
 
 class WiringTests(SlangTestCase):
@@ -742,40 +1330,41 @@ class PrefixTests(SlangTestCase):
             context,
         )
 
-    def test_the_stable_prefix_is_byte_identical_across_learning(self):
-        index = TermIndex(self.slang, self.config)
+    def _registry(self, index):
         registry = ContextRegistry()
         registry.register(
             "group_slang",
-            lambda event: render_terms(index, event.scope),
+            lambda event: render_terms(index, event.scope, event.text),
             trust=Trust.DERIVED,
             priority=CONTEXT_PRIORITY,
             max_chars=CONTEXT_MAX_CHARS,
         )
-        agent = self.agent(registry)
+        return registry
+
+    def test_the_stable_prefix_is_byte_identical_across_learning(self):
+        index = TermIndex(self.slang, self.config)
+        agent = self.agent(self._registry(index))
         before = agent.stable_prefix()
         self.learn()
         self.review({"approve": [BREAKOUT]})
+        self.describe(BREAKOUT, "赢了、拿到好处")
+        index.refresh(GROUP)
         self.assertEqual(agent.stable_prefix(), before)
         self.assertNotIn(BREAKOUT, agent.stable_prefix())
 
     def test_learned_terms_reach_the_model_through_the_dynamic_suffix(self):
         index = TermIndex(self.slang, self.config)
-        registry = ContextRegistry()
-        registry.register(
-            "group_slang",
-            lambda event: render_terms(index, event.scope),
-            trust=Trust.DERIVED,
-            priority=CONTEXT_PRIORITY,
-            max_chars=CONTEXT_MAX_CHARS,
-        )
+        registry = self._registry(index)
         agent = self.agent(registry)
         self.learn()
         self.review({"approve": [BREAKOUT]})
-        messages = agent.build_messages(event())
+        self.describe(BREAKOUT, "赢了、拿到好处")
+        index.refresh(GROUP)
+        speaking = event(text=f"{BREAKOUT}真爽")
+        messages = agent.build_messages(speaking)
         self.assertIn(BREAKOUT, messages[-1]["content"])
         self.assertNotIn(BREAKOUT, messages[0]["content"])
-        self.assertEqual(registry.trust_map(event())["group_slang"], "medium")
+        self.assertEqual(registry.trust_map(speaking)["group_slang"], "medium")
 
 
 class _SilentSender:

@@ -6,6 +6,7 @@ import argparse
 import asyncio
 import json
 import logging
+from dataclasses import replace
 from inspect import isawaitable
 from typing import Any, Callable
 
@@ -14,6 +15,7 @@ from .config import Config
 from .domain import BotPolicy, ConfigError, ConversationPolicy, SchedulePolicy
 from .extensions.loader import (
     bind_features,
+    bind_management,
     build_features,
     build_registry,
     build_workers,
@@ -23,17 +25,31 @@ from .extensions.loader import (
 from .adapters.events import parse_message
 from .adapters.model import ModelClient
 from .memory.service import MemoryService
+from .identity_guard import IdentityGuard
 from .adapters.onebot import OneBotGateway
 from .relationships.evaluator import AffectionEvaluator
+from .relationships.state import policy_from_env
+from .conversation_intelligence import ConversationIntelligence
+from .replies import CasualMediaPolicy, DefaultReplyPlanner, HumanizedPacer, QQFacePolicy, ReplyDispatcher
+from .replies.quotes import QuotePolicy
 from .scheduling import Scheduler
 from .scheduling.runner import JobRunner
+from .scheduling.management import ScheduleManagementService
 from .runtime.service import ConversationService
 from .runtime.skills import SkillCatalog
 from .storage.activity import ActivityStore
 from .storage.conversation import ConversationStore
 from .storage.database import SqliteDatabase
 from .storage.jobs import JobsStore
+from .storage.knowledge import KnowledgeStore
 from .storage.memory import MemoryStore
+from .storage.prompt_sessions import PromptSessionStore
+from .conversation_compaction import ConversationCompactor
+from .social_interactions import (
+    LightInteractionPolicy, LightInteractionSettings, PokeController, PokeSettings,
+    ReactionPolicy, ReactionSettings,
+)
+from .storage.topic_observations import TopicObservationStore
 from .storage.relationships import RelationshipsStore
 from .runtime.tools import built_in_tools
 
@@ -110,8 +126,11 @@ class BotApp:
         database = SqliteDatabase(config.db_path)
         self._closers.append(database.db.close)
         conversations = ConversationStore(database)
-        people = RelationshipsStore(database)
+        people = RelationshipsStore(database, policy=policy_from_env())
         memories = MemoryStore(database)
+        knowledge = KnowledgeStore(database)
+        prompt_sessions = PromptSessionStore(database)
+        topic_observations = TopicObservationStore(database)
         activity = ActivityStore(database)
         jobs = JobsStore(database)
         model = ModelClient(
@@ -122,7 +141,18 @@ class BotApp:
         )
         self._closers.append(model.close)
         skills = SkillCatalog(config.skills_path, enabled_skills(config))
-        memory = MemoryService(model, conversations, memories)
+        memory = MemoryService(
+            model, conversations, memories, knowledge=knowledge
+        )
+        conversation_intelligence = ConversationIntelligence(
+            observations=topic_observations,
+            window_messages=config.conversation_window_messages,
+            window_seconds=config.conversation_window_seconds,
+            window_char_budget=config.conversation_window_chars,
+        )
+        conversation_compactor = ConversationCompactor(
+            model, prompt_sessions, conversations
+        )
         # Handed to the features before they register, so one that reads
         # memories finds the coordinator there. Read-only: the memory package
         # stays the sole owner of its data.
@@ -141,6 +171,9 @@ class BotApp:
             features.tools,
             config.persona_path,
             features.context,
+            conversation_intelligence=conversation_intelligence,
+            prompt_sessions=prompt_sessions,
+            conversation_compactor=conversation_compactor,
         )
         gateway = OneBotGateway(
             config.onebot_host,
@@ -175,6 +208,7 @@ class BotApp:
                 max_chars=config.job_max_chars,
             ),
         )
+        media = features.media()
         service = ConversationService(
             agent,
             conversations,
@@ -182,10 +216,27 @@ class BotApp:
             activity,
             gateway,
             policy,
-            AffectionEvaluator(model, people),
-            features.media(),
+            AffectionEvaluator(model, people, policy_from_env()),
+            media,
             tuple(features.observers),
+            reply_planner=DefaultReplyPlanner(
+                features.reply_capabilities(), qq_faces=QQFacePolicy.from_env(),
+                quotes=QuotePolicy.from_env(),
+                casual_media=CasualMediaPolicy.from_env(),
+            ),
+            reply_dispatcher=ReplyDispatcher(
+                gateway, media, pacer=HumanizedPacer.from_env()
+            ),
+            conversation_intelligence=conversation_intelligence,
             reply_policy=features.reply_policy,
+            turn_guard=IdentityGuard.built_in(model),
+            reaction_policy=ReactionPolicy(ReactionSettings.from_env()),
+            reaction_sender=gateway,
+            light_interaction_policy=LightInteractionPolicy(
+                LightInteractionSettings.from_env(), repeat_ledger=activity
+            ),
+            native_interaction_sender=gateway,
+            prompt_sessions=prompt_sessions,
             observation_backlog=config.observer_queue_size,
             observation_workers=config.observer_workers,
             observation_dedupe=config.observer_dedupe,
@@ -195,13 +246,46 @@ class BotApp:
         self._closers.append(service.aclose)
         # Features that need a runtime collaborator get it here, rather than
         # app.py importing each feature module to wire it by hand.
-        bind_features(features, service)
         job_runner = JobRunner(service, handlers)
+        schedule_management = ScheduleManagementService(
+            scheduler,
+            job_runner.run,
+            config.schedules_path,
+            config.group_allowlist,
+            handlers.suggested_jobs(),
+        )
+        bind_features(features, service)
+        bind_management(features, schedule_management)
+        poke_controller = PokeController(
+            PokeSettings.from_env(), service, gateway, config.group_allowlist
+        )
 
         async def on_event(raw: dict) -> None:
+            if await poke_controller.handle(raw):
+                return
+            for handler in features.inbound_handlers:
+                try:
+                    if await handler(raw):
+                        return
+                except Exception:
+                    log.exception("Extension inbound handler failed")
             event = parse_message(raw)
             if event:
                 try:
+                    if event.reply_to_message_id:
+                        try:
+                            quoted = await gateway.resolve_quote(event.reply_to_message_id)
+                            event = replace(
+                                event,
+                                quoted_text=str(quoted.get("text") or ""),
+                                quoted_image_urls=tuple(quoted.get("image_urls") or ()),
+                            )
+                        except Exception:
+                            log.info(
+                                "Could not resolve quoted message %s",
+                                event.reply_to_message_id,
+                                exc_info=True,
+                            )
                     await service.handle_message(event)
                 except Exception:
                     log.exception("Failed to handle QQ event %s", event.event_id)

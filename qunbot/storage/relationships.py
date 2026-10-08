@@ -37,6 +37,11 @@ _ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("affection_events", "value_after", "value_after INTEGER"),
     ("affection_events", "status", "status TEXT NOT NULL DEFAULT 'applied'"),
     ("affection_events", "detail", "detail TEXT NOT NULL DEFAULT ''"),
+    # When dormancy decay last moved this score. Kept apart from `updated_at`
+    # so a decay is never mistaken for an interaction — the cooldown and the
+    # daily caps read `affection_events` with status='applied', and a decay
+    # writes status='decayed' precisely so it cannot reset them.
+    ("relations", "decayed_at", "decayed_at INTEGER NOT NULL DEFAULT 0"),
 )
 
 
@@ -227,6 +232,88 @@ class RelationshipsStore(SqliteRepository):
                 f"{current}->{value}：{proposal.reason}"
             ),
         }
+
+    # ---------------------------------------------------------- dormancy
+
+    def decay_dormant(self, *, now: int | None = None) -> list[dict]:
+        """Pull relationships nobody has touched back toward neutral.
+
+        Half-life decay measured from the last *applied* interaction, so a
+        score only ever moves because time passed, never because this ran more
+        often. The clock is ``decayed_at`` rather than ``updated_at``: keeping
+        them apart is what stops a decay from looking like an interaction to
+        the cooldown and the daily caps.
+
+        Returns only the rows whose *stage* changed — that is the part with
+        visible consequences. A score drifting inside a stage changes nothing
+        the bot says, so it is applied silently; a stage change is recorded,
+        under status ``decayed`` so it never counts as an interaction.
+        """
+        policy = self.policy
+        half_life = int(policy.decay_half_life_seconds)
+        if half_life <= 0:
+            return []
+        now = int(time.time()) if now is None else int(now)
+        rows = self.db.execute(
+            "SELECT r.group_id, r.user_id, r.affection,"
+            " MAX("
+            "   COALESCE((SELECT MAX(e.created_at) FROM affection_events e"
+            "     WHERE e.group_id=r.group_id AND e.user_id=r.user_id"
+            "       AND e.status='applied'), 0),"
+            "   r.decayed_at, r.updated_at"
+            " ) AS anchor"
+            " FROM relations r WHERE r.affection != 0"
+            " ORDER BY abs(r.affection) DESC LIMIT ?",
+            (max(0, int(policy.decay_max_rows)),),
+        ).fetchall()
+
+        stage_changes: list[dict] = []
+        for row in rows:
+            elapsed = now - int(row["anchor"] or 0) - int(policy.decay_grace_seconds)
+            if elapsed <= 0:
+                continue
+            current = int(row["affection"])
+            # Exponentials compose, so stepping this repeatedly reaches the
+            # same place as one long step. Rounding decides *when* a step
+            # happens, not how far — which is why nothing is written when the
+            # score has not moved a whole point yet.
+            value = int(round(current * (0.5 ** (elapsed / half_life))))
+            if value == current:
+                continue
+            before = policy.stage_for(current)
+            after = policy.stage_for(value)
+            with self.transaction():
+                self.db.execute(
+                    "UPDATE relations SET affection=?, decayed_at=?"
+                    " WHERE group_id=? AND user_id=?",
+                    (value, now, row["group_id"], row["user_id"]),
+                )
+                if after.key != before.key:
+                    self._log_event(
+                        AffectionProposal(
+                            row["group_id"],
+                            row["user_id"],
+                            value - current,
+                            "长期未互动，关系阶段回落",
+                            source="decay",
+                        ),
+                        value,
+                        "decayed",
+                        f"{before.key}->{after.key}",
+                        now,
+                    )
+            if after.key != before.key:
+                stage_changes.append(
+                    {
+                        "group_id": row["group_id"],
+                        "user_id": row["user_id"],
+                        "before": current,
+                        "after": value,
+                        "from_stage": before.key,
+                        "to_stage": after.key,
+                    }
+                )
+        return stage_changes
 
     # ---------------------------------------------------------- audit trail
 

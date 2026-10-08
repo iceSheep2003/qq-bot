@@ -17,8 +17,10 @@ import logging
 import time
 from collections.abc import Callable, Iterable
 
+from ...storage.slang import stage_for
 from . import mining
 from .config import SlangConfig
+from .gloss import GlossEngine
 from .review import ReviewFile
 
 log = logging.getLogger(__name__)
@@ -32,6 +34,12 @@ def _day(created_at: int) -> str:
     return time.strftime("%Y%m%d", time.gmtime(int(created_at)))
 
 
+def _batches(rows: list[dict], size: int):
+    size = max(1, int(size))
+    for start in range(0, len(rows), size):
+        yield rows[start : start + size]
+
+
 class SlangWorker:
     def __init__(
         self,
@@ -41,6 +49,8 @@ class SlangWorker:
         reader: Callable[[str, int], list[dict]],
         *,
         review_file: ReviewFile | None = None,
+        model=None,
+        index=None,
     ):
         self.store = store
         self.config = config
@@ -48,6 +58,14 @@ class SlangWorker:
         self.reader = reader
         self.review = review_file or ReviewFile(config.review_path)
         self.words = mining.load_wordlist(config.wordlist_path)
+        # Absent model is a supported configuration, not a broken one: the
+        # package still discovers and counts, it just cannot say what a term
+        # means. Everything downstream treats "no meaning" as "not yet known".
+        self.gloss = GlossEngine(model, config) if model is not None else None
+        self._glossing: set[str] = set()
+        # The worker publishes what the reply path may read: the provider runs
+        # inside a turn, where a query is not allowed.
+        self.index = index
 
     # -- one scope ----------------------------------------------------------
 
@@ -69,16 +87,28 @@ class SlangWorker:
         merged = self._merge(scope, fresh)
         self._write(scope, merged)
 
-        reviewed = self._apply_review(scope)
+        now = int(time.time())
+        reviewed = self._apply_review(scope, now)
+        # Decay before pruning. Eviction is by confidence, so a term that has
+        # gone quiet must lose its confidence before `prune` can even consider
+        # it; pruning first would keep the stale hits and drop the new ones.
+        decayed = self.store.decay(
+            scope, now=now, half_life=self.config.decay_half_life_seconds
+        )
         pruned = self.store.prune(scope, self.config.max_candidates)
         if rows:
             self.store.advance_scan(scope, max(int(row.get("id") or 0) for row in rows))
+        if self.index is not None:
+            # Publish what this pass learned so the next turn can read it
+            # without touching the database.
+            self.index.refresh(scope)
         return {
             "scope": scope,
             "scanned": len(fresh),
             "new": len(merged),
             "kept": len(self.store.candidates(scope)),
             "reviewed": reviewed,
+            "decayed": decayed,
             "pruned": pruned,
         }
 
@@ -146,10 +176,12 @@ class SlangWorker:
             users, days = users[:_MAX_TRACKED], days[:_MAX_TRACKED]
             samples = samples[: self.config.max_samples]
             confidence = mining.confidence(occurrences, len(users), len(days))
-            # Below the evidence floor a term is not recorded at all: a single
-            # sighting is a typo far more often than it is a group's word, and
-            # storing every 2-gram once would bury the real candidates.
-            if occurrences < self.config.min_occurrences:
+            # Write at the storage floor, not the promotion floor. A term that
+            # appears once per scan window can only cross the promotion floor
+            # if its tally survives the window: discarding it here meant the
+            # next pass started from 1 again, so it never did. Storage is cheap
+            # and `prune` bounds it; invisibility was the real cost.
+            if occurrences < self.config.store_occurrences:
                 continue
             result[term] = {
                 "occurrences": occurrences,
@@ -174,22 +206,115 @@ class SlangWorker:
                 now=entry["now"],
             )
 
-    def _apply_review(self, scope: str) -> int:
+    def _apply_review(self, scope: str, now: int) -> int:
+        """Apply the deployer's file: status decisions and meanings both.
+
+        A deployer's meaning is written with ``source="human"``, which is what
+        stops a later inference pass from revising it.
+        """
         review = self.review.current()
         if review.is_empty():
             return 0
         changed = 0
         for term, row in self.store.candidates(scope).items():
             action = review.action_for(scope, term)
-            if action is None:
+            if action is not None:
+                desired = review.status_for(scope, term)
+                if desired != row["status"]:
+                    self.store.set_status(scope, term, desired)
+                    self.store.log_review(scope, term, action, "review file")
+                    changed += 1
+
+            if review.releases(scope, term):
+                if self.store.clear_human_meaning(scope, term, now=now):
+                    self.store.log_review(scope, term, "release", "review file")
+                    changed += 1
                 continue
-            desired = review.status_for(scope, term)
-            if desired == row["status"]:
+
+            if not review.has_meaning(scope, term):
                 continue
-            self.store.set_status(scope, term, desired)
-            self.store.log_review(scope, term, action, "review file")
-            changed += 1
+            meaning = review.meaning_for(scope, term) or ""
+            if row["meaning_source"] == "human" and row["meaning"] == meaning:
+                continue
+            if self.store.set_meaning(
+                scope, term, meaning, source="human", stage=0, now=now
+            ):
+                self.store.log_review(scope, term, "meaning", "review file")
+                changed += 1
         return changed
+
+    # -- meaning inference --------------------------------------------------
+
+    async def gloss_pass(self, scope: str) -> int:
+        """One bounded round of inference. Returns terms examined.
+
+        Three gates stand between a scan and a model call, and all three are
+        load-bearing rather than decorative — the default deployment wires its
+        model client without a budget policy, so nothing else caps the spend:
+
+        * ``gloss_enabled`` and an injected model;
+        * the persisted interval, so a scope cannot be re-inferred every scan;
+        * ``inference_stage`` per term, so evidence already judged is not
+          judged again — and a restart resumes mid-staging instead of starting
+          over.
+        """
+        if self.gloss is None or not self.config.gloss_enabled:
+            return 0
+        if self.config.gloss_max_per_scan <= 0 or scope in self._glossing:
+            return 0
+        now = int(time.time())
+        if now - self.store.last_gloss(scope) < self.config.gloss_interval_seconds:
+            return 0
+
+        self._glossing.add(scope)
+        try:
+            rows = self.store.promotable(
+                scope,
+                thresholds=self.config.infer_thresholds,
+                limit=self.config.gloss_max_per_scan,
+                skip_human=not self.config.overwrite_human_meanings,
+            )
+            examined = 0
+            for batch in _batches(rows, self.config.gloss_batch_size):
+                examined += self._record(scope, batch, await self.gloss.infer_batch(batch), now)
+            return examined
+        except Exception:
+            # A model that is down, misconfigured, or answering in prose must
+            # not take the scan loop with it.
+            log.exception("slang meaning inference failed for %s", scope)
+            return 0
+        finally:
+            self._glossing.discard(scope)
+            # Marked whether or not it worked: a broken model costs one attempt
+            # per interval, not one per scan.
+            self.store.mark_gloss(scope, now)
+
+    def _record(self, scope: str, batch: list[dict], glossed, now: int) -> int:
+        by_term = {str(row["term"]): row for row in batch}
+        written = 0
+        for item in glossed:
+            row = by_term.get(item.term)
+            if row is None:
+                continue
+            # An ordinary word is retired at the last stage: re-asking every
+            # interval would spend on the same answer forever.
+            stage = (
+                stage_for(int(row["occurrences"]), self.config.infer_thresholds)
+                if item.is_jargon
+                else len(self.config.infer_thresholds)
+            )
+            if self.store.set_meaning(
+                scope,
+                item.term,
+                item.meaning,
+                source="llm",
+                stage=stage,
+                now=now,
+                context_meaning=item.context_meaning,
+                standalone_meaning=item.standalone_meaning,
+            ):
+                written += 1
+        return written
 
     # -- loop ---------------------------------------------------------------
 
@@ -198,6 +323,7 @@ class SlangWorker:
             for scope in self.scopes:
                 try:
                     self.scan(scope)
+                    await self.gloss_pass(scope)
                 except Exception:
                     # One bad scope must not stop the others, and nothing here
                     # is allowed to take the gateway down.

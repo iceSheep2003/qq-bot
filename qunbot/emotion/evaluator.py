@@ -153,3 +153,26 @@ class MoodEvaluator:
             dedupe_key=key,
             now=now,
         )
+
+    async def observe_draft(self, event: MessageEvent, bot_reply: str, draft) -> None:
+        """Consume a state observation emitted by the already-paid main turn."""
+        if not self.auto_enabled or not event.group_id:
+            return
+        state = getattr(draft, "state_observations", None) or {}
+        raw = state.get("mood")
+        if not isinstance(raw, dict):
+            return
+        verdict = parse_verdict(json.dumps(raw, ensure_ascii=False))
+        if verdict is None:
+            return
+        key = dedupe_key(event)
+        if self.store.seen(event.scope, key):
+            return
+        deltas, reason = verdict
+        now = int(self.clock())
+        before = Mood.from_row(self.store.load(event.scope))
+        after = self.policy.apply(before, deltas, reason, now)
+        self.store.change(
+            event.scope, after.values(), deltas, reason,
+            dedupe_key=key, now=now,
+        )

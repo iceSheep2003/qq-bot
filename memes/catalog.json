@@ -1,3 +1,77 @@
 {
-  "memes": []
+  "_comment": [
+    "本地表情包素材目录。tag 是模型唯一能看到的东西——它会出现在提示词的",
+    "available_meme_tags 里，模型据此决定回复末尾放不放 [[meme:标签]]。",
+    "同一个 tag 可以对应多个文件，pick() 随机挑一个。",
+    "文件必须留在本目录之下（路径会被校验），单文件上限 4 MiB。",
+    "",
+    "ip/ 下是 B站账号 kinna-408bot 的 IP 立绘（蓝发黑卫衣女孩），",
+    "astrbot-official-01/ 下是 AstrBot 表情包 1 号的全量第三方素材与先前的精选副本，",
+    "来源、版本与许可声明见 astrbot-official-01/SOURCE.md。"
+  ],
+  "packs": [
+    {
+      "root": "astrbot-official-01/upstream",
+      "category_tags": {
+        "angry": "生气",
+        "baka": "调侃",
+        "color": "暧昧",
+        "confused": "疑惑",
+        "cpu": "烧脑",
+        "fool": "犯傻",
+        "givemoney": "要钱",
+        "happy": "开心",
+        "like": "喜欢",
+        "meow": "卖萌",
+        "morning": "早安",
+        "reply": "等回复",
+        "sad": "难过",
+        "see": "观望",
+        "shy": "害羞",
+        "sigh": "无语",
+        "sleep": "困了",
+        "surprised": "震惊",
+        "work": "工作"
+      }
+    }
+  ],
+  "memes": [
+    { "tag": "思考", "file": "ip/ip-thinking-v1.png" },
+    { "tag": "加油", "file": "ip/ip-encouragement-v1.png" },
+    { "tag": "拒绝", "file": "ip/ip-nope-v1.png" },
+    { "tag": "警告", "file": "ip/ip-warning-v1.png" },
+    { "tag": "提醒", "file": "ip/ip-warning.png" },
+    { "tag": "记笔记", "file": "ip/ip-note-taking-v1.png" },
+    { "tag": "查数据", "file": "ip/ip-data-check-v1.png" },
+    { "tag": "讲重点", "file": "ip/ip-framework-pointer-v1.png" },
+    { "tag": "再见", "file": "ip/ip-outro-wave-v1.png" },
+    { "tag": "算一算", "file": "ip/ip-calculator.png" },
+    { "tag": "查资料", "file": "ip/ip-search-input.png" },
+    { "tag": "崩溃", "file": "ip/ip-overload.png" },
+
+    { "tag": "翻资料", "file": "ip/zinxtick-open-folder.png" },
+    { "tag": "整理", "file": "ip/zinxtick-file-sort.png" },
+    { "tag": "划重点", "file": "ip/zinxtick-highlight.png" },
+    { "tag": "核对", "file": "ip/zinxtick-align-lists.png" },
+    { "tag": "观望", "file": "ip/zinxtick-competition-watch.png" },
+    { "tag": "震惊", "file": "ip/zinxtick-ranking-surprise.png" },
+    { "tag": "做计划", "file": "ip/zinxtick-calendar-plan.png" },
+    { "tag": "权衡", "file": "ip/zinxtick-scale-compare.png" },
+    { "tag": "纠结", "file": "ip/zinxtick-token-choice.png" },
+    { "tag": "打勾", "file": "ip/zinxtick-checklist.png" },
+    { "tag": "给你看", "file": "ip/zinxtick-present-sheet.png" },
+    { "tag": "打住", "file": "ip/zinxtick-pause.png" },
+
+    { "tag": "打call", "file": "ip/ew408-pom-pom-cheer-9f.gif" },
+    { "tag": "疑惑", "file": "astrbot-official-01/confused-question.jpg" },
+    { "tag": "震惊", "file": "astrbot-official-01/surprised-blank.jpg" },
+    { "tag": "无语", "file": "astrbot-official-01/sigh-soft.png" },
+    { "tag": "观望", "file": "astrbot-official-01/peek.jpg" },
+    { "tag": "困了", "file": "astrbot-official-01/sleep-cat.jpg" },
+    { "tag": "害羞", "file": "astrbot-official-01/shy-spin.gif" },
+    { "tag": "调侃", "file": "astrbot-official-01/tease-dazed.jpg" },
+    { "tag": "吃瓜", "file": "astrbot-official-01/fool-together.jpg" },
+    { "tag": "开心", "file": "astrbot-official-01/happy-dance.gif" },
+    { "tag": "卖萌", "file": "astrbot-official-01/cat-cheeks.jpg" }
+  ]
 }

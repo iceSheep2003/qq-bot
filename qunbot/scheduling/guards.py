@@ -63,7 +63,5 @@ def record(
 ) -> None:
     """Shared bookkeeping: quota log, group history and the reply cooldown."""
     bot.activity.log_proactive(job["group_id"], text, source)
-    bot.conversations.add_message(
-        event.event_id, event.scope, "bot", "Bot", "assistant", text
-    )
+    bot.record_outbound(event, text, event_id=f"reply:{event.event_id}")
     bot.last_reply[event.scope] = time.time()

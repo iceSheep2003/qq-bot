@@ -1,12 +1,9 @@
-"""Dynamic Persona: a bounded, temporary style delta for the current stretch.
+"""Dynamic Persona and bounded style-example evolution.
 
-The one invariant this package exists to protect: **``config/persona.md`` is
-never written.** The stable prefix — persona file plus the enabled Skill
-catalogue — has to stay byte-identical across turns so the provider can cache
-it, and a persona that drifted with the conversation would break that and the
-bot's identity at the same time. So everything this feature produces is a
-contribution to the *dynamic suffix*, under the ``persona`` name, and the file
-is only ever read by ``runtime/agent.py``.
+The dynamic per-turn hint remains in the suffix. Optional scheduled learning
+may rotate only the marked example section of ``config/persona.md``. The
+identity and rules stay fixed; the prefix changes at most on a gated scan,
+then becomes cacheable again. Group messages cannot issue persona commands.
 
 The split with ``qunbot/emotion/`` (the mood feature) is the other half of the
 design:
@@ -33,6 +30,9 @@ Enabled only by an explicit ``BOT_PERSONA_ENABLED=true`` plus adding
 
 from __future__ import annotations
 
+import logging
+from pathlib import Path
+
 from ...runtime.context import Trust
 from .config import PersonaConfig
 from .director import PersonaDirector
@@ -44,6 +44,8 @@ from .strategy import (
     StyleStrategy,
     parse_strategy,
 )
+
+log = logging.getLogger(__name__)
 
 CONTEXT_NAME = "persona"
 # Read ``ContextRegistry.collect`` before changing it: selection runs lowest
@@ -71,7 +73,7 @@ __all__ = [
 ]
 
 
-def register(host, _config, model) -> None:
+def register(host, app_config, model) -> None:
     config = PersonaConfig.from_env()
     if not config.enabled:
         return
@@ -96,7 +98,57 @@ def register(host, _config, model) -> None:
     host.observers.append(director)
     host.closers.append(director.close)
 
+    if config.proposals_enabled:
+        _wire_proposals(host, app_config, config, model)
+
+
+def _wire_proposals(host, app_config, config: PersonaConfig, model) -> None:
+    """Attach gated scans; auto mode writes only the managed example window."""
+    db_path = getattr(app_config, "db_path", None)
+    persona_path = getattr(app_config, "persona_path", None)
+    if db_path is None or persona_path is None:
+        log.error(
+            "persona proposals are enabled but no database or persona path is "
+            "available; skipping"
+        )
+        return
+
+    from ...storage.conversation import ConversationStore
+    from ...storage.database import SqliteDatabase
+    from ...storage.persona_review import ProposalStore
+    from .proposals import PersonaProposer
+    from .queue import PersonaProposalQueue
+
+    database = SqliteDatabase(db_path)
+    conversations = ConversationStore(database)
+    scopes = tuple(
+        f"group:{group_id}"
+        for group_id in sorted(getattr(app_config, "group_allowlist", ()) or ())
+    )
+    if not scopes:
+        database.close()
+        return
+    queue = PersonaProposalQueue(
+        ProposalStore(database),
+        config,
+        PersonaProposer(model),
+        scopes,
+        conversations.recent,
+        # Read fresh each pass, never cached: a deployer who edits the file
+        # should get suggestions against what it says now.
+        lambda: Path(persona_path).read_text(encoding="utf-8"),
+        persona_path=Path(persona_path),
+        model=model,
+        incremental_reader=conversations.after_id,
+    )
+    host.workers.append(queue.run)
+    host.closers.append(database.close)
+
 
 def validate() -> dict:
     config = PersonaConfig.from_env()
-    return {"enabled": config.enabled, "ttl_minutes": config.ttl_minutes}
+    return {
+        "enabled": config.enabled,
+        "ttl_minutes": config.ttl_minutes,
+        "proposals_enabled": config.proposals_enabled,
+    }

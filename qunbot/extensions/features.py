@@ -52,16 +52,39 @@ class FeatureHost:
     # grow a parameter per feature, and app.py does not import feature modules
     # to wire them.
     binders: list[Callable[[object], None]] = field(default_factory=list)
+    # Owner-console application services are bound separately from the
+    # conversation runtime. This keeps scheduling/database capabilities out of
+    # ConversationService just because one UI needs them.
+    management_binders: list[Callable[[object], None]] = field(default_factory=list)
     # Long-running background loops, started alongside the gateway and the
     # scheduler and cancelled on shutdown. Each is a zero-argument coroutine
     # function; a worker that raises is restarted by the supervisor, not by
     # the feature.
     workers: list[Callable[[], Awaitable[None]]] = field(default_factory=list)
+    # Raw OneBot notice/request handlers. They run before message parsing and
+    # return True only when they consumed an event.
+    inbound_handlers: list[Callable[[dict], Awaitable[bool]]] = field(
+        default_factory=list
+    )
 
     def media(self) -> MediaProcessor | None:
         if self.meme_source is None and self.speech_source is None:
             return None
         return ReplyMediaProcessor(self.meme_source or _NoMemes(), self.speech_source)
+
+    def reply_capabilities(self):
+        """Describe enabled delivery capabilities without exposing providers."""
+        from ..replies import ReplyCapabilities
+
+        tags = ()
+        if self.meme_source is not None:
+            available = getattr(self.meme_source, "available_tags", None)
+            if callable(available):
+                tags = available()
+        return ReplyCapabilities(
+            frozenset(str(tag) for tag in tags),
+            self.speech_source is not None,
+        )
 
     async def aclose(self) -> None:
         """Shut every extension down, newest first.

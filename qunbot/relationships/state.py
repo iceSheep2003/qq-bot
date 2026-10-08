@@ -18,6 +18,7 @@ function of its arguments.
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass, field
 
 # Existing constraints, preserved verbatim: the -100..100 range, a delta of
@@ -82,7 +83,7 @@ DEFAULT_STAGES: tuple[Stage, ...] = (
         "普通群友",
         -10,
         "正常称呼",
-        "礼貌、简洁、就事论事，不主动搭话",
+        "自然友好，可以接日常话题和轻松的梗；调侃要轻，不追着一个人连续开玩笑",
     ),
     Stage(
         "distant",
@@ -122,6 +123,14 @@ class RelationshipPolicy:
     auto_deltas: frozenset[int] = field(default=AUTO_DELTAS)
     stages: tuple[Stage, ...] = DEFAULT_STAGES
     narration_max_chars: int = 200
+    # Dormancy decay. 0 disables it, and that is the default: a score that
+    # drifts down on its own changes how the bot treats someone who has done
+    # nothing, which is a deployer's decision rather than a sensible default.
+    # When enabled, a relationship untouched for `grace` seconds starts moving
+    # back toward neutral with this half-life.
+    decay_half_life_seconds: int = 0
+    decay_grace_seconds: int = 14 * DAY_SECONDS
+    decay_max_rows: int = 500
 
     def clamp(self, value: int) -> int:
         return max(self.floor, min(self.ceil, int(value)))
@@ -148,6 +157,30 @@ class RelationshipPolicy:
             if stage.key == stage_key:
                 return stage.guidance
         raise KeyError(stage_key)
+
+
+def policy_from_env() -> RelationshipPolicy:
+    """The policy this deployment runs with.
+
+    Only dormancy decay is environmental. The stage bands, the daily caps and
+    the cooldown stay constants the module was designed around: two
+    deployments that ran different numbers would no longer be comparable, and
+    the caps are what makes an automatic scorer safe to leave on.
+    """
+    raw = os.getenv("BOT_AFFECTION_DECAY_HALF_LIFE_SECONDS", "").strip()
+    if not raw:
+        return RelationshipPolicy()
+    try:
+        half_life = int(float(raw))
+    except ValueError:
+        raise ValueError(
+            "BOT_AFFECTION_DECAY_HALF_LIFE_SECONDS must be a number of seconds"
+        ) from None
+    if half_life < 0:
+        raise ValueError(
+            "BOT_AFFECTION_DECAY_HALF_LIFE_SECONDS cannot be negative"
+        )
+    return RelationshipPolicy(decay_half_life_seconds=half_life)
 
 
 @dataclass(frozen=True)

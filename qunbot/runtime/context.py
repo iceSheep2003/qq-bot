@@ -26,6 +26,7 @@ from __future__ import annotations
 import enum
 import json
 import logging
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
@@ -139,6 +140,75 @@ class _Registration:
     trust: Trust
     priority: int
     max_chars: int
+
+
+def _scope_key(event: MessageEvent) -> str:
+    return str(getattr(event, "scope", "") or "")
+
+
+def cached(
+    provider: Callable[[MessageEvent], Any],
+    *,
+    ttl_seconds: float,
+    key: Callable[[MessageEvent], str] | None = None,
+    max_entries: int = 256,
+    clock: Callable[[], float] = time.monotonic,
+) -> Callable[[MessageEvent], Any]:
+    """Wrap a provider so it recomputes at most once per ``ttl_seconds``.
+
+    A provider runs *inside a turn*, synchronously, on the event loop. Whatever
+    it reads — a query, a search, a recomputation over stored rows — is paid on
+    every message the bot answers, even though the data behind it changes on
+    the scale of minutes. This is the cheapest way to stop that, and it is the
+    same shape the persona director already uses for its own proposals.
+
+    The default key is the event's scope, because that is what most providers
+    vary on. A provider whose answer also depends on *who is speaking* passes
+    its own ``key`` — otherwise one member's cached answer would be handed to
+    the next.
+
+    ``None`` is cached like any other answer: "there is nothing to say about
+    this scope" is a result too, and recomputing it every turn is the waste
+    this exists to remove. A raising provider is not cached, so a transient
+    failure is not pinned for the whole window.
+
+    **Only wrap a provider whose answer does not depend on the current
+    message.** A provider that searches *for this text* — the memory replay is
+    one — must not be wrapped: keyed by scope it would hand one message's
+    results to the next, and keyed by the query it would never hit. Fix the
+    cost of that kind of provider where the search happens, not here.
+    """
+    ttl = max(0.0, float(ttl_seconds))
+    key_of = key or _scope_key
+    cache: dict[str, tuple[float, Any]] = {}
+
+    def _trim() -> None:
+        if len(cache) <= max_entries:
+            return
+        now = clock()
+        for slot in [s for s, (expires, _) in cache.items() if expires <= now]:
+            cache.pop(slot, None)
+        while len(cache) > max_entries:
+            # Nothing has expired; drop whatever expires soonest.
+            cache.pop(min(cache, key=lambda slot: cache[slot][0]), None)
+
+    def wrapper(event: MessageEvent):
+        if ttl <= 0:
+            return provider(event)
+        slot = key_of(event)
+        now = clock()
+        hit = cache.get(slot)
+        if hit is not None and now < hit[0]:
+            return hit[1]
+        value = provider(event)
+        cache[slot] = (now + ttl, value)
+        _trim()
+        return value
+
+    wrapper.__wrapped__ = provider  # type: ignore[attr-defined]
+    wrapper.cache_clear = cache.clear  # type: ignore[attr-defined]
+    wrapper.cache_size = lambda: len(cache)  # type: ignore[attr-defined]
+    return wrapper
 
 
 class ContextRegistry:

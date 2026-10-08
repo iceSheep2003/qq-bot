@@ -30,6 +30,13 @@ def _integer(name: str, default: int, *, low: int, high: int) -> int:
 class PersonaConfig:
     enabled: bool
     ttl_minutes: int
+    # Scheduled scans are separately enabled because they spend model calls.
+    # Auto mode replaces only the marked example window, never the core rules.
+    proposals_enabled: bool = False
+    proposal_interval_hours: int = 6
+    proposal_min_messages: int = 20
+    proposal_window_messages: int = 60
+    auto_examples_enabled: bool = False
 
     @classmethod
     def from_env(cls) -> PersonaConfig:
@@ -41,4 +48,15 @@ class PersonaConfig:
             ttl_minutes=_integer(
                 "BOT_PERSONA_TTL_MINUTES", 30, low=1, high=1440
             ),
+            proposals_enabled=_flag("BOT_PERSONA_PROPOSALS_ENABLED", False),
+            proposal_interval_hours=_integer(
+                "BOT_PERSONA_PROPOSAL_INTERVAL_HOURS", 6, low=1, high=168
+            ),
+            proposal_min_messages=_integer(
+                "BOT_PERSONA_PROPOSAL_MIN_MESSAGES", 20, low=5, high=1000
+            ),
+            proposal_window_messages=_integer(
+                "BOT_PERSONA_PROPOSAL_WINDOW_MESSAGES", 60, low=10, high=500
+            ),
+            auto_examples_enabled=_flag("BOT_PERSONA_AUTO_EXAMPLES_ENABLED", False),
         )

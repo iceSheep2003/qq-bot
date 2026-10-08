@@ -5,9 +5,10 @@ Two defaults matter more than the rest:
 * ``enabled`` is **false**. Nothing runs, nothing is collected, unless the
   deployer switched the extension on in ``BOT_EXTENSIONS`` *and* set
   ``BOT_STYLE_ECHO_ENABLED=true``.
-* ``allowed_users`` is **empty**. Even when the extension is enabled, an empty
-  allow-list means no user is ever sampled. Consent is a deployer-side
-  allow-list of user IDs, never a message a group member can send.
+* ``allowed_users`` is **empty**. With no individual roster, only a transient
+  aggregate of the group's sentence statistics is used; no individual raw
+  samples are stored by this feature. A nonempty roster opts into the original
+  per-speaker sampling mode.
 """
 
 from __future__ import annotations
@@ -44,6 +45,10 @@ class StyleEchoConfig:
     poll_seconds: int = 120
     retention_days: int = 30
     scan_limit: int = 40
+    # The provider re-reads a person's stored samples and recomputes their
+    # profile on every turn. Nothing about how someone punctuates changes
+    # between two messages, and the read is on the reply path.
+    cache_seconds: int = 300
 
     @classmethod
     def from_env(cls) -> StyleEchoConfig:
@@ -54,6 +59,7 @@ class StyleEchoConfig:
             min_samples=_int("BOT_STYLE_ECHO_MIN_SAMPLES", 5, low=2, high=100),
             poll_seconds=_int("BOT_STYLE_ECHO_POLL_SECONDS", 120, low=15, high=3600),
             retention_days=_int("BOT_STYLE_ECHO_RETENTION_DAYS", 30, low=1, high=3650),
+            cache_seconds=_int("BOT_STYLE_ECHO_CACHE_SECONDS", 300, low=0, high=86400),
             scan_limit=40,
         )
 

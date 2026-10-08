@@ -26,6 +26,11 @@ class JobRunner:
     async def send_reply(self, group_id: str | None, user_id: str | None, text: str) -> str:
         return await self.conversation.send_reply(group_id, user_id, text)
 
+    async def send_draft(self, group_id, user_id, draft, event=None) -> str:
+        return await self.conversation.send_draft(
+            group_id, user_id, draft, event=event
+        )
+
     def today_start(self) -> int:
         return self.conversation.today_start()
 
@@ -45,6 +50,18 @@ class JobRunner:
         return MessageEvent(
             f"job:{job['id']}:{job['run_id']}", f"group:{group_id}", group_id,
             "bot", "Bot", job["prompt"], (), False, (), now,
+            origin="operator",
+        )
+
+    def record_outbound(self, trigger: MessageEvent, text: str, *, event_id: str) -> None:
+        record = getattr(self.conversation, "record_assistant_turn", None)
+        if callable(record):
+            record(trigger, text, event_id=event_id)
+            return
+        # Compatibility for narrow third-party/test runtimes. Production uses
+        # ConversationService and therefore also indexes the assistant turn.
+        self.conversations.add_message(
+            event_id, trigger.scope, "bot", "Bot", "assistant", text
         )
 
     async def run(self, job: dict) -> None:

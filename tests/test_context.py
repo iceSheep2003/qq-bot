@@ -10,6 +10,7 @@ from qunbot.runtime.context import (
     ContextRegistry,
     Trust,
     _shrink,
+    cached,
 )
 
 
@@ -122,6 +123,125 @@ class FailureIsolationTests(unittest.TestCase):
         registry.register("weather", explode)
         failed = [c for c in registry.contributions(event()) if c.failed]
         self.assertEqual([c.name for c in failed], ["weather"])
+
+
+class CountingProvider:
+    """A provider that records how often it was actually asked."""
+
+    def __init__(self, answer=None):
+        self.answer = answer
+        self.calls = 0
+
+    def __call__(self, _event):
+        self.calls += 1
+        return self.answer
+
+
+class Clock:
+    def __init__(self, now: float = 0.0):
+        self.now = now
+
+    def __call__(self) -> float:
+        return self.now
+
+
+class CachedProviderTests(unittest.TestCase):
+    """A provider runs inside a turn; recomputing it every turn is the waste."""
+
+    def test_a_second_call_inside_the_window_is_served_from_cache(self):
+        inner = CountingProvider("note")
+        clock = Clock()
+        provider = cached(inner, ttl_seconds=60, clock=clock)
+        self.assertEqual(provider(event()), "note")
+        self.assertEqual(provider(event()), "note")
+        self.assertEqual(inner.calls, 1)
+
+    def test_the_cache_expires(self):
+        inner = CountingProvider("note")
+        clock = Clock()
+        provider = cached(inner, ttl_seconds=60, clock=clock)
+        provider(event())
+        clock.now = 59
+        provider(event())
+        clock.now = 61
+        provider(event())
+        self.assertEqual(inner.calls, 2)
+
+    def test_scopes_do_not_share_an_answer(self):
+        inner = CountingProvider("note")
+        provider = cached(inner, ttl_seconds=60, clock=Clock())
+        provider(event("group:1"))
+        provider(event("group:2"))
+        self.assertEqual(inner.calls, 2)
+
+    def test_a_custom_key_separates_speakers_in_one_scope(self):
+        """The style note describes the speaker, so it cannot be shared."""
+        inner = CountingProvider("note")
+        provider = cached(
+            inner,
+            ttl_seconds=60,
+            key=lambda e: f"{e.scope}|{e.user_id}",
+            clock=Clock(),
+        )
+        provider(event())
+        provider(MessageEvent("e2", "group:42", "42", "9", "小红", "你好", (), True, (), 0))
+        self.assertEqual(inner.calls, 2)
+
+    def test_nothing_to_say_is_cached_too(self):
+        inner = CountingProvider(None)
+        provider = cached(inner, ttl_seconds=60, clock=Clock())
+        self.assertIsNone(provider(event()))
+        self.assertIsNone(provider(event()))
+        self.assertEqual(inner.calls, 1)
+
+    def test_a_raising_provider_is_not_pinned_for_the_window(self):
+        class Flaky:
+            def __init__(self):
+                self.calls = 0
+
+            def __call__(self, _event):
+                self.calls += 1
+                if self.calls == 1:
+                    raise RuntimeError("transient")
+                return "recovered"
+
+        inner = Flaky()
+        provider = cached(inner, ttl_seconds=60, clock=Clock())
+        with self.assertRaises(RuntimeError):
+            provider(event())
+        self.assertEqual(provider(event()), "recovered")
+
+    def test_a_zero_ttl_disables_the_cache(self):
+        inner = CountingProvider("note")
+        provider = cached(inner, ttl_seconds=0, clock=Clock())
+        provider(event())
+        provider(event())
+        self.assertEqual(inner.calls, 2)
+
+    def test_a_per_speaker_key_stays_bounded(self):
+        """style_echo keys on scope+user, which is not a small set."""
+        inner = CountingProvider("note")
+        provider = cached(
+            inner,
+            ttl_seconds=600,
+            key=lambda e: f"{e.scope}|{e.user_id}",
+            max_entries=4,
+            clock=Clock(),
+        )
+        for index in range(50):
+            provider(event(f"group:{index}"))
+        self.assertLessEqual(provider.cache_size(), 4)
+
+    def test_a_registry_accepts_a_wrapped_provider_unchanged(self):
+        registry = ContextRegistry()
+        registry.register(
+            "style_echo",
+            cached(CountingProvider("note"), ttl_seconds=60, clock=Clock()),
+            trust=Trust.DERIVED,
+            priority=65,
+            max_chars=250,
+        )
+        self.assertIn("style_echo", registry.names())
 
 
 class ContributionTests(unittest.TestCase):

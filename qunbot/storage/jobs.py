@@ -28,7 +28,9 @@ def migrate(db) -> None:
           status TEXT NOT NULL, detail TEXT NOT NULL DEFAULT '',
           started_at INTEGER NOT NULL, finished_at INTEGER,
           lease_owner TEXT, lease_expires_at INTEGER,
-          attempt INTEGER NOT NULL DEFAULT 1
+          attempt INTEGER NOT NULL DEFAULT 1,
+          trigger TEXT NOT NULL DEFAULT 'scheduled',
+          scheduled_for INTEGER, requested_by TEXT
         );
         CREATE TABLE IF NOT EXISTS scheduler_leases (
           name TEXT PRIMARY KEY, owner TEXT NOT NULL,
@@ -55,6 +57,12 @@ def migrate(db) -> None:
         db.execute("ALTER TABLE job_runs ADD COLUMN lease_expires_at INTEGER")
     if "attempt" not in run_columns:
         db.execute("ALTER TABLE job_runs ADD COLUMN attempt INTEGER NOT NULL DEFAULT 1")
+    if "trigger" not in run_columns:
+        db.execute("ALTER TABLE job_runs ADD COLUMN trigger TEXT NOT NULL DEFAULT 'scheduled'")
+    if "scheduled_for" not in run_columns:
+        db.execute("ALTER TABLE job_runs ADD COLUMN scheduled_for INTEGER")
+    if "requested_by" not in run_columns:
+        db.execute("ALTER TABLE job_runs ADD COLUMN requested_by TEXT")
 
 
 class JobsStore(SqliteRepository):
@@ -101,6 +109,8 @@ class JobsStore(SqliteRepository):
 
         for row in rows:
             key, group, kind, value, prompt, action, next_run = row[:7]
+            explicit_enabled = len(row) > 8 and row[8] is not None
+            row_enabled = int(row[8]) if explicit_enabled else enabled
             payload = encode_payload(row[7] if len(row) > 7 else {})
             existing = self.db.execute(
                 "SELECT created_by, group_id, schedule_kind, schedule_value, prompt, action, enabled, payload FROM jobs WHERE config_key=?",
@@ -117,7 +127,7 @@ class JobsStore(SqliteRepository):
                         prompt,
                         action,
                         next_run,
-                        enabled,
+                        row_enabled,
                         created_by,
                         now,
                         payload,
@@ -150,7 +160,7 @@ class JobsStore(SqliteRepository):
                     ("prompt", prompt),
                     ("action", action),
                 )
-            )
+            ) or (explicit_enabled and existing["enabled"] != row_enabled)
             if adopted or edited:
                 # next_run is recomputed on adoption so a promoted suggestion
                 # does not fire late.
@@ -164,7 +174,7 @@ class JobsStore(SqliteRepository):
                         prompt,
                         action,
                         next_run,
-                        enabled,
+                        row_enabled,
                         payload,
                         JOB_SPEC_VERSION,
                         key,
@@ -230,8 +240,8 @@ class JobsStore(SqliteRepository):
             if not updated.rowcount:
                 return None
             cursor = self.db.execute(
-                "INSERT INTO job_runs(job_id,status,started_at) VALUES(?,?,?)",
-                (job["id"], "running", now),
+                "INSERT INTO job_runs(job_id,status,started_at,trigger,scheduled_for) VALUES(?,?,?,?,?)",
+                (job["id"], "running", now, "scheduled", job["next_run"]),
             )
             return int(cursor.lastrowid)
 
@@ -250,6 +260,38 @@ class JobsStore(SqliteRepository):
     def job_run(self, run_id: int) -> dict | None:
         row = self.db.execute("SELECT * FROM job_runs WHERE id=?", (run_id,)).fetchone()
         return dict(row) if row else None
+
+    def job_by_id(self, job_id: int) -> dict | None:
+        row = self.db.execute("SELECT * FROM jobs WHERE id=?", (job_id,)).fetchone()
+        return self._hydrate(row) if row else None
+
+    def job_by_key(self, key: str) -> dict | None:
+        row = self.db.execute("SELECT * FROM jobs WHERE config_key=?", (key,)).fetchone()
+        return self._hydrate(row) if row else None
+
+    def list_runs(self, job_id: int | None = None, limit: int = 100) -> list[dict]:
+        where, params = ("WHERE r.job_id=?", [job_id]) if job_id is not None else ("", [])
+        rows = self.db.execute(
+            "SELECT r.*,j.config_key,j.group_id,j.action FROM job_runs r "
+            "JOIN jobs j ON j.id=r.job_id " + where + " ORDER BY r.id DESC LIMIT ?",
+            (*params, max(1, min(500, limit))),
+        )
+        return [dict(row) for row in rows]
+
+    def reserve_manual_job(self, job_id: int, now: int, requested_by: str) -> tuple[dict, int] | None:
+        """Open an audited run without changing the job's normal cadence."""
+        with self.transaction():
+            job = self.db.execute("SELECT * FROM jobs WHERE id=?", (job_id,)).fetchone()
+            if job is None:
+                return None
+            cursor = self.db.execute(
+                "INSERT INTO job_runs(job_id,status,started_at,trigger,scheduled_for,requested_by) "
+                "VALUES(?,?,?,?,?,?)",
+                (job_id, "running", now, "manual", now, requested_by[:80]),
+            )
+        hydrated = self._hydrate(job)
+        hydrated["run_id"] = int(cursor.lastrowid)
+        return hydrated, int(cursor.lastrowid)
 
     def reconcile_interrupted_jobs(self, now: int) -> None:
         """Single-instance restart: nothing can still be live, so none of these

@@ -33,6 +33,7 @@ from __future__ import annotations
 
 from .config import ReplyPolicyConfig
 from .policy import Decision, MentionOnlyPolicy, RoomReadingPolicy
+from .adaptive import AdaptiveReplyPolicy
 
 
 def build_policy(config: ReplyPolicyConfig):
@@ -52,7 +53,12 @@ def register(host, _config, _model) -> None:
     """
     policy = build_policy(ReplyPolicyConfig.from_env())
     if policy is not None:
-        host.reply_policy = policy
+        if isinstance(policy, RoomReadingPolicy):
+            adaptive = AdaptiveReplyPolicy(policy.config)
+            host.reply_policy = adaptive
+            host.binders.append(adaptive.bind)
+        else:
+            host.reply_policy = policy
 
 
 def validate() -> dict:
@@ -70,6 +76,7 @@ def validate() -> dict:
 
 __all__ = [
     "Decision",
+    "AdaptiveReplyPolicy",
     "MentionOnlyPolicy",
     "ReplyPolicyConfig",
     "RoomReadingPolicy",

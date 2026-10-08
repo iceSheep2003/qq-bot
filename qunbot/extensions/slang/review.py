@@ -5,6 +5,11 @@ approve the phrases the bot learns, because approval is an authority the bot
 does not accept over chat. A reviewer edits a JSON file (or calls
 ``SlangStore.set_status`` from their own script) and the next scan applies it.
 
+The file carries two things: status decisions (approve/reject/reset) and
+meanings. A meaning written here is recorded as ``human``, which is what stops
+a later inference pass from revising it. Writing ``null`` for a term releases
+that override and hands the term back to automatic inference.
+
 The file is re-read every scan, so a correction lands without a restart. A
 malformed file keeps the last good decision set and logs loudly rather than
 silently clearing an approval — "the bot quietly stopped understanding the
@@ -35,6 +40,10 @@ class Review:
 
     global_actions: dict[str, frozenset[str]] = field(default_factory=dict)
     scoped_actions: dict[str, dict[str, frozenset[str]]] = field(default_factory=dict)
+    # term -> meaning. A value of None is not "no meaning": it is the deployer
+    # writing `null`, which hands the term back to automatic inference.
+    global_meanings: dict[str, str | None] = field(default_factory=dict)
+    scoped_meanings: dict[str, dict[str, str | None]] = field(default_factory=dict)
 
     def action_for(self, scope: str, term: str) -> str | None:
         """The reviewer's decision for ``term`` in ``scope``, or None."""
@@ -51,8 +60,33 @@ class Review:
         action = self.action_for(scope, term)
         return _STATUS_BY_ACTION[action] if action else None
 
+    def _meaning(self, scope: str, term: str) -> tuple[bool, str | None]:
+        scoped = self.scoped_meanings.get(scope) or {}
+        if term in scoped:
+            return True, scoped[term]
+        if term in self.global_meanings:
+            return True, self.global_meanings[term]
+        return False, None
+
+    def has_meaning(self, scope: str, term: str) -> bool:
+        return self._meaning(scope, term)[0]
+
+    def meaning_for(self, scope: str, term: str) -> str | None:
+        """The deployer's definition, or None when they set none."""
+        return self._meaning(scope, term)[1]
+
+    def releases(self, scope: str, term: str) -> bool:
+        """True when the file writes ``null``: stop overriding, resume learning."""
+        present, value = self._meaning(scope, term)
+        return present and value is None
+
     def is_empty(self) -> bool:
-        return not self.global_actions and not self.scoped_actions
+        return not (
+            self.global_actions
+            or self.scoped_actions
+            or self.global_meanings
+            or self.scoped_meanings
+        )
 
 
 def _terms(value: object, where: str) -> frozenset[str]:
@@ -61,6 +95,21 @@ def _terms(value: object, where: str) -> frozenset[str]:
     if not isinstance(value, list):
         raise ValueError(f"{where} must be a list of terms")
     return frozenset(str(item).strip() for item in value if str(item).strip())
+
+
+def _meanings(value: object, where: str) -> dict[str, str | None]:
+    """``{term: meaning}``. ``null`` is kept as None — it means "release"."""
+    if value is None:
+        return {}
+    if not isinstance(value, dict):
+        raise ValueError(f"{where} must be an object of term -> meaning")
+    out: dict[str, str | None] = {}
+    for term, meaning in value.items():
+        key = str(term).strip()
+        if not key:
+            continue
+        out[key] = None if meaning is None else str(meaning).strip()
+    return out
 
 
 def parse_review(payload: object) -> Review:
@@ -73,6 +122,7 @@ def parse_review(payload: object) -> Review:
         action: _terms(payload.get(action), action) for action in ACTIONS
     }
     scoped_actions: dict[str, dict[str, frozenset[str]]] = {}
+    scoped_meanings: dict[str, dict[str, str | None]] = {}
     scopes = payload.get("scopes") or {}
     if not isinstance(scopes, dict):
         raise ValueError("slang review 'scopes' must be an object")
@@ -83,7 +133,15 @@ def parse_review(payload: object) -> Review:
             action: _terms(block.get(action), f"scopes[{scope}].{action}")
             for action in ACTIONS
         }
-    return Review(global_actions, scoped_actions)
+        scoped_meanings[str(scope)] = _meanings(
+            block.get("meanings"), f"scopes[{scope}].meanings"
+        )
+    return Review(
+        global_actions,
+        scoped_actions,
+        _meanings(payload.get("meanings"), "meanings"),
+        scoped_meanings,
+    )
 
 
 def load_review(path: Path) -> Review:
