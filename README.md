@@ -1,4 +1,4 @@
-# QunBot · Kinna
+# Kinna · QQ Bot
 
 一个住在 QQ 群里的聊天 Bot。接话、看热闹、发表情，慢慢认识群里的每个人。
 
@@ -139,7 +139,6 @@ tests/                       回归测试
 
 ## 参考与致谢
 
-- [Pallas-Bot](https://github.com/PallasBot/Pallas-Bot)：本仓库首页的组织方式参考了它。QunBot 不是 Pallas-Bot 的移植版，当前对话仍依赖 LLM。
 - [NapCatQQ](https://github.com/NapNeko/NapCatQQ)：QQ 接入。
 - [AstrBot](https://github.com/AstrBotDevs/AstrBot)：功能拆分与插件设计的参考。
 - [狗头军师](https://github.com/shengjidaguai-china/goutoujunshi)：对话知识与群聊轻量适配，保留原版文件和 MIT 许可。
