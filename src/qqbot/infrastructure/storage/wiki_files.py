@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 from pathlib import Path
 
 from qqbot.agent.memory.wiki.page import WikiEntry, WikiLink, WikiPage, WikiRelation, WikiSlang, WikiTopic
+
+log = logging.getLogger(__name__)
 
 
 def _frontmatter(text: str) -> tuple[dict[str, str], str]:
@@ -30,12 +33,17 @@ class MarkdownWikiStore:
     def __init__(self, root: Path):
         self.root = Path(root)
 
-    def load(self) -> list[WikiPage]:
+    def load(self, *, strict: bool = False) -> list[WikiPage]:
         pages: list[WikiPage] = []
         if not self.root.exists():
             return pages
         for path in sorted(self.root.rglob("*.md")):
-            pages.append(self._parse(path))
+            try:
+                pages.append(self._parse(path))
+            except (OSError, ValueError, KeyError) as exc:
+                if strict:
+                    raise
+                log.warning("skipping malformed Wiki page path=%s error=%s", path, exc)
         return pages
 
     def _parse(self, path: Path) -> WikiPage:

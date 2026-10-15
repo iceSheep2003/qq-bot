@@ -35,3 +35,13 @@ def test_markdown_snapshot_round_trips_to_page(tmp_path):
     assert restored.slang[0].term == "开黑"
     assert restored.links[0].target_page_id == "groups/g1/members/u1"
     assert restored.relations[0].score == 0.7
+
+
+def test_malformed_markdown_does_not_hide_valid_pages(tmp_path):
+    writer = WikiWriter()
+    writer.write(tmp_path, page())
+    (tmp_path / "README.md").write_text("这是说明文件，不是 Wiki 页面。", encoding="utf-8")
+
+    loaded = MarkdownWikiStore(tmp_path).load()
+
+    assert [item.page_id for item in loaded] == ["groups/g1"]
