@@ -30,6 +30,7 @@ from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
 from ..domain import MessageEvent
+from ..conversation.channels import ChannelPolicy
 from ..ports import (
     ActivityRepository,
     AffectionObserver,
@@ -340,9 +341,8 @@ class ConversationService:
         makes a redelivered frame (reconnect, OneBot retry) a no-op here, so it
         never reaches the reply decision or the observation queue again.
         """
-        if not event.group_id and not self.policy.private_enabled:
-            return False
-        if event.group_id and event.group_id not in self.policy.allowed_groups:
+        channels = ChannelPolicy(self.policy.allowed_groups, self.policy.private_enabled)
+        if not channels.accepts(event):
             return False
         text = event.text or (
             "[非文字消息]" if event.image_urls or event.inbound_parts else ""
@@ -381,6 +381,8 @@ class ConversationService:
         can be injected without touching turn execution. An injected policy is
         advisory — a disabled feature simply means the default applies.
         """
+        if not event.group_id:
+            return ChannelPolicy(self.policy.allowed_groups, self.policy.private_enabled).accepts(event)
         if self.reply_policy is None:
             return not event.group_id or event.at_bot
         try:

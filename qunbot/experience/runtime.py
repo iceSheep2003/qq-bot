@@ -66,7 +66,7 @@ class CompiledBehaviorExperience:
             return None
 
 
-def configured_behavior_experience() -> CompiledBehaviorExperience | None:
+def configured_behavior_experience(*, settings=None) -> CompiledBehaviorExperience | None:
     """Load the optional behavior snapshot from deployment configuration.
 
     No default path points at private data.  A missing or malformed optional
@@ -74,17 +74,18 @@ def configured_behavior_experience() -> CompiledBehaviorExperience | None:
     bot from starting.
     """
 
-    raw_snapshot = os.getenv("BOT_BEHAVIOR_GRAPH_PATH", "").strip()
+    get = os.getenv if settings is None else settings.get
+    raw_snapshot = get("BOT_BEHAVIOR_GRAPH_PATH", "").strip()
     if not raw_snapshot:
         return None
     snapshot = Path(raw_snapshot).expanduser()
-    raw_calibration = os.getenv("BOT_BEHAVIOR_CALIBRATION_PATH", "").strip()
+    raw_calibration = get("BOT_BEHAVIOR_CALIBRATION_PATH", "").strip()
     calibration = Path(raw_calibration).expanduser() if raw_calibration else None
     # The default is ``None`` — calibration off (see ``DEFAULT_PRIOR_WEIGHT``).
     # An empty value keeps that default; ``off``/``none`` spell it out; anything
     # else is parsed as a weight. ``str(DEFAULT_PRIOR_WEIGHT)`` is deliberately
     # not used here: it would produce the string ``"None"`` and disable the graph.
-    raw_weight = os.getenv("BOT_BEHAVIOR_PRIOR_WEIGHT", "").strip()
+    raw_weight = get("BOT_BEHAVIOR_PRIOR_WEIGHT", "").strip()
     try:
         if not raw_weight:
             prior_weight = DEFAULT_PRIOR_WEIGHT
@@ -96,9 +97,9 @@ def configured_behavior_experience() -> CompiledBehaviorExperience | None:
             snapshot, calibration=calibration, prior_weight=prior_weight
         )
         compiler = BehaviorCompiler(
-            max_options=max(1, min(3, int(os.getenv("BOT_BEHAVIOR_MAX_OPTIONS", "3")))),
-            max_cases=max(0, min(2, int(os.getenv("BOT_BEHAVIOR_MAX_CASES", "2")))),
-            char_budget=max(240, min(2400, int(os.getenv("BOT_BEHAVIOR_CHAR_BUDGET", "1200")))),
+            max_options=max(1, min(3, int(get("BOT_BEHAVIOR_MAX_OPTIONS", "3") or "3"))),
+            max_cases=max(0, min(2, int(get("BOT_BEHAVIOR_MAX_CASES", "2") or "2"))),
+            char_budget=max(240, min(2400, int(get("BOT_BEHAVIOR_CHAR_BUDGET", "1200") or "1200"))),
         )
     except (OSError, ValueError, TypeError, json.JSONDecodeError) as exc:
         log.warning("Behavior graph disabled: %s", type(exc).__name__)

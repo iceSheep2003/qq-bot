@@ -5,6 +5,8 @@ import json
 
 from ..harness.tools import KernelDenied
 from ..ontology.objects import stable_id
+from ..conversation.channels import channel_for
+from ..skills.audience import scoped_skills
 
 
 class BuiltinHandlers:
@@ -107,10 +109,11 @@ class BuiltinHandlers:
         return {"evidence": self.knowledge.evidence(event.scope, args["evidence_ids"])}
 
     def skill_load(self, args, event):
-        loader = getattr(self.skills, "load", None)
+        skills = scoped_skills(self.skills, channel_for(event))
+        loader = getattr(skills, "load", None)
         if callable(loader):
             return loader(args["skill_id"])
-        skill = self.skills.by_name(args["skill_id"])
+        skill = skills.by_name(args["skill_id"])
         if not skill:
             raise KernelDenied("Skill not owner-enabled")
         return {

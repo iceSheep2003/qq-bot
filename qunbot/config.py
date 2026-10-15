@@ -107,7 +107,7 @@ class Config:
         if require_secrets:
             if not self.onebot_token:
                 raise ConfigError("BOT_ONEBOT_TOKEN is required")
-            if not self.group_allowlist:
+            if not self.group_allowlist and not self.private_enabled:
                 raise ConfigError("BOT_GROUP_ALLOWLIST is required")
         if require_model_key and not self.model_api_key:
             raise ConfigError("BOT_MODEL_API_KEY is required")

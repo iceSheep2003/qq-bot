@@ -1,0 +1,4 @@
+{
+  "manifest": ".veritygate/tasks/SCENE-CORE-001-R3.json",
+  "config": "quality.config.json"
+}

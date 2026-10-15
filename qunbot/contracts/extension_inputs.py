@@ -36,6 +36,10 @@ _SKILL = document(
     "skill-declaration",
 )
 
+# Optional addition: old owner declarations remain valid and group-only.
+_SKILL["properties"]["audiences"] = array(enum("group", "private"), 2, minimum=1)
+_SKILL["properties"]["audiences"]["uniqueItems"] = True
+
 def specification() -> dict:
     return deepcopy({"version": 1, "skill": _SKILL})
 

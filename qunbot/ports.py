@@ -410,3 +410,9 @@ class BehaviorDecisionPort(Protocol):
     mode: str
 
     def decide(self, query: str) -> "BehaviorDecision | None": ...
+
+
+class SceneDecisionPort(Protocol):
+    """Internal route selection from a trusted scene, not user text."""
+
+    def decide_for(self, event: MessageEvent, query: str) -> "BehaviorDecision | None": ...

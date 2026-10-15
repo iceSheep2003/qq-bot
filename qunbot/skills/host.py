@@ -7,6 +7,7 @@ from pathlib import Path
 from ..contracts.extension_inputs import validate_skill
 from ..contracts.schema import ContractError
 from ..runtime.skills import Skill
+from .audience import ScopedSkills, audiences_for
 
 
 class OwnerSkills:
@@ -59,37 +60,44 @@ class OwnerSkills:
                 self._bodies[name],
                 d["priority"],
                 d["activation"] == "always",
+                audiences_for(d.get("audiences")),
             )
         return list(values.values())
 
-    def by_name(self, name):
-        return next((s for s in self.skills if s.name == name), None)
+    def for_audience(self, audience):
+        return ScopedSkills(self, audience)
 
-    def select(self, text, *, proactive=False):
+    def _visible(self, audience):
+        return self.skills if audience is None else self.for_audience(audience).skills
+
+    def by_name(self, name, *, audience=None):
+        return next((s for s in self._visible(audience) if s.name == name), None)
+
+    def select(self, text, *, proactive=False, audience=None):
         # New declarations are loaded through fixed skill_load on demand; no
         # hidden keyword that can install or execute anything.
         return [
             s
-            for s in self.legacy.select(text, proactive=proactive)
+            for s in self.legacy.select(text, proactive=proactive, audience=audience)
             if s.name not in self._declarations and s.name not in self.unavailable
         ]
 
-    def stable_instructions(self):
+    def stable_instructions(self, *, audience=None):
         pieces = []
         budget = 4000
-        for s in sorted(self.skills, key=lambda s: (-s.priority, s.name)):
+        for s in sorted(self._visible(audience), key=lambda s: (-s.priority, s.name)):
             if s.always_on and len(s.body) <= budget:
                 pieces.append(s.name + ":\n" + s.body)
                 budget -= len(s.body)
         return "\n\n".join(pieces)
 
-    def catalog_text(self):
+    def catalog_text(self, *, audience=None):
         return "\n".join(
-            f"- {s.name}: {s.description[:300]}" for s in self.skills if not s.always_on
+            f"- {s.name}: {s.description[:300]}" for s in self._visible(audience) if not s.always_on
         )[:5000]
 
-    def load(self, name):
-        skill = self.by_name(name)
+    def load(self, name, *, audience=None):
+        skill = self.by_name(name, audience=audience)
         if not skill or name in self.unavailable:
             raise ContractError("Skill unavailable or not enabled")
         declaration = self._declarations.get(name)

@@ -33,6 +33,9 @@ import unicodedata
 from dataclasses import dataclass
 from pathlib import Path
 
+from ..contracts.schema import ContractError
+from ..skills.audience import ScopedSkills, audiences_for
+
 log = logging.getLogger(__name__)
 
 #: How many skill bodies may enter one turn. Bounded so a long message full of
@@ -104,6 +107,7 @@ class Skill:
     body: str
     priority: int = 0
     always_on: bool = False
+    audiences: frozenset[str] = frozenset({"group"})
 
     def matches(self, text: str, *, proactive: bool = False) -> int:
         """Score this skill against already-normalized ``text``.
@@ -247,6 +251,11 @@ class SkillCatalog:
                 log.warning("Skill %s has no frontmatter block; skipping", path)
                 continue
             fields, body = parsed
+            try:
+                audiences = audiences_for(fields.get("audiences"))
+            except (ValueError, TypeError):
+                log.warning("Invalid skill audiences at %s; skipping", path)
+                continue
             name = _unquote(fields.get("name", "")) or path.parent.name
             if self.enabled_names is not None and name not in self.enabled_names:
                 continue
@@ -280,18 +289,25 @@ class SkillCatalog:
                 body=body.strip(),
                 priority=priority,
                 always_on=always_on,
+                audiences=audiences,
             )
             by_name[name] = skill
             skills.append(skill)
         self.skills = skills
 
-    def by_name(self, name: str) -> Skill | None:
-        for skill in self.skills:
+    def for_audience(self, audience: str) -> ScopedSkills:
+        return ScopedSkills(self, audience)
+
+    def _visible(self, audience):
+        return self.skills if audience is None else self.for_audience(audience).skills
+
+    def by_name(self, name: str, *, audience=None) -> Skill | None:
+        for skill in self._visible(audience):
             if skill.name == name:
                 return skill
         return None
 
-    def select(self, text: str, *, proactive: bool = False) -> list[Skill]:
+    def select(self, text: str, *, proactive: bool = False, audience=None) -> list[Skill]:
         """The skills whose triggers fire for this turn, most specific first.
 
         Pure text matching: no skill can cause a lookup, a call or a write.
@@ -299,7 +315,7 @@ class SkillCatalog:
         haystack = normalize(text)
         order = {id(skill): index for index, skill in enumerate(self.skills)}
         scored: list[tuple[int, int, int, Skill]] = []
-        for skill in self.skills:
+        for skill in self._visible(audience):
             if skill.always_on:
                 continue
             score = skill.matches(haystack, proactive=proactive)
@@ -311,9 +327,16 @@ class SkillCatalog:
         scored.sort(key=lambda item: item[:3])
         return [item[3] for item in scored[:MAX_SELECTED]]
 
-    def catalog_text(self) -> str:
-        return "\n".join(f"- {s.name}: {s.description}" for s in self.skills if not s.always_on)
+    def catalog_text(self, *, audience=None) -> str:
+        return "\n".join(f"- {s.name}: {s.description}" for s in self._visible(audience) if not s.always_on)
 
-    def stable_instructions(self) -> str:
+    def stable_instructions(self, *, audience=None) -> str:
         """Operator-enabled, always-on guidance kept identical across turns."""
-        return "\n\n".join(f"{s.name}:\n{s.body}" for s in self.skills if s.always_on)
+        return "\n\n".join(f"{s.name}:\n{s.body}" for s in self._visible(audience) if s.always_on)
+
+    def load(self, name, *, audience=None):
+        skill = self.by_name(name, audience=audience)
+        if skill is None:
+            raise ContractError("Skill unavailable in this audience")
+        return {"skill_id": skill.name, "version": "installed-instructions-v1",
+                "instructions": skill.body[:12000], "required_capabilities": []}

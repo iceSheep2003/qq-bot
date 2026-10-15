@@ -1,6 +1,7 @@
 ---
 name: meme
 description: 用户提到斗图或表情包时，可选择本地表情包附在回复末尾。
+audiences: [group, private]
 triggers: 表情包, 斗图, meme
 ---
 仅当表情确实比文字更合适，且动态上下文给出了对应素材标签时，才在固定回复 JSON 的 `channels` 中加入 `meme`，并把准确标签写入 `meme_tag`。可以与 `text` 组合，也可以只发表情。不要编造标签，不要连续刷图；正常回复只选择 `text`。不要输出内部标记、文件路径或 URL。

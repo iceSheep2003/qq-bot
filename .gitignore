@@ -36,3 +36,13 @@ __pycache__/
 
 # Parallel agent worktrees
 .claude/worktrees/
+.quality/
+.veritygate/run.lock/
+.veritygate/.gitkeep
+.mcp.json
+
+# Test-first quality toolchain and generated reports
+node_modules/
+.coverage
+.import_linter_cache/
+.pytest_tmp_*/

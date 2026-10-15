@@ -80,7 +80,7 @@ from .social_interactions import (
 from .storage.topic_observations import TopicObservationStore
 from .storage.relationships import RelationshipsStore
 from .runtime.tools import built_in_tools
-from .experience.decision import configured_behavior_decision
+from .cognition.routes import configured_scene_routes
 
 log = logging.getLogger(__name__)
 
@@ -228,6 +228,7 @@ class BotApp:
             tool_handlers.handlers(),
             allowed_scopes=frozenset(f"group:{g}" for g in config.group_allowlist),
             executions=executions,
+            private_enabled=config.private_enabled,
         )
         # A feature may open an HTTP client (voice, weather). Captured here so a
         # later assembly failure closes it too.
@@ -247,7 +248,7 @@ class BotApp:
             conversation_intelligence=conversation_intelligence,
             prompt_sessions=prompt_sessions,
             conversation_compactor=conversation_compactor,
-            behavior_decision=configured_behavior_decision(),
+            behavior_decision=configured_scene_routes(),
             history_char_budget=config.conversation_window_chars,
             history_message_limit=config.conversation_window_messages,
             live_scene_seconds=config.conversation_window_seconds,

@@ -15,6 +15,8 @@ from ..contracts.kernel_v1 import (
 from ..contracts.schema import ContractError, canonical, fingerprint
 from ..ontology.objects import stable_id
 
+GROUP_ONLY_TOOLS = frozenset({"group_query", "group_action_propose", "interaction_propose"})
+
 
 class KernelDenied(ContractError):
     pass
@@ -22,17 +24,33 @@ class KernelDenied(ContractError):
 
 class KernelTools:
     def __init__(
-        self, handlers: dict, *, allowed_scopes: frozenset[str], executions=None
+        self, handlers: dict, *, allowed_scopes: frozenset[str], executions=None,
+        private_enabled: bool = False,
     ):
         if set(handlers) - set(tool_names()):
             raise ContractError("Unknown kernel handler")
         self._handlers = dict(handlers)
         self._scopes = frozenset(allowed_scopes)
+        self.private_enabled = private_enabled
         self.executions = executions
         self._calls = defaultdict(deque)
 
     def schemas(self):
         return model_tool_schemas()
+
+    def schemas_for(self, event):
+        if event.scope.startswith("private:"):
+            return [s for s in self.schemas() if s["function"]["name"] not in GROUP_ONLY_TOOLS]
+        return self.schemas()
+
+    def _scope_allowed(self, event):
+        if event.scope.startswith("private:"):
+            return (
+                self.private_enabled and not getattr(event, "group_id", None)
+                and bool(getattr(event, "user_id", ""))
+                and event.scope == f"private:{event.user_id}"
+            )
+        return event.scope in self._scopes
 
     async def acall(self, name, args, event):
         trace = stable_id("tool", event.scope, event.event_id, name, fingerprint(args))
@@ -48,8 +66,10 @@ class KernelTools:
         previous = None
         try:
             validate_tool_input(name, args)
-            if event.scope not in self._scopes:
+            if not self._scope_allowed(event):
                 raise KernelDenied("Conversation scope is not enabled")
+            if event.scope.startswith("private:") and name in GROUP_ONLY_TOOLS:
+                raise KernelDenied("Group capabilities are unavailable in private chat")
             key = (event.scope, name)
             calls = self._calls[key]
             now = time.monotonic()

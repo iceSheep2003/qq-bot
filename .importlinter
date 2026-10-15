@@ -1,0 +1,32 @@
+[importlinter]
+root_package = qunbot
+
+[importlinter:contract:scene]
+name = Scene policy has no infrastructure dependencies
+type = forbidden
+source_modules = qunbot.conversation.channels
+forbidden_modules =
+    qunbot.adapters
+    qunbot.storage
+    qunbot.extensions
+    qunbot.runtime
+
+[importlinter:contract:audience]
+name = Skill audience policy is independent of the runtime
+type = forbidden
+source_modules = qunbot.skills.audience
+forbidden_modules =
+    qunbot.adapters
+    qunbot.storage
+    qunbot.runtime
+    qunbot.extensions
+
+[importlinter:contract:cognition]
+name = Cognition does not depend on runtime or infrastructure
+type = forbidden
+source_modules = qunbot.cognition
+forbidden_modules =
+    qunbot.adapters
+    qunbot.storage
+    qunbot.extensions
+    qunbot.runtime
