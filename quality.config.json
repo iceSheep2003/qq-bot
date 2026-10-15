@@ -10,9 +10,9 @@
           ".venv/bin/python",
           "-m",
           "pytest",
-          "tests/test_scene_refactor.py",
-          "tests/test_scene_private_disabled.py",
-          "tests/test_quality_junit.py",
+          "tests/agent/test_scene_refactor.py",
+          "tests/agent/test_scene_private_disabled.py",
+          "tests/quality/test_quality_junit.py",
           "-q",
           "--junitxml=.quality/acceptance.xml"
         ],
@@ -43,7 +43,7 @@
           ".venv/bin/python",
           "-m",
           "pytest",
-          "tests/test_owner_skill_budget.py",
+          "tests/agent/test_owner_skill_budget.py",
           "-q",
           "--junitxml=.quality/owner-selection.xml"
         ],
@@ -74,8 +74,8 @@
           ".venv/bin/python",
           "-m",
           "pytest",
-          "tests/test_branding.py",
-          "tests/test_webui.py::test_markdown_guide_is_task_oriented_and_covers_every_module",
+          "tests/bootstrap/test_branding.py",
+          "tests/interfaces/test_webui.py::test_markdown_guide_is_task_oriented_and_covers_every_module",
           "-q",
           "--junitxml=.quality/branding.xml"
         ],
@@ -100,11 +100,44 @@
         ]
       },
       {
+        "id": "project-layout",
+        "title": "Canonical source, dependency boundaries, preserved tests and installable wheel",
+        "command": [
+          ".venv/bin/python",
+          "-m",
+          "pytest",
+          "tests/quality/test_project_layout.py",
+          "-q",
+          "--junitxml=.quality/project-layout.xml"
+        ],
+        "report": ".quality/project-layout.xml",
+        "format": "junit",
+        "timeoutMs": 180000,
+        "metrics": [
+          {
+            "name": "Layout acceptance cases",
+            "path": "tests",
+            "min": 20
+          },
+          {
+            "name": "Success rate",
+            "path": "successRate",
+            "equals": 100
+          },
+          {
+            "name": "Skipped",
+            "path": "skipped",
+            "equals": 0
+          }
+        ]
+      },
+      {
         "id": "regression",
         "title": "Complete legacy and new Python regression suite",
         "command": [
           ".venv/bin/python",
-          "scripts/quality_adapter.py",
+          "-m",
+          "tools.quality.checks",
           "regression"
         ],
         "report": ".quality/regression.xml",
@@ -133,7 +166,8 @@
         "title": "Ruff syntax and correctness across changed Python modules",
         "command": [
           ".venv/bin/python",
-          "scripts/quality_adapter.py",
+          "-m",
+          "tools.quality.checks",
           "lint"
         ]
       },
@@ -142,7 +176,8 @@
         "title": "Import-linter ownership contracts",
         "command": [
           ".venv/bin/python",
-          "scripts/quality_adapter.py",
+          "-m",
+          "tools.quality.checks",
           "architecture"
         ]
       },
@@ -151,7 +186,8 @@
         "title": "New module line and branch coverage",
         "command": [
           ".venv/bin/python",
-          "scripts/quality_adapter.py",
+          "-m",
+          "tools.quality.checks",
           "coverage"
         ],
         "report": ".quality/coverage-metrics.json",

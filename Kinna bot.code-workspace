@@ -6,6 +6,29 @@
     }
   ],
   "settings": {
-    "window.title": "Kinna bot · ${activeEditorShort} · ${appName}"
+    "window.title": "Kinna bot · ${activeEditorShort} · ${appName}",
+    "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python",
+    "files.exclude": {
+      "**/__pycache__": true,
+      "**/*.egg-info": true,
+      ".venv": true,
+      ".pytest_cache": true,
+      ".pytest_tmp*": true,
+      ".ruff_cache": true,
+      ".import_linter_cache": true,
+      "build": true,
+      "dist": true,
+      ".coverage": true
+    },
+    "search.exclude": {
+      "**/__pycache__": true,
+      ".venv": true,
+      ".quality": true,
+      ".pytest_tmp*": true,
+      "data": true,
+      "experiments": true,
+      "build": true
+    },
+    "explorer.sortOrder": "default"
   }
 }

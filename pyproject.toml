@@ -1,3 +1,7 @@
+[build-system]
+requires = ["setuptools==80.9.0", "wheel==0.45.1"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "qunbot"
 version = "0.1.0"
@@ -16,11 +20,16 @@ dependencies = [
 exam-poster = ["pillow>=10,<13"]
 
 [project.scripts]
-qunbot = "qunbot.app:main"
+qunbot = "qunbot.bootstrap.app:main"
+kinna-bot = "qunbot.bootstrap.app:main"
 
 [tool.setuptools.packages.find]
+where = ["src"]
 include = ["qunbot*"]
+namespaces = false
 
 [tool.setuptools.package-data]
-"qunbot.extensions.webui" = ["static/*", "docs/*.md"]
-"qunbot.identity_guard" = ["rules.json"]
+"qunbot.interfaces.webui" = ["static/*", "docs/*.md"]
+"qunbot.agent.identity.guard" = ["rules.json"]
+"qunbot.features.slang" = ["data/*.txt", "data/*.json"]
+"qunbot.features.scheduled_chat" = ["data/*.json"]

@@ -6,7 +6,7 @@
 ![QQ](https://img.shields.io/badge/QQ-NapCat-2563EB)
 ![OneBot](https://img.shields.io/badge/OneBot-v11-2563EB)
 
-[代码从哪里看](docs/CODE_MAP.md) · [快速开始](#快速开始) · [使用文档](#使用文档) · [开发指南](CONTRIBUTING.md) · [反馈问题](https://github.com/iceSheep2003/qq-bot/issues)
+[项目结构](docs/architecture/README.md) · [快速开始](#快速开始) · [使用文档](#使用文档) · [开发指南](CONTRIBUTING.md) · [反馈问题](https://github.com/iceSheep2003/qq-bot/issues)
 
 <p align="center">
   <img src="memes/ip/zinxtick-present-sheet.png" alt="Kinna：蓝发、黑卫衣，拿着一张清单" width="306" />
@@ -18,7 +18,29 @@ Kinna 侧重 QQ 群里的日常聊天：参与多人话题、接梗、发表情�
 
 NapCat 负责 QQ 登录和消息收发，Bot 负责对话、记忆和行为规划，语言模型通过 OpenAI 兼容接口接入。配置和聊天记录保存在部署机器上，管理界面随 Bot 启动。
 
-当前为持续开发中的版本。聊天效果依赖模型与配置，功能的实现状态和限制见 [功能说明](docs/FEATURES.md)。
+当前为持续开发中的版本。聊天效果依赖模型与配置，功能的实现状态和限制见 [功能说明](docs/guides/FEATURES.md)。
+
+## 代码与目录
+
+源码统一放在 `src/qunbot/`，按七种职责组织：
+
+| 目录 | 负责什么 |
+| --- | --- |
+| `agent/` | 感知、会话上下文、身份、记忆、认知路线、Skill 与模型编排 |
+| `actions/` | 固定工具、回复发送、QQ 原生互动、定时任务执行 |
+| `features/` | 开发者维护的可选内置能力与固定装配清单 |
+| `infrastructure/` | QQ、模型服务和数据库的具体接入 |
+| `interfaces/` | 管理界面和维护查询 |
+| `bootstrap/` | 配置读取、依赖组装和启动入口 |
+| `contracts/` | 公共数据结构、端口、协议和图谱 schema |
+
+测试按相同职责放在 `tests/`。实验、运维与质量工具放在 `tools/`；使用指南、
+当前架构、未来设计和历史记录分别放在 `docs/` 的对应目录。详见
+[项目结构与依赖规则](docs/architecture/README.md)、[文档索引](docs/README.md)和
+[开发约定](CONTRIBUTING.md)。VS Code 可直接打开根目录的 `Kinna bot.code-workspace`。
+
+默认对话使用 LLM；群聊和私聊可分别配置可选认知通道。跨场景记忆授权、
+新认知图谱及私聊定时任务仍属于后续开发范围。
 
 ## 功能概览
 
@@ -51,7 +73,7 @@ NapCat 负责 QQ 登录和消息收发，Bot 负责对话、记忆和行为规�
 - 已安装并登录 QQ 的 [NapCat](https://github.com/NapNeko/NapCatQQ)。
 - 一个可用的 OpenAI 兼容聊天接口，以及它的地址、密钥和模型名。
 
-基础聊天不需要 GPU 或语音服务。以下命令使用 Linux/macOS 的 Bash 或 Zsh；容器网络、可选功能和排错步骤见 [完整启动指南](docs/QUICKSTART.md)。
+基础聊天不需要 GPU 或语音服务。以下命令使用 Linux/macOS 的 Bash 或 Zsh；容器网络、可选功能和排错步骤见 [完整启动指南](docs/guides/QUICKSTART.md)。
 
 ### 1. 下载并安装
 
@@ -117,22 +139,25 @@ WebUI 默认地址：**http://127.0.0.1:6200/**。使用 `BOT_WEBUI_TOKEN` 登�
 
 | 你想做什么 | 文档或文件 |
 | --- | --- |
-| 安装、接入 QQ、启用语音与定时任务 | [完整启动指南](docs/QUICKSTART.md) |
-| 调整回复频率、查看记忆、管理任务 | [WebUI 操作手册](qunbot/extensions/webui/docs/GUIDE.md) |
+| 安装、接入 QQ、启用语音与定时任务 | [完整启动指南](docs/guides/QUICKSTART.md) |
+| 调整回复频率、查看记忆、管理任务 | [WebUI 操作手册](src/qunbot/interfaces/webui/docs/GUIDE.md) |
 | 修改角色、人设和说话风格 | [人格文件](config/persona.md) |
-| 查配置项、实现方式和功能限制 | [功能说明](docs/FEATURES.md) |
-| 了解短期上下文与话题选择 | [对话理解设计](docs/CONVERSATION_INTELLIGENCE_DESIGN.md) |
-| 查看模块缺口与后续开发计划 | [开发路线](docs/DEVELOPMENT_ROADMAP.md) |
+| 查配置项、实现方式和功能限制 | [功能说明](docs/guides/FEATURES.md) |
+| 了解短期上下文与话题选择 | [对话理解设计](docs/design/CONVERSATION_INTELLIGENCE_DESIGN.md) |
+| 查看模块缺口与后续开发计划 | [开发路线](docs/development/ROADMAP.md) |
 
 ## 扩展与开发
 
-可选功能通过 `BOT_EXTENSIONS` 选择，并在本地 manifest 中注册。对话编排、存储、媒体、工具和任务有独立接口；新增一种任务动作不需要修改调度循环。
+部署者通过两种声明式输入补充能力：`skills/*/SKILL.md` 与定时任务定义。
+Skill 描述已有能力如何使用，任务定义选择已有动作与执行时间。它们不能
+注册代码、增加工具权限、修改图谱 schema 或数据库结构。
 
-Skill 提供对话知识和能力使用说明。群成员不能安装代码、修改运行配置或执行任意脚本；维护者已启用的群管理动作则按各自权限和规则运行。**AstrBot 插件不能直接安装到本项目，需要移植适配。**
+`src/qunbot/features/` 中的可选功能由开发者维护，经固定清单装配；
+`BOT_EXTENSIONS` 选择已经内置的功能。新增实际工具、动作或存储能力需要修改
+受测试和质量门禁约束的版本代码。AstrBot 插件需要移植适配。
 
-人格与常驻知识尽量保持稳定，记忆、心情和本轮线索按预算注入动态上下文，以减少重复输入的成本。实际缓存命中由模型服务商决定。
-
-开发环境、包边界和提交要求见 [开发指南](CONTRIBUTING.md)。问题反馈请提交 [Issue](https://github.com/iceSheep2003/qq-bot/issues)，附复现步骤和脱敏日志，不要上传密钥或聊天数据库。
+开发环境、目录归属与先测试后实现的提交要求见 [开发约定](CONTRIBUTING.md)。
+问题反馈请提交 [Issue](https://github.com/iceSheep2003/qq-bot/issues)，附复现步骤和脱敏日志。
 
 ## 使用注意
 

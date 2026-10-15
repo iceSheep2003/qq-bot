@@ -1,1 +1,0 @@
-"""QQ companion bot."""
