@@ -76,6 +76,7 @@ class Agent:
         history_message_limit: int = DEFAULT_HISTORY_MESSAGE_LIMIT,
         live_scene_seconds: int = LIVE_SCENE_SECONDS,
         continuity_ttl_seconds: int = 5400,
+        wiki_reader=None,
     ):
         self.model, self.conversations, self.people, self.memories = (
             model,
@@ -89,6 +90,7 @@ class Agent:
         self.prompt_sessions = prompt_sessions
         self.conversation_compactor = conversation_compactor
         self.behavior_decision = behavior_decision
+        self.wiki_reader = wiki_reader
         self.persona_path = persona_path
         self.history_char_budget = max(0, int(history_char_budget))
         self.history_message_limit = max(4, int(history_message_limit))
@@ -278,6 +280,17 @@ class Agent:
             if recall_eligible
             else {"items": [], "usage_rule": "短句语义不明，本轮不用长期记忆推断话题"}
         )
+        wiki_context = {}
+        if self.wiki_reader is not None and recall_eligible:
+            try:
+                wiki_context = self.wiki_reader.read(
+                    event.scope, event.user_id, memory_query[:1200], limit=4
+                )
+            except Exception:
+                log.exception(
+                    "Wiki context read failed for scope=%s; replying without Wiki",
+                    event.scope,
+                )
         selected = skills.select(
             event.text + (" 群聊" if event.group_id else ""), proactive=proactive
         )
@@ -305,6 +318,7 @@ class Agent:
                 "关系": profile.get("relationship_note", ""),
             },
             "相关记忆": memories,
+            "Wiki背景": wiki_context,
             "本轮技能": [{"name": s.name, "instructions": s.body} for s in selected],
             "可选扩展上下文": extensions,
             # Tells the model how much authority each contribution carries.

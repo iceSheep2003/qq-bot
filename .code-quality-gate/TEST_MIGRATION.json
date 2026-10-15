@@ -290,9 +290,10 @@
       "test_schedule_config_accepts_poster_and_rejects_unknown_action",
       "test_schedule_config_is_idempotent",
       "test_scheduler_records_skipped_separately_from_failed",
-      "test_stable_prefix_excludes_dynamic_profile"
+      "test_stable_prefix_excludes_dynamic_profile",
+      "test_wiki_reader_is_dynamic_context_and_does_not_change_stable_prefix"
     ],
-    "assertions": 86
+    "assertions": 88
   },
   "tests/agent/test_emotion.py": {
     "tests": [
@@ -1480,5 +1481,13 @@
       "test_weather_without_key_registers_nothing_and_no_worker"
     ],
     "assertions": 79
+  },
+  "tests/agent/test_wiki_reader.py": {
+    "tests": [
+      "test_full_read_is_explicit_and_preview_does_not_include_entries",
+      "test_private_scope_cannot_fall_back_to_a_group_page",
+      "test_selected_read_merges_group_and_person_without_reading_everything"
+    ],
+    "assertions": 10
   }
 }

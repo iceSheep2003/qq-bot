@@ -49,6 +49,16 @@ class FakeSender:
         return {}
 
 
+class FakeWikiReader:
+    def read(self, scope, subject, query, *, mode="selected", limit=4):
+        return {
+            "mode": mode,
+            "entries": [{"claim": "正在准备操作系统课程"}],
+            "pages": ["groups/42", "groups/42/members/7"],
+            "usage_rule": "Wiki 是背景资料",
+        }
+
+
 def event(message_id: int, *, at_bot: bool) -> MessageEvent:
     return MessageEvent(
         str(message_id), "group:42", "42", "7", "小明", "你好", (), at_bot, (), 0
@@ -66,6 +76,24 @@ class CoreTests(unittest.TestCase):
     def tearDown(self):
         self.store.db.close()
         self.temp.cleanup()
+
+    def test_wiki_reader_is_dynamic_context_and_does_not_change_stable_prefix(self):
+        model = FakeModel()
+        base = Agent(
+            model, self.store, self.store,
+            MemoryService(model, self.store, self.store),
+            SkillCatalog(self.root / "skills"), built_in_tools(self.store), self.persona,
+        )
+        with_wiki = Agent(
+            model, self.store, self.store,
+            MemoryService(model, self.store, self.store),
+            SkillCatalog(self.root / "skills"), built_in_tools(self.store), self.persona,
+            wiki_reader=FakeWikiReader(),
+        )
+        plain = base.build_messages(event(1, at_bot=True))
+        enriched = with_wiki.build_messages(event(1, at_bot=True))
+        self.assertEqual(plain[0]["content"], enriched[0]["content"])
+        self.assertIn("Wiki", enriched[-1]["content"])
 
     def test_deployed_persona_is_a_general_group_member(self):
         persona = (Path(__file__).resolve().parents[2] / "config" / "persona.md").read_text(encoding="utf-8")
