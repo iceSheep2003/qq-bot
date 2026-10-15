@@ -1,20 +1,19 @@
 from __future__ import annotations
 
 from qqbot.agent.memory.wiki.cache import WikiContextCache
-from qqbot.agent.memory.wiki.page import WikiEntry, WikiPage, WikiScope
+from qqbot.agent.memory.wiki.entity import WikiEntity, WikiFact
 
 
-def test_wiki_page_is_an_entity_with_scoped_entries_and_preview():
-    page = WikiPage(
-        page_id="groups/g1/members/u1",
+def test_entity_is_small_and_can_select_facts_like_slang_records():
+    entity = WikiEntity(
         scope="group_member",
         entity_id="u1",
-        title="小明",
+        name="小明",
         summary="喜欢讨论操作系统。",
-        entries=(
-            WikiEntry(
-                entry_id="e1",
-                claim="正在准备操作系统课程",
+        facts=(
+            WikiFact(
+                fact_id="e1",
+                text="正在准备操作系统课程",
                 topic="学习",
                 source_ids=("evt-1",),
                 confidence=0.9,
@@ -22,8 +21,8 @@ def test_wiki_page_is_an_entity_with_scoped_entries_and_preview():
         ),
         version="v1",
     )
-    assert page.preview() == {"page_id": "groups/g1/members/u1", "title": "小明", "summary": "喜欢讨论操作系统。", "version": "v1"}
-    assert page.select("操作系统")[0].claim == "正在准备操作系统课程"
+    assert entity.preview() == {"scope": "group_member", "entity_id": "u1", "name": "小明", "summary": "喜欢讨论操作系统。", "version": "v1"}
+    assert entity.select("操作系统")[0].text == "正在准备操作系统课程"
 
 
 def test_cache_reuses_query_scoped_wiki_context_until_ttl():
