@@ -8,24 +8,19 @@ tested and replaced on its own:
 ``execute_turn``      take the scope lock, call the model, send and record
 ``dispatch_post_reply`` hand best-effort observations to a bounded queue
 
-Post-reply work (affection, mood, other observers) runs on a bounded worker
-queue with idempotent event keys instead of one bare ``create_task`` per reply.
-The guarantee is **at most once**: a key is admitted only once, a full backlog
-drops and counts work rather than duplicating it, and a failed observation is
-logged and never retried. Nothing in the queue is persisted, so a restart loses
-queued observations — that is a deliberate trade (observations are advisory and
-must never double-count) rather than a gap to fix with a database table.
+Post-reply work (affection, mood, other observers) is delegated to
+``agent.observation.ObservationDispatcher``. It owns bounded in-memory and
+optional durable queues, idempotent event keys, recovery and shutdown so the
+interactive service does not carry a second maintenance lifecycle.
 """
 
 from __future__ import annotations
 
 import asyncio
 import logging
-import json
 import re
 import time
-from collections import OrderedDict
-from dataclasses import dataclass, replace, asdict
+from dataclasses import dataclass, replace
 from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
@@ -60,6 +55,7 @@ from qqbot.actions.replies import (
 )
 from qqbot.actions.replies.repetition import repeats_recent
 from qqbot.agent.fairness import ScopeWorkBudget
+from qqbot.agent.observation import ObservationDispatcher
 
 log = logging.getLogger(__name__)
 
@@ -86,26 +82,6 @@ class BotPolicy:
     # often silent for a while and a scheduled post should still land.
     job_freshness_minutes: int = 180
     job_max_chars: int = 150
-
-
-@dataclass
-class ObservationStats:
-    """Counters for the post-reply queue. Observability without a dependency."""
-
-    enqueued: int = 0
-    dropped: int = 0
-    deduplicated: int = 0
-    completed: int = 0
-    failed: int = 0
-
-
-@dataclass(frozen=True)
-class _DraftObserver:
-    observer: object
-    draft: object
-
-    async def observe(self, event: MessageEvent, bot_reply: str) -> None:
-        await self.observer.observe_draft(event, bot_reply, self.draft)
 
 
 class ConversationService:
@@ -141,13 +117,11 @@ class ConversationService:
         self.agent, self.conversations, self.activity = agent, conversations, activity
         self.people = people
         self.sender, self.policy = sender, policy
-        self.affection = affection
         self.media = media
         self.inbound_media = inbound_media
         self.reply_planner = reply_planner or DefaultReplyPlanner()
         self.reply_dispatcher = reply_dispatcher or ReplyDispatcher(sender, media)
         self.conversation_intelligence = conversation_intelligence
-        self.observers = observers
         # None means the built-in "@ me only" rule; an injected policy replaces
         # it. Advisory only — a failure falls back to the default.
         self.reply_policy = reply_policy
@@ -165,26 +139,21 @@ class ConversationService:
         # a service that never replies never allocates a worker.
         # Defaults live here; environment parsing lives in config.Config, which
         # app.py passes down. This module never reads os.environ.
-        self._observation_backlog = observation_backlog or DEFAULT_OBSERVATION_BACKLOG
-        self._observation_workers = observation_workers or DEFAULT_OBSERVATION_WORKERS
-        self._dedupe_limit = observation_dedupe or DEFAULT_OBSERVATION_DEDUPE
-        self._queue: asyncio.Queue | None = None
-        self._workers: list[asyncio.Task] = []
-        self._seen: OrderedDict[str, None] = OrderedDict()
+        self.post_reply = ObservationDispatcher(
+            affection=affection, observers=tuple(observers),
+            affection_enabled=policy.affection_auto_enabled,
+            backlog=observation_backlog or DEFAULT_OBSERVATION_BACKLOG,
+            workers=observation_workers or DEFAULT_OBSERVATION_WORKERS,
+            dedupe=observation_dedupe or DEFAULT_OBSERVATION_DEDUPE,
+            store=observation_store,
+        )
         self._extract_tasks: set[asyncio.Task] = set()
         # Compaction is maintenance, never part of the interactive reply
         # latency. One task per scope prevents a hot group from creating a
         # model-call backlog; the model adapter still enforces the global cap.
         self._compaction_tasks: dict[str, asyncio.Task] = {}
         self._compaction_budget = ScopeWorkBudget(max_per_scope=2)
-        self._closed = False
-        self.observations = ObservationStats()
-        self.observation_store = observation_store
-        self._durable_handlers = {}
-        for observer in (affection, *observers):
-            if observer is not None:
-                identity = type(observer).__module__ + "." + type(observer).__qualname__
-                self._durable_handlers[identity] = observer
+        self.observations = self.post_reply.stats
         if restore_last_reply:
             self.restore_last_reply()
 
@@ -653,197 +622,23 @@ class ConversationService:
 
     # --- use case 4: post-reply events -----------------------------------
 
-    def dispatch_post_reply(
-        self, event: MessageEvent, bot_reply: str, draft: object | None = None
-    ) -> None:
-        """Queue best-effort observations. Never awaited by the caller."""
-        if self.affection and self.policy.affection_auto_enabled and event.group_id:
-            observer = self._observer_for_draft(self.affection, draft)
-            self.submit_observation(
-                f"affection:{event.event_id}", observer, event, bot_reply
-            )
-        for index, observer in enumerate(self.observers):
-            observer = self._observer_for_draft(observer, draft)
-            self.submit_observation(
-                f"observer:{index}:{event.event_id}", observer, event, bot_reply
-            )
+    def dispatch_post_reply(self, event: MessageEvent, bot_reply: str, draft: object | None = None) -> None:
+        """Delegate advisory work to the single post-reply owner."""
+        self.post_reply.dispatch(event, bot_reply, draft)
 
-    @staticmethod
-    def _observer_for_draft(observer: object, draft: object | None):
-        if (
-            draft is not None
-            and getattr(draft, "state_observations", None) is not None
-            and callable(getattr(observer, "observe_draft", None))
-        ):
-            return _DraftObserver(observer, draft)
-        return observer
-
-    def submit_observation(
-        self,
-        key: str,
-        observer: ReplyObserver,
-        event: MessageEvent,
-        bot_reply: str,
-    ) -> bool:
-        """Admit one observation, at most once per key.
-
-        The key is claimed before it is queued: a redelivered event, a failure
-        replay or a retry can never observe the same turn twice. If the backlog
-        is full the observation is dropped and counted — the alternative
-        (unbounded growth, or replaying a partially applied observation) is
-        worse than a missing affection nudge.
-        """
-        if self._closed:
-            return False
-        if self.observation_store is not None:
-            base = (
-                observer.observer if isinstance(observer, _DraftObserver) else observer
-            )
-            identity = type(base).__module__ + "." + type(base).__qualname__
-            self._durable_handlers[identity] = base
-            # Mood and affection have transactional source-event dedupe. Style
-            # directives are advisory but may lack it, so crash recovery must
-            # not blindly repeat those consumers.
-            replayable = identity in {
-                "qqbot.agent.memory.relationships.evaluator.AffectionEvaluator",
-                "qqbot.agent.identity.emotion.system.EmotionSystem",
-            }
-            draft = (
-                asdict(observer.draft)
-                if isinstance(observer, _DraftObserver)
-                and isinstance(observer.draft, ReplyDraft)
-                else None
-            )
-            status = self.observation_store.enqueue(
-                key,
-                identity,
-                asdict(event),
-                bot_reply,
-                draft,
-                replayable=replayable,
-                capacity=self._observation_backlog,
-            )
-            if status == "queued":
-                self.observations.enqueued += 1
-                return True
-            if status == "duplicate":
-                self.observations.deduplicated += 1
-            else:
-                self.observations.dropped += 1
-            return False
-        if key in self._seen:
-            self.observations.deduplicated += 1
-            return False
-        self._remember(key)
-        queue = self._ensure_queue()
-        try:
-            queue.put_nowait((key, observer, event, bot_reply))
-        except asyncio.QueueFull:
-            self.observations.dropped += 1
-            log.warning("Observation backlog full; dropped %s", key)
-            return False
-        self.observations.enqueued += 1
-        return True
-
-    def _remember(self, key: str) -> None:
-        self._seen[key] = None
-        while len(self._seen) > self._dedupe_limit:
-            self._seen.popitem(last=False)
-
-    def _ensure_queue(self) -> asyncio.Queue:
-        if self._queue is None:
-            self._queue = asyncio.Queue(maxsize=self._observation_backlog)
-        if not any(not task.done() for task in self._workers):
-            self._workers = [
-                asyncio.get_running_loop().create_task(self._observation_worker())
-                for _ in range(self._observation_workers)
-            ]
-        return self._queue
-
-    async def _observation_worker(self) -> None:
-        queue = self._queue
-        while True:
-            item = await queue.get()
-            key, observer, event, bot_reply = item
-            try:
-                await observer.observe(event, bot_reply)
-                self.observations.completed += 1
-            except asyncio.CancelledError:
-                raise
-            except Exception:
-                # At-most-once: a failed observation is logged, never retried,
-                # so it cannot be counted twice on a later replay.
-                self.observations.failed += 1
-                log.exception("Post-reply observation failed for %s", key)
-            finally:
-                queue.task_done()
+    def submit_observation(self, key: str, observer: ReplyObserver, event: MessageEvent, bot_reply: str) -> bool:
+        return self.post_reply.submit(key, observer, event, bot_reply)
 
     @property
     def pending_observations(self) -> int:
-        if self.observation_store is not None:
-            return self.observation_store.pending()
-        return self._queue.qsize() if self._queue is not None else 0
+        return self.post_reply.pending
 
     async def durable_observation_loop(self):
-        if self.observation_store is None:
-            return
-        self.observation_store.recover()
-        while not self._closed:
-            row = self.observation_store.lease(tuple(self._durable_handlers))
-            if row is None:
-                await asyncio.sleep(0.25)
-                continue
-            observer = self._durable_handlers[row["handler_id"]]
-            try:
-                event = MessageEvent(**json.loads(row["event_json"]))
-                if row["draft_json"] and callable(
-                    getattr(observer, "observe_draft", None)
-                ):
-                    draft = ReplyDraft(**json.loads(row["draft_json"]))
-                    await observer.observe_draft(event, row["reply"], draft)
-                else:
-                    await observer.observe(event, row["reply"])
-                self.observation_store.complete(row["id"])
-                self.observations.completed += 1
-            except asyncio.CancelledError:
-                raise
-            except Exception:
-                self.observation_store.failed(row["id"])
-                self.observations.failed += 1
-                log.warning(
-                    "Durable observation failed handler=%s; bounded policy applied",
-                    row["handler_id"],
-                )
+        return await self.post_reply.run_durable()
 
     async def aclose(self, timeout: float = 5.0) -> None:
-        """Stop accepting new work, drain the queue, then cancel what remains.
-
-        Rule at shutdown: already-queued observations get ``timeout`` seconds to
-        finish; anything still running after that is cancelled, and nothing is
-        written to disk to resume later. Callers that do not await ``aclose``
-        simply lose the queued observations on exit.
-        """
-        self._closed = True
-        queue = self._queue
-        workers = [task for task in self._workers if not task.done()]
-        if queue is not None and workers:
-            try:
-                await asyncio.wait_for(queue.join(), timeout=timeout)
-            except (TimeoutError, asyncio.TimeoutError):
-                log.warning(
-                    "Observation queue did not drain within %.1fs; dropping %d",
-                    timeout,
-                    queue.qsize(),
-                )
-            except asyncio.CancelledError:
-                # Shutdown itself was cancelled: stop the workers without waiting.
-                for task in workers:
-                    task.cancel()
-                raise
-            for task in workers:
-                task.cancel()
-            await asyncio.gather(*workers, return_exceptions=True)
-        self._workers = []
+        """Stop post-reply work, then cancel compaction and extraction tasks."""
+        await self.post_reply.aclose(timeout=timeout)
         compactions = list(self._compaction_tasks.values())
         for task in compactions:
             task.cancel()

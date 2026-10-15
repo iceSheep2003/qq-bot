@@ -1,0 +1,53 @@
+{
+  "version": 1,
+  "id": "AGENT-OBSERVATION-007",
+  "attempts": 2,
+  "red": {
+    "time": "2026-10-15T17:05:58.759Z",
+    "snapshot": {
+      "contract": "273db2105bbf32872d41cc3e2064c060a9f9c390b194ffe8a6d72b6e3cfac658",
+      "protected": {
+        ".code-quality-gate/ci-setup.sh": "8c6636d8a04487aa9d8c623fce23aaab751bec431c25aa8a402a841532a8a69f",
+        ".code-quality-gate/tasks/AGENT-OBSERVATION-007.json": "75229a2aad5108fc8b31add14606b545d81bac0020d7e5a9faa5afc22e610712",
+        ".importlinter": "aa8de79473b76661f8190e3c7ad0977a9c01b7f13d9b5bf8b527629f5d4e9cb1",
+        "quality.config.json": "eb883e7316cc09244e8b6623219579681a642b05687ed077fa1984fa752dc78d",
+        "tests/agent/test_observation.py": "9d4df67ef2d643a0ef9cfdb510b60cd816e4512df14947628858f8efbb4bb6e2",
+        "tests/agent/test_service.py": "1368c3244ab4718c81b349ffa30136b0d576693e0d758222f8435e76f0359e77",
+        "tests/quality/test_quality_integration.py": "a75d63f91d7eff628b543d93f9eebb42b5adf097b360684293da71455c27a7a5",
+        "tools/quality/junit_report.py": "082cff7fb89c4f5cac8d71a198185f857b5d2501f7a59f74905cf4bf22b48c8b"
+      },
+      "code": {
+        ".importlinter": "aa8de79473b76661f8190e3c7ad0977a9c01b7f13d9b5bf8b527629f5d4e9cb1",
+        "quality.config.json": "eb883e7316cc09244e8b6623219579681a642b05687ed077fa1984fa752dc78d",
+        "src/qqbot/agent/observation.py": "9d91d346164af5e953cfc64ec0763612ffb02f36c98bab59fb7b0c8902913bf7",
+        "src/qqbot/agent/service.py": "cd3e8bec436453cee77355faa5beb36ddcde71730615a2dda2bd78de6fc2f801",
+        "tools/quality/checks.py": "74c3d702e3ce6eec6ea924b7be8c9653354393ecb57e3f1b1e8bc2dc5fd73057"
+      }
+    },
+    "report": ".quality/code-quality-gate/AGENT-OBSERVATION-007/red-a4b01a4f-c78b-44cc-a5ee-c274f93ff2b7.md"
+  },
+  "green": {
+    "time": "2026-10-15T17:10:21.389Z",
+    "snapshot": {
+      "contract": "273db2105bbf32872d41cc3e2064c060a9f9c390b194ffe8a6d72b6e3cfac658",
+      "protected": {
+        ".code-quality-gate/ci-setup.sh": "8c6636d8a04487aa9d8c623fce23aaab751bec431c25aa8a402a841532a8a69f",
+        ".code-quality-gate/tasks/AGENT-OBSERVATION-007.json": "75229a2aad5108fc8b31add14606b545d81bac0020d7e5a9faa5afc22e610712",
+        ".importlinter": "aa8de79473b76661f8190e3c7ad0977a9c01b7f13d9b5bf8b527629f5d4e9cb1",
+        "quality.config.json": "eb883e7316cc09244e8b6623219579681a642b05687ed077fa1984fa752dc78d",
+        "tests/agent/test_observation.py": "9d4df67ef2d643a0ef9cfdb510b60cd816e4512df14947628858f8efbb4bb6e2",
+        "tests/agent/test_service.py": "1368c3244ab4718c81b349ffa30136b0d576693e0d758222f8435e76f0359e77",
+        "tests/quality/test_quality_integration.py": "a75d63f91d7eff628b543d93f9eebb42b5adf097b360684293da71455c27a7a5",
+        "tools/quality/junit_report.py": "082cff7fb89c4f5cac8d71a198185f857b5d2501f7a59f74905cf4bf22b48c8b"
+      },
+      "code": {
+        ".importlinter": "aa8de79473b76661f8190e3c7ad0977a9c01b7f13d9b5bf8b527629f5d4e9cb1",
+        "quality.config.json": "eb883e7316cc09244e8b6623219579681a642b05687ed077fa1984fa752dc78d",
+        "src/qqbot/agent/observation.py": "48db912c0acd8e8e46353fad3723fc7a5c8c663771426815eaa7ab2c0a56cd5e",
+        "src/qqbot/agent/service.py": "c95aec7c737806ef2357cbfab002e512cc97b800d7d025130e8dfe02084aecd3",
+        "tools/quality/checks.py": "74c3d702e3ce6eec6ea924b7be8c9653354393ecb57e3f1b1e8bc2dc5fd73057"
+      }
+    },
+    "report": ".quality/code-quality-gate/AGENT-OBSERVATION-007/green-aecaefb6-a852-44f9-87e6-7f9273f9f2af.md"
+  }
+}

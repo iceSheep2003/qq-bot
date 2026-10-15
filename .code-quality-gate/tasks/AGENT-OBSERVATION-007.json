@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "id": "AGENT-OBSERVATION-007",
+  "title": "Extract bounded post-reply observation lifecycle from ConversationService",
+  "requirements": [
+    "A standalone ObservationDispatcher must own bounded in-memory and durable post-reply observation admission, deduplication, execution, statistics and shutdown.",
+    "Group and private events must preserve their scopes; automatic affection observation remains group-only while ordinary observers support both scenes.",
+    "ConversationService must delegate post-reply observation state and lifecycle without retaining duplicate queue, worker, dedupe or durable-handler state.",
+    "Failures, full queues, cancellation, durable recovery and structured reply drafts must preserve the existing at-most-once and shutdown semantics."
+  ],
+  "testFiles": [
+    "tests/agent/test_observation.py"
+  ],
+  "codeFiles": [
+    "src/qqbot/agent/observation.py",
+    "src/qqbot/agent/service.py",
+    "tools/quality/checks.py",
+    "quality.config.json",
+    ".importlinter"
+  ],
+  "testChecks": [
+    "observation-boundary"
+  ],
+  "protectedFiles": [
+    "tests/agent/test_observation.py",
+    "tests/agent/test_service.py",
+    "tools/quality/junit_report.py",
+    "tests/quality/test_quality_integration.py",
+    ".code-quality-gate/ci-setup.sh",
+    ".importlinter"
+  ],
+  "maxAttempts": 12
+}

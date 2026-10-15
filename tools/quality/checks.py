@@ -1,4 +1,4 @@
-"""Run actual Python quality tools for the frozen VerityGate contract."""
+"""Run actual Python quality tools for the Code Quality Gate contract."""
 
 from __future__ import annotations
 
@@ -16,6 +16,7 @@ NEW_FILES = [
     "src/qqbot/agent/cognition/routes.py",
 ]
 CODE_FILES = NEW_FILES + [
+    "src/qqbot/agent/observation.py", "tests/agent/test_observation.py",
     "src/qqbot/agent/cognition/__init__.py", "src/qqbot/agent/skills/catalog.py",
     "src/qqbot/agent/skills/host.py", "src/qqbot/agent/orchestrator.py", "src/qqbot/agent/service.py",
     "src/qqbot/actions/tools/kernel.py", "src/qqbot/bootstrap/app.py", "src/qqbot/bootstrap/config.py",
@@ -28,17 +29,17 @@ def run(args: list[str]) -> int:
     return subprocess.run(args, cwd=ROOT, check=False).returncode
 
 
-def coverage_report() -> int:
+def coverage_report(files=NEW_FILES, prefix="new", metrics_name="coverage-metrics") -> int:
     result = run([
-        sys.executable, "-m", "coverage", "json", "--include=" + ",".join(NEW_FILES),
-        "-o", ".quality/new-coverage.json",
+        sys.executable, "-m", "coverage", "json", "--include=" + ",".join(files),
+        "-o", f".quality/{prefix}-coverage.json",
     ])
     if result:
         return result
-    report = json.loads((ROOT / ".quality/new-coverage.json").read_text())
+    report = json.loads((ROOT / f".quality/{prefix}-coverage.json").read_text())
     totals = report["totals"]
     statements, branches = totals["num_statements"], totals["num_branches"]
-    if not statements or not branches or set(report["files"]) != set(NEW_FILES):
+    if not statements or not branches or set(report["files"]) != set(files):
         raise ValueError("Missing source or coverage denominators")
     metrics = {
         "lineCoverage": 100 * totals["covered_lines"] / statements,
@@ -46,7 +47,7 @@ def coverage_report() -> int:
         "statements": statements,
         "branches": branches,
     }
-    (ROOT / ".quality/coverage-metrics.json").write_text(json.dumps(metrics))
+    (ROOT / f".quality/{metrics_name}.json").write_text(json.dumps(metrics))
     print(json.dumps(metrics))
     return 0
 
@@ -68,6 +69,8 @@ def main() -> int:
         raise ValueError("One check name is required")
     if sys.argv[1] == "coverage":
         return coverage_report()
+    if sys.argv[1] == "observation-coverage":
+        return coverage_report(["src/qqbot/agent/observation.py"], "observation", "observation-coverage-metrics")
     result = run(commands[sys.argv[1]])
     if sys.argv[1] == "regression":
         normalize_junit(ROOT / ".quality/regression.xml")

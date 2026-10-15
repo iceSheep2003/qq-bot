@@ -1,4 +1,4 @@
 {
-  "manifest": ".code-quality-gate/tasks/CQG-INTEGRATION-006-R2.json",
+  "manifest": ".code-quality-gate/tasks/AGENT-OBSERVATION-007.json",
   "config": "quality.config.json"
 }

@@ -1,6 +1,6 @@
 # Agent 回合与能力
 
-`service.py` 负责准入、回复触发、回合执行、发送结果记账和回复后维护。
+`service.py` 负责准入、回复触发、回合执行和发送结果记账；`observation.py` 负责回复后观察的有界队列、持久恢复和关闭清理。
 `orchestrator.py` 负责稳定前缀、动态上下文、模型与工具循环。
 
 子包：`perception/` 输入理解，`conversation/` 场景与工作记忆，

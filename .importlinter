@@ -69,3 +69,14 @@ forbidden_modules =
     qqbot.features
     qqbot.interfaces
     qqbot.bootstrap
+
+[importlinter:contract:observations]
+name = Reply observation lifecycle owns no adapters or conversation service
+type = forbidden
+source_modules = qqbot.agent.observation
+forbidden_modules =
+    qqbot.agent.service
+    qqbot.infrastructure
+    qqbot.features
+    qqbot.interfaces
+    qqbot.bootstrap

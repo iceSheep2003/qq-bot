@@ -194,6 +194,37 @@
         ]
       },
       {
+        "id": "observation-boundary",
+        "title": "Independent post-reply observation lifecycle and service delegation",
+        "command": [
+          ".venv/bin/python",
+          "-m",
+          "pytest",
+          "tests/agent/test_observation.py",
+          "-q",
+          "--junitxml=.quality/observation.xml"
+        ],
+        "report": ".quality/observation.xml",
+        "format": "junit",
+        "metrics": [
+          {
+            "name": "Observation cases",
+            "path": "tests",
+            "min": 18
+          },
+          {
+            "name": "Success rate",
+            "path": "successRate",
+            "equals": 100
+          },
+          {
+            "name": "Skipped",
+            "path": "skipped",
+            "equals": 0
+          }
+        ]
+      },
+      {
         "id": "regression",
         "title": "Complete legacy and new Python regression suite",
         "command": [
@@ -274,6 +305,40 @@
             "name": "Branches",
             "path": "branches",
             "min": 10
+          }
+        ]
+      },
+      {
+        "id": "observation-coverage",
+        "title": "Observation module measured line and branch coverage",
+        "command": [
+          ".venv/bin/python",
+          "-m",
+          "tools.quality.checks",
+          "observation-coverage"
+        ],
+        "report": ".quality/observation-coverage-metrics.json",
+        "format": "json",
+        "metrics": [
+          {
+            "name": "Line coverage",
+            "path": "lineCoverage",
+            "min": 90
+          },
+          {
+            "name": "Branch coverage",
+            "path": "branchCoverage",
+            "min": 80
+          },
+          {
+            "name": "Statements",
+            "path": "statements",
+            "min": 100
+          },
+          {
+            "name": "Branches",
+            "path": "branches",
+            "min": 40
           }
         ]
       }
