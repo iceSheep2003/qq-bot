@@ -9,6 +9,25 @@ from qqbot.agent.memory.wiki.page import (
     WikiSlang,
     WikiTopic,
 )
+from qqbot.agent.memory.wiki.links import LinkCandidate, markdown_link, reciprocal
+
+
+def test_links_are_markdown_and_reciprocal_only_when_relation_is_stable():
+    candidate = LinkCandidate(
+        "groups/g1",
+        "groups/g1/members/u1",
+        "frequent_member",
+        "小明",
+        confidence=0.9,
+        evidence_count=2,
+        symmetric=True,
+    )
+    reverse = reciprocal(candidate)
+    assert reverse is not None
+    assert markdown_link("groups/g1", "groups/g1/members/u1", "小明") == "[小明](g1/members/u1.md)"
+
+    one_way = LinkCandidate("groups/g1", "groups/g1/topics/os", "mentions", "操作系统", 0.6)
+    assert reciprocal(one_way) is None
 
 
 def test_wiki_page_keeps_online_memory_fields_and_reads_latest_entries_first():
