@@ -6,12 +6,11 @@ import argparse
 import asyncio
 import json
 import logging
-from dataclasses import replace
-from inspect import isawaitable
-from typing import Any, Callable
 
 from qqbot.agent.orchestrator import Agent
 from qqbot.bootstrap.config import Config
+from qqbot.bootstrap.runtime import ApplicationRuntime, Closer, close_sync
+from qqbot.interfaces.qq.router import QqEventRouter
 from qqbot.contracts.models import BotPolicy, ConfigError, ConversationPolicy, SchedulePolicy
 from qqbot.features.loader import (
     bind_features,
@@ -84,53 +83,6 @@ from qqbot.agent.cognition.routes import configured_scene_routes
 
 log = logging.getLogger(__name__)
 
-Closer = Callable[[], Any]
-"""A teardown step. May be sync or return an awaitable."""
-
-
-def _run_awaitable(awaitable: Any) -> None:
-    """Settle an async teardown from a synchronous context.
-
-    A failed ``BotApp.__init__`` cannot await: it is called as
-    ``asyncio.run(BotApp(config).run())``, so its constructor runs *outside*
-    the loop. The usual case is no running loop at all, which ``asyncio.run``
-    handles; if a caller did construct inside a loop, the step is scheduled and
-    this is best-effort rather than silently dropped.
-    """
-    try:
-        asyncio.get_running_loop()
-    except RuntimeError:
-        asyncio.run(awaitable)
-        return
-    asyncio.ensure_future(awaitable)
-
-
-def _close_sync(closers: list[Closer]) -> None:
-    """Reverse-order teardown that never raises, for a constructor rollback."""
-    for close in reversed(closers):
-        try:
-            result = close()
-        except Exception:
-            log.exception("Cleanup step failed while unwinding a failed assembly")
-            continue
-        if isawaitable(result):
-            try:
-                _run_awaitable(result)
-            except Exception:
-                log.exception("Async cleanup step failed while unwinding")
-
-
-async def _aclose_all(closers: list[Closer]) -> None:
-    """The same reverse-order teardown, awaited. Used by ``BotApp.run``."""
-    for close in reversed(closers):
-        try:
-            result = close()
-            if isawaitable(result):
-                await result
-        except Exception:
-            log.exception("Cleanup step failed during shutdown")
-
-
 class BotApp:
     def __init__(self, config: Config):
         self.config = config
@@ -142,7 +94,7 @@ class BotApp:
         try:
             self._assemble(config)
         except BaseException:
-            _close_sync(self._closers)
+            close_sync(self._closers)
             self._closers = []
             raise
 
@@ -346,43 +298,11 @@ class BotApp:
             PokeSettings.from_env(), service, gateway, config.group_allowlist
         )
 
-        async def on_event(raw: dict) -> None:
-            if await poke_controller.handle(raw):
-                return
-            for handler in features.inbound_handlers:
-                try:
-                    if await handler(raw):
-                        return
-                except Exception:
-                    log.exception("Extension inbound handler failed")
-            event = parse_message(raw)
-            if event:
-                if event.group_id and event.group_id not in config.group_allowlist:
-                    return
-                if not event.group_id and not config.private_enabled:
-                    return
-                try:
-                    if event.reply_to_message_id:
-                        try:
-                            quoted = await gateway.resolve_quote(
-                                event.reply_to_message_id, group_id=event.group_id
-                            )
-                            event = replace(
-                                event,
-                                quoted_text=str(quoted.get("text") or ""),
-                                quoted_image_urls=tuple(quoted.get("image_urls") or ()),
-                            )
-                        except Exception:
-                            log.info(
-                                "Could not resolve quoted message %s",
-                                event.reply_to_message_id,
-                                exc_info=True,
-                            )
-                    await service.handle_message(event)
-                except Exception:
-                    log.exception("Failed to handle QQ event %s", event.event_id)
-
-        gateway.on_event = on_event
+        gateway.on_event = QqEventRouter(
+            service=service, gateway=gateway, allowed_groups=config.group_allowlist,
+            private_enabled=config.private_enabled, poke_controller=poke_controller,
+            inbound_handlers=features.inbound_handlers, parse_event=parse_message, logger=log,
+        )
         self.gateway, self.scheduler, self.job_runner, self.model = (
             gateway,
             scheduler,
@@ -395,9 +315,7 @@ class BotApp:
         # Feature-declared loops run beside the scheduled-job workers. A feature
         # loop that raises is caught by the gather below and reports itself
         # rather than taking the gateway down with it.
-        self.workers = build_workers(config, service, gateway, features) + [
-            worker() for worker in features.workers
-        ]
+        self.workers = build_workers(config, service, gateway, features) + list(features.workers)
 
         async def project_ledger():
             while True:
@@ -414,20 +332,12 @@ class BotApp:
         self.ontology, self.projector = ontology, projector
 
     async def run(self) -> None:
-        try:
-            await asyncio.gather(
-                self.gateway.run(),
-                self.scheduler.loop(self.job_runner.run),
-                *self.workers,
-                *(worker() for worker in self._kernel_workers),
-            )
-        finally:
-            # Reverse order, appended at construction: drain the observation
-            # queue before closing the database — they write to it. Skipping
-            # this drops in-flight affection/mood updates on every restart
-            # instead of merely on a crash. One step failing must not strand
-            # the rest, so each is isolated inside _aclose_all.
-            await _aclose_all(self._closers)
+        runtime = ApplicationRuntime(
+            (self.gateway.run, lambda: self.scheduler.loop(self.job_runner.run),
+             *self.workers, *self._kernel_workers),
+            self._closers,
+        )
+        await runtime.run()
 
 
 def main() -> None:

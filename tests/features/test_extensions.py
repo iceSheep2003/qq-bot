@@ -617,7 +617,7 @@ class WorkerSupervisionTests(unittest.TestCase):
                 config("proactive_chat"), Service(), Gateway(), FeatureHost()
             )
             self.assertEqual(len(workers), 1)
-            task = asyncio.ensure_future(workers[0])
+            task = asyncio.ensure_future(workers[0]())
             await asyncio.sleep(0)
             task.cancel()
             try:

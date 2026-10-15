@@ -1,0 +1,59 @@
+{
+  "version": 1,
+  "id": "RUNTIME-COMPOSITION-010",
+  "attempts": 1,
+  "red": {
+    "time": "2026-10-15T17:52:05.894Z",
+    "snapshot": {
+      "contract": "a61a10977a53ff1a9f5f7fb7065dc4219012ee85cb9885fa9253e1dd3de2a9b0",
+      "protected": {
+        ".code-quality-gate/REFACTOR_COMPLETION.md": "2ee7ed7b3f38a4df2d9fbd143e3f6641d46980035f105fbf50a75d5e0108058c",
+        ".code-quality-gate/ci-setup.sh": "8c6636d8a04487aa9d8c623fce23aaab751bec431c25aa8a402a841532a8a69f",
+        ".code-quality-gate/tasks/RUNTIME-COMPOSITION-010.json": "02f80c98356592e4125c2f31040b4a5353082b868ced9ee28b8af80051d04d89",
+        ".importlinter": "aa54cf0857b699cb32d94ab09bad29a08bf675397f3179ac85a80ecf390128a6",
+        "quality.config.json": "49484f2be191821d09bdbe805ba4405b154c49abcca8d87470260b73e0b37a7d",
+        "tests/agent/test_integration.py": "8f3afc3a2cc9b49558298fe55ad51c866ddc9103640e14c40f02303590071082",
+        "tests/bootstrap/test_runtime_boundaries.py": "ffae319c517dd85990f803788dcf28d9bd6b0a3383ceb2b31726577c317b6dd2",
+        "tools/quality/checks.py": "b6086edb0d5ccb86f1f6553507f57008ffe3d128a62e37913a1076b5aa148431",
+        "tools/quality/junit_report.py": "082cff7fb89c4f5cac8d71a198185f857b5d2501f7a59f74905cf4bf22b48c8b"
+      },
+      "code": {
+        "src/qqbot/bootstrap/app.py": "77dcde4f908b9e982bdf17dd3e0700e84eb9818ce9d3df0c6c0972aaa95f4c44",
+        "src/qqbot/bootstrap/runtime.py": "14cf8eb3bdc2acfd64ec2db283b2ca4712f003de5d2c87a2dbe4366f0d5f9f14",
+        "src/qqbot/features/loader.py": "0c7ff44c9c40c116d031d94a1873f5826bd686ff85f5f51ff752b19226bb5cea",
+        "src/qqbot/interfaces/qq/__init__.py": "8ddfbc60ccc7ac2d7ae588a7a04867aa84bc1a96fbea414830e2c62fe4a4f85a",
+        "src/qqbot/interfaces/qq/router.py": "829c99b3756c53d13e44314a0b21dfde4a7a30f7edea423dda09be210914abaa",
+        "tests/bootstrap/test_assembly.py": "46d2e87f46ff903943a8ea9a24960fe6ec0d88697f73b521e6470add6822bdd1",
+        "tests/features/test_extensions.py": "9c8a202d355fe2c99e7537387f50bddc69a7bc33aefba8e34301c523e89362e2"
+      }
+    },
+    "report": ".quality/code-quality-gate/RUNTIME-COMPOSITION-010/red-628bd640-5f07-4982-a24e-d725aa2c2bdc.md"
+  },
+  "green": {
+    "time": "2026-10-15T17:53:37.186Z",
+    "snapshot": {
+      "contract": "a61a10977a53ff1a9f5f7fb7065dc4219012ee85cb9885fa9253e1dd3de2a9b0",
+      "protected": {
+        ".code-quality-gate/REFACTOR_COMPLETION.md": "2ee7ed7b3f38a4df2d9fbd143e3f6641d46980035f105fbf50a75d5e0108058c",
+        ".code-quality-gate/ci-setup.sh": "8c6636d8a04487aa9d8c623fce23aaab751bec431c25aa8a402a841532a8a69f",
+        ".code-quality-gate/tasks/RUNTIME-COMPOSITION-010.json": "02f80c98356592e4125c2f31040b4a5353082b868ced9ee28b8af80051d04d89",
+        ".importlinter": "aa54cf0857b699cb32d94ab09bad29a08bf675397f3179ac85a80ecf390128a6",
+        "quality.config.json": "49484f2be191821d09bdbe805ba4405b154c49abcca8d87470260b73e0b37a7d",
+        "tests/agent/test_integration.py": "8f3afc3a2cc9b49558298fe55ad51c866ddc9103640e14c40f02303590071082",
+        "tests/bootstrap/test_runtime_boundaries.py": "ffae319c517dd85990f803788dcf28d9bd6b0a3383ceb2b31726577c317b6dd2",
+        "tools/quality/checks.py": "b6086edb0d5ccb86f1f6553507f57008ffe3d128a62e37913a1076b5aa148431",
+        "tools/quality/junit_report.py": "082cff7fb89c4f5cac8d71a198185f857b5d2501f7a59f74905cf4bf22b48c8b"
+      },
+      "code": {
+        "src/qqbot/bootstrap/app.py": "576ddb80f2899b06a258b41bf12f3af77cdaa35c3fb80061a3a641a61d205a0a",
+        "src/qqbot/bootstrap/runtime.py": "2edd9744810c18642978a597474066b4f2e962bd7b6e665a536d4c42e0f7ac74",
+        "src/qqbot/features/loader.py": "7866770c5c73e8055253dfb33922e6223447c09a866748d410d609f7349e3454",
+        "src/qqbot/interfaces/qq/__init__.py": "8ddfbc60ccc7ac2d7ae588a7a04867aa84bc1a96fbea414830e2c62fe4a4f85a",
+        "src/qqbot/interfaces/qq/router.py": "282b1ac0ae69d324776440ea2df77a4c77c6f283125f90ce3432e26b76563bff",
+        "tests/bootstrap/test_assembly.py": "46d2e87f46ff903943a8ea9a24960fe6ec0d88697f73b521e6470add6822bdd1",
+        "tests/features/test_extensions.py": "9c8a202d355fe2c99e7537387f50bddc69a7bc33aefba8e34301c523e89362e2"
+      }
+    },
+    "report": ".quality/code-quality-gate/RUNTIME-COMPOSITION-010/green-50ac7c9e-5231-4596-a1bf-f960c3b7d452.md"
+  }
+}

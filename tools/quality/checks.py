@@ -16,6 +16,7 @@ NEW_FILES = [
     "src/qqbot/agent/cognition/routes.py",
 ]
 CODE_FILES = NEW_FILES + [
+    'src/qqbot/bootstrap/runtime.py', 'src/qqbot/bootstrap/app.py', 'src/qqbot/interfaces/qq/router.py', 'src/qqbot/interfaces/qq/__init__.py', 'src/qqbot/features/loader.py', 'tests/features/test_extensions.py', 'tests/bootstrap/test_assembly.py', 'tests/bootstrap/test_runtime_boundaries.py',
     'src/qqbot/agent/conversation/delivery.py', 'src/qqbot/agent/service.py', 'src/qqbot/agent/observation.py', 'src/qqbot/contracts/ports.py', 'tests/agent/test_delivery_boundary.py',
     "src/qqbot/agent/conversation/maintenance.py", "tests/agent/test_conversation_maintenance.py",
     "src/qqbot/agent/observation.py", "tests/agent/test_observation.py",
@@ -77,6 +78,8 @@ def main() -> int:
         return coverage_report(["src/qqbot/agent/conversation/maintenance.py"], "maintenance", "maintenance-coverage-metrics")
     if sys.argv[1] == 'delivery-boundary-coverage':
         return coverage_report(['src/qqbot/agent/conversation/delivery.py'], 'delivery-boundary', 'delivery-boundary-coverage-metrics')
+    if sys.argv[1] == 'runtime-boundary-coverage':
+        return coverage_report(['src/qqbot/bootstrap/runtime.py', 'src/qqbot/interfaces/qq/router.py'], 'runtime-boundary', 'runtime-boundary-coverage-metrics')
     result = run(commands[sys.argv[1]])
     if sys.argv[1] == "regression":
         normalize_junit(ROOT / ".quality/regression.xml")

@@ -21,7 +21,7 @@ from contextlib import redirect_stdout
 from pathlib import Path
 from unittest import mock
 
-from qqbot.bootstrap.app import _aclose_all, _close_sync
+from qqbot.bootstrap.runtime import close_all, close_sync
 from qqbot.bootstrap.config import CONFIG_VERSION, Config
 from qqbot.contracts.models import (
     BotPolicy,
@@ -220,7 +220,7 @@ class TeardownHelperTests(unittest.TestCase):
             events.append("sync")
 
         with self.assertLogs("qqbot.bootstrap.app", level="ERROR"):
-            asyncio.run(_aclose_all([sync_close, bad, async_close]))
+            asyncio.run(close_all([sync_close, bad, async_close]))
         self.assertEqual(events, ["async", "sync"])
 
     def test_close_sync_unwinds_in_reverse_and_isolates_failures(self):
@@ -230,7 +230,7 @@ class TeardownHelperTests(unittest.TestCase):
             raise RuntimeError("boom")
 
         with self.assertLogs("qqbot.bootstrap.app", level="ERROR"):
-            _close_sync([lambda: events.append("first"), bad, lambda: events.append("last")])
+            close_sync([lambda: events.append("first"), bad, lambda: events.append("last")])
         self.assertEqual(events, ["last", "first"])
 
     def test_close_sync_settles_an_async_step(self):
@@ -239,7 +239,7 @@ class TeardownHelperTests(unittest.TestCase):
         async def async_close():
             events.append("async")
 
-        _close_sync([lambda: events.append("sync"), async_close])
+        close_sync([lambda: events.append("sync"), async_close])
         self.assertEqual(events, ["async", "sync"])
 
 

@@ -287,6 +287,37 @@
         ]
       },
       {
+        "id": "runtime-boundary",
+        "title": "Deferred worker lifecycle and QQ event routing",
+        "command": [
+          ".venv/bin/python",
+          "-m",
+          "pytest",
+          "tests/bootstrap/test_runtime_boundaries.py",
+          "-q",
+          "--junitxml=.quality/runtime-boundary.xml"
+        ],
+        "report": ".quality/runtime-boundary.xml",
+        "format": "junit",
+        "metrics": [
+          {
+            "name": "Acceptance cases",
+            "path": "tests",
+            "min": 13
+          },
+          {
+            "name": "Success rate",
+            "path": "successRate",
+            "equals": 100
+          },
+          {
+            "name": "Skipped",
+            "path": "skipped",
+            "equals": 0
+          }
+        ]
+      },
+      {
         "id": "regression",
         "title": "Complete legacy and new Python regression suite",
         "command": [
@@ -448,6 +479,40 @@
           "delivery-boundary-coverage"
         ],
         "report": ".quality/delivery-boundary-coverage-metrics.json",
+        "format": "json",
+        "metrics": [
+          {
+            "name": "Line coverage",
+            "path": "lineCoverage",
+            "min": 90
+          },
+          {
+            "name": "Branch coverage",
+            "path": "branchCoverage",
+            "min": 80
+          },
+          {
+            "name": "Statements",
+            "path": "statements",
+            "min": 20
+          },
+          {
+            "name": "Branches",
+            "path": "branches",
+            "min": 4
+          }
+        ]
+      },
+      {
+        "id": "runtime-boundary-coverage",
+        "title": "Deferred worker lifecycle and QQ event routing measured coverage",
+        "command": [
+          ".venv/bin/python",
+          "-m",
+          "tools.quality.checks",
+          "runtime-boundary-coverage"
+        ],
+        "report": ".quality/runtime-boundary-coverage-metrics.json",
         "format": "json",
         "metrics": [
           {

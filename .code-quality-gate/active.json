@@ -1,4 +1,4 @@
 {
-  "manifest": ".code-quality-gate/tasks/DELIVERY-BOUNDARY-009-R2.json",
+  "manifest": ".code-quality-gate/tasks/RUNTIME-COMPOSITION-010.json",
   "config": "quality.config.json"
 }

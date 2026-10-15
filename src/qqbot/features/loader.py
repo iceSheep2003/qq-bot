@@ -32,7 +32,6 @@ import asyncio
 import logging
 from dataclasses import dataclass
 from importlib import import_module
-from inspect import isawaitable
 from typing import TYPE_CHECKING
 
 from qqbot.agent.context import DEFAULT_MAX_CHARS
@@ -428,22 +427,6 @@ def _supervise(worker, name: str):
     return supervised
 
 
-def _supervise_coroutine(coro, name: str):
-    """Wrap an already-created coroutine so a crash stays inside it."""
-
-    async def supervised() -> None:
-        try:
-            await coro
-        except asyncio.CancelledError:
-            raise
-        except Exception:
-            log.exception(
-                "Extension worker %s failed; it will not be restarted", name
-            )
-
-    return supervised()
-
-
 # ---------------------------------------------------------------------------
 # loading
 # ---------------------------------------------------------------------------
@@ -563,18 +546,14 @@ def validate_features(config: Config) -> dict:
 
 
 def build_workers(config: Config, service, gateway, features: FeatureHost) -> list:
-    """Start the loop of every enabled background extension, supervised."""
+    """Return supervised loop factories without constructing any coroutine."""
     plan = resolve_plan(config)
     workers = []
     for manifest in plan.background:
         factory = _entry_callable(manifest, "build_worker")
-        coro = factory(service, gateway, config, features.proactive_gate)
-        if not isawaitable(coro):
-            raise ExtensionError(
-                f"extension {manifest.name!r} build_worker did not return an "
-                f"awaitable"
-            )
-        workers.append(_supervise_coroutine(coro, manifest.name))
+        def deferred(factory=factory):
+            return factory(service, gateway, config, features.proactive_gate)
+        workers.append(_supervise(deferred, manifest.name))
     return workers
 
 

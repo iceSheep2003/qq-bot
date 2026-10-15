@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "id": "RUNTIME-COMPOSITION-010",
+  "title": "Deferred worker lifecycle and QQ event routing",
+  "requirements": [
+    "Runtime starts zero-argument worker factories only inside run, cancels and awaits all siblings before reverse resource cleanup on failure or cancellation.",
+    "Assembly creates no coroutine objects; feature background and registered workers use the same lazy factory representation without wrapper aliases.",
+    "QQ event routing is independent of composition, preserving notice handlers, group/private admission, quote enrichment and fault isolation.",
+    "Historical assembly/extension tests migrate canonical call sites without reducing assertions; no unawaited coroutine warnings are suppressed."
+  ],
+  "testFiles": [
+    "tests/bootstrap/test_runtime_boundaries.py"
+  ],
+  "codeFiles": [
+    "src/qqbot/bootstrap/runtime.py",
+    "src/qqbot/bootstrap/app.py",
+    "src/qqbot/interfaces/qq/router.py",
+    "src/qqbot/interfaces/qq/__init__.py",
+    "src/qqbot/features/loader.py",
+    "tests/features/test_extensions.py",
+    "tests/bootstrap/test_assembly.py"
+  ],
+  "testChecks": [
+    "runtime-boundary"
+  ],
+  "protectedFiles": [
+    "tools/quality/checks.py",
+    "tools/quality/junit_report.py",
+    ".importlinter",
+    ".code-quality-gate/REFACTOR_COMPLETION.md",
+    ".code-quality-gate/ci-setup.sh",
+    "tests/agent/test_integration.py"
+  ],
+  "maxAttempts": 12
+}
