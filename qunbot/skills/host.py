@@ -76,11 +76,10 @@ class OwnerSkills:
     def select(self, text, *, proactive=False, audience=None):
         # New declarations are loaded through fixed skill_load on demand; no
         # hidden keyword that can install or execute anything.
-        return [
-            s
-            for s in self.legacy.select(text, proactive=proactive, audience=audience)
-            if s.name not in self._declarations and s.name not in self.unavailable
-        ]
+        return self.legacy.select(
+            text, proactive=proactive, audience=audience,
+            exclude_names=frozenset(self._declarations) | frozenset(self.unavailable),
+        )
 
     def stable_instructions(self, *, audience=None):
         pieces = []

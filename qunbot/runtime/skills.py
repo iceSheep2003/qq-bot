@@ -307,7 +307,10 @@ class SkillCatalog:
                 return skill
         return None
 
-    def select(self, text: str, *, proactive: bool = False, audience=None) -> list[Skill]:
+    def select(
+        self, text: str, *, proactive: bool = False, audience=None,
+        exclude_names: frozenset[str] = frozenset(),
+    ) -> list[Skill]:
         """The skills whose triggers fire for this turn, most specific first.
 
         Pure text matching: no skill can cause a lookup, a call or a write.
@@ -316,7 +319,7 @@ class SkillCatalog:
         order = {id(skill): index for index, skill in enumerate(self.skills)}
         scored: list[tuple[int, int, int, Skill]] = []
         for skill in self._visible(audience):
-            if skill.always_on:
+            if skill.always_on or skill.name in exclude_names:
                 continue
             score = skill.matches(haystack, proactive=proactive)
             if score > 0:

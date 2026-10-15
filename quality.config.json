@@ -37,6 +37,37 @@
         ]
       },
       {
+        "id": "owner-selection",
+        "title": "Owner skill exclusion before selection budget",
+        "command": [
+          ".venv/bin/python",
+          "-m",
+          "pytest",
+          "tests/test_owner_skill_budget.py",
+          "-q",
+          "--junitxml=.quality/owner-selection.xml"
+        ],
+        "report": ".quality/owner-selection.xml",
+        "format": "junit",
+        "metrics": [
+          {
+            "name": "Owner boundary cases",
+            "path": "tests",
+            "min": 4
+          },
+          {
+            "name": "Success rate",
+            "path": "successRate",
+            "equals": 100
+          },
+          {
+            "name": "Skipped",
+            "path": "skipped",
+            "equals": 0
+          }
+        ]
+      },
+      {
         "id": "regression",
         "title": "Complete legacy and new Python regression suite",
         "command": [
