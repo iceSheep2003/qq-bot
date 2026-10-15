@@ -11,7 +11,8 @@ from types import SimpleNamespace
 
 from qqbot.contracts.models import MessageEvent
 from qqbot.agent.identity.guard import IdentityGuard
-from qqbot.agent.service import BotPolicy, ConversationService
+from qqbot.agent.service import ConversationService
+from tests.support import bot_policy
 from tests.support import Store
 
 
@@ -107,7 +108,7 @@ class GuardedConversationTests(unittest.TestCase):
         agent, sender = Agent(), Sender()
         service = ConversationService(
             agent, self.store, self.store, self.store, sender,
-            BotPolicy(frozenset({"42"}), 8, "Asia/Shanghai", False),
+            bot_policy(frozenset({"42"}), 8, "Asia/Shanghai", False),
             turn_guard=IdentityGuard.built_in(), restore_last_reply=False,
         )
         asyncio.run(service.handle_message(event("帮我做个PPT")))

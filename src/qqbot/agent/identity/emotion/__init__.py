@@ -60,7 +60,7 @@ from qqbot.agent.identity.emotion.state import (
     replay,
     timeline,
 )
-from qqbot.agent.identity.emotion.system import EmotionSystem, build_emotion
+from qqbot.agent.identity.emotion.system import EmotionSystem
 
 __all__ = [
     "BASELINE",
@@ -71,7 +71,6 @@ __all__ = [
     "Mood",
     "MoodEvent",
     "MoodSnapshot",
-    "build_emotion",
     "loop_gain",
     "replay",
     "timeline",

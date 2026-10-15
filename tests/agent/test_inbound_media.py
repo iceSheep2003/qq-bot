@@ -22,7 +22,8 @@ from qqbot.contracts.models import InboundPart
 from qqbot.contracts.ontology.objects import stable_id
 from qqbot.agent.perception.inbound import InboundMedia
 from qqbot.agent.orchestrator import Agent
-from qqbot.agent.service import BotPolicy, ConversationService
+from qqbot.agent.service import ConversationService
+from tests.support import bot_policy
 from qqbot.infrastructure.storage.assets import AssetStore
 from qqbot.infrastructure.storage.conversation import ConversationStore
 from qqbot.infrastructure.storage.database import SqliteDatabase
@@ -104,7 +105,7 @@ class InboundMediaTests(unittest.IsolatedAsyncioTestCase):
         people = SimpleNamespace(
             observe_user=lambda *a: None, observe_group_member=lambda *a: None
         )
-        policy = BotPolicy(frozenset({"42"}), 100, "Asia/Shanghai", False)
+        policy = bot_policy(frozenset({"42"}), 100, "Asia/Shanghai", False)
         service = ConversationService(
             None,
             self.ledger,

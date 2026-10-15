@@ -1,4 +1,4 @@
 {
-  "manifest": ".code-quality-gate/tasks/RUNTIME-COMPOSITION-010.json",
+  "manifest": ".code-quality-gate/tasks/EMBEDDING-RETIREMENT-012.json",
   "config": "quality.config.json"
 }

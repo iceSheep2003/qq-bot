@@ -11,7 +11,8 @@ from unittest.mock import AsyncMock
 
 from qqbot.agent.conversation.maintenance import ConversationMaintenance
 from qqbot.agent.fairness import ScopeWorkBudget
-from qqbot.agent.service import BotPolicy, ConversationService
+from qqbot.agent.service import ConversationService
+from tests.support import bot_policy
 from tests.agent.test_service import FakeAgent, FakeSender, RecordingObserver, event
 from tests.support import Store
 
@@ -324,7 +325,7 @@ class MaintenanceIntegrationTests(unittest.IsolatedAsyncioTestCase):
         self.services = []
 
     def service(self, **options):
-        policy = BotPolicy(frozenset({"42"}), 2, "UTC", False, private_enabled=True)
+        policy = bot_policy(frozenset({"42"}), 2, "UTC", False, private_enabled=True)
         result = ConversationService(self.agent, self.store, self.store, self.store,
                                      self.sender, policy, restore_last_reply=False, **options)
         self.services.append(result)

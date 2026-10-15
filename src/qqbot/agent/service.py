@@ -20,10 +20,11 @@ import asyncio
 import logging
 import re
 import time
-from dataclasses import dataclass, replace
+from dataclasses import replace
 from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
+from qqbot.contracts import models
 from qqbot.contracts.models import MessageEvent
 from qqbot.agent.conversation.channels import ChannelPolicy
 from qqbot.agent.conversation.delivery import ConversationDelivery
@@ -68,24 +69,6 @@ DEFAULT_OBSERVATION_WORKERS = 1
 DEFAULT_OBSERVATION_DEDUPE = 4096
 
 
-@dataclass(frozen=True)
-class BotPolicy:
-    allowed_groups: frozenset[str]
-    memory_extract_every: int
-    timezone: str
-    affection_auto_enabled: bool
-    private_enabled: bool = False
-    # Scheduled posts have their own quota; optional proactive chat owns its own.
-    job_daily_limit: int = 6
-    active_start_hour: int = 7
-    active_end_hour: int = 23
-    job_cooldown_minutes: int = 30
-    # "Group is not dead", not "someone spoke a minute ago" — a study group is
-    # often silent for a while and a scheduled post should still land.
-    job_freshness_minutes: int = 180
-    job_max_chars: int = 150
-
-
 class ConversationService:
     def __init__(
         self,
@@ -94,7 +77,7 @@ class ConversationService:
         people: PeopleRepository,
         activity: ActivityRepository,
         sender: MessageSender,
-        policy: BotPolicy,
+        policy: models.BotPolicy,
         affection: AffectionObserver | None = None,
         media: MediaProcessor | None = None,
         observers: tuple[ReplyObserver, ...] = (),

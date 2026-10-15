@@ -1,0 +1,55 @@
+{
+  "version": 1,
+  "id": "CORE-IO-POLICY-011-R2",
+  "attempts": 1,
+  "red": {
+    "time": "2026-10-15T17:58:34.198Z",
+    "snapshot": {
+      "contract": "992392ae26c7c19e6eb7f23ff70f5b96825a5990aa27479ca0aa268529f73861",
+      "protected": {
+        ".code-quality-gate/CORE_IO_TEST_REVIEW.md": "14188ec5d06ec92431cf2b29b92ce1423603d14e81e4b566f169ffea0388b7bd",
+        ".code-quality-gate/REFACTOR_COMPLETION.md": "2ee7ed7b3f38a4df2d9fbd143e3f6641d46980035f105fbf50a75d5e0108058c",
+        ".code-quality-gate/ci-setup.sh": "8c6636d8a04487aa9d8c623fce23aaab751bec431c25aa8a402a841532a8a69f",
+        ".code-quality-gate/evidence/CORE-IO-POLICY-011.json": "5c5b56ee24197a8bd05af0491c7dfad9701c0ea2d1b298dd1c16e24f879ca14a",
+        ".code-quality-gate/history/CORE-IO-011-R1-inputs.zip": "7c97bcd626cf4216ea6636daaddfdb5e0c5673fd0a594cc6c75b606dfbc81959",
+        ".code-quality-gate/tasks/CORE-IO-POLICY-011-R2.json": "bba6e8e324c5d72482e8b197fa4f903943112cc13358523fe85b38b24a6fee10",
+        ".importlinter": "dbe30e5e76cf5a7c1c2377d8ea87502421d2eb93c175711447bab2baee6f1eca",
+        "quality.config.json": "1dfe888466c6d1b28592cc752ea7aaf3030e8d88ffde842cd1a06b18c4aa331c",
+        "tests/quality/test_core_io_boundaries.py": "53d639c50d87c66e1d05ca9e0591916b5108a6add8f6404bb3fa1715af55188d",
+        "tests/support.py": "3bb9c83c3753874fd87b2641bf73a7b70c443ee59cf0994925dd9d56ef552fa5",
+        "tools/quality/checks.py": "3ada264ccc812091cdfef7a83f3e4d7c5f56249e9ff8cf37da61f694acdd61dc",
+        "tools/quality/junit_report.py": "082cff7fb89c4f5cac8d71a198185f857b5d2501f7a59f74905cf4bf22b48c8b"
+      },
+      "code": {
+        "src/qqbot/actions/scheduling/registry.py": "76db83dd2303b1a3408dbd9f52c31d1903d63737e32a0c3e13177c1c25eb5667",
+        "src/qqbot/agent/identity/emotion/__init__.py": "dacf3acf68c8a3756a367b41178ae98f145b010883e64d7a4ac2d1771021330c",
+        "src/qqbot/agent/identity/emotion/evaluator.py": "f41f0171369913a85e04514bd7db2f116aa92d600f97ab763533c1dfb6e615b9",
+        "src/qqbot/agent/identity/emotion/store.py": null,
+        "src/qqbot/agent/identity/emotion/system.py": "a6945d1d99d77ddd21ca3edee4f71e1e02127e6b321d0fa451fa605b61727c07",
+        "src/qqbot/agent/memory/embeddings.py": "d3921940112ff21f9c142c79a68d3b72c8944b9823f2c25ee931b0b54761ffba",
+        "src/qqbot/agent/memory/service.py": "c5f9ee64aedd2287f6cf70c5720c6b2c8c7b93dfa7f171857539acee5ece197b",
+        "src/qqbot/agent/service.py": "9d783cd9fc3646dd66b685605b6f09caa348f72e893886c0cc0c424edbdc9d68",
+        "src/qqbot/bootstrap/app.py": "f335e4f3acbccdfb1e0548938088e43dd3047244754e4cb91ab8dd41e62bce89",
+        "src/qqbot/contracts/models.py": "bc294a0e8351a0e2ebeb30e0fd3a19d733aebd8354e4620a078ebdf08be2321c",
+        "src/qqbot/contracts/ports.py": "0d62c598f8b12653d2a65eb31ea5c5ad15ec2155c5b70cc066010ef6c5c50ddf",
+        "src/qqbot/features/mood/composition.py": "6c1abfb48e23def2dfeee2d259a3ad6a4b1c519508a12a0cbfca19c7ea9b558e",
+        "src/qqbot/features/mood/register.py": "e1bd3cf5700cd923c2bad51113d95d4a269bb2ac5dcb6b84057b300856bcdd06",
+        "src/qqbot/infrastructure/adapters/embeddings.py": "35665ac49b66acc87767933226f6c9c934e86b1a586b04a60399350b29c2e050",
+        "src/qqbot/infrastructure/storage/emotion.py": "f4223fef49d1a10158c46dc2c2e37951c8a3a43fda2377d4564c48daee7956ec",
+        "tests/agent/test_conversation_maintenance.py": "1922a07f534258f035dd247475dd633d692b687abe864dad775df3f4d1b1c88a",
+        "tests/agent/test_core.py": "99d64052804580560b3ed7807f91a8304d8d7569b5b1958b10ca5f84ed4523f2",
+        "tests/agent/test_delivery_boundary.py": "7689a5936f51b8c674b0c87c26ea53ccb4ea9d95acf670917f088cd51fa35d21",
+        "tests/agent/test_emotion.py": "d12ab3045af0f7c07156f1061b8734a58661f36d4716415fdb51c61fab485015",
+        "tests/agent/test_identity_guard.py": "210c77b4afaa41742c73bd4425d787bf3dada52aeed4fd9dafb1b89a96b7e615",
+        "tests/agent/test_inbound_media.py": "6c403e01a612fab0b3f0a4e6ac70894125ee42962a444f39c64751e9bc1513e5",
+        "tests/agent/test_memory.py": "6257eeab7ce4df9a62eedf0cd2be15dff095308888e696c8c530baf12f30eb6d",
+        "tests/agent/test_observation.py": "8afd1a5d9ad1f6527b9a370eb6ba4f2f3c84b30c7ec868e5295945a617e0102b",
+        "tests/agent/test_relationships.py": "0f6dcedea757c18ecfb0f54d7d607ef49691163d31f2e76accfd6c8e55953f78",
+        "tests/agent/test_service.py": "7534755f6d0b99f3571dcf1aa0861e63c00d5ab423c64544248ed7369b4391fc",
+        "tests/features/test_reply_policy.py": "261290c38e8e486132493e9a30974783d334b51747f9b38ce51b03092f0c2be3",
+        "tests/features/test_slang.py": "65cb72839d12bc5491fdb4a15fb906b288dd26104d7f59b7254cc5cfe74dbe40"
+      }
+    },
+    "report": ".quality/code-quality-gate/CORE-IO-POLICY-011-R2/red-033a9331-6793-4cf3-b8a2-dcd47f1e22ce.md"
+  }
+}

@@ -48,7 +48,8 @@ from qqbot.features.reply_policy.replay import (
     replay_case,
     run_replay,
 )
-from qqbot.agent.service import BotPolicy, ConversationService
+from qqbot.agent.service import ConversationService
+from tests.support import bot_policy
 from tests.support import Store
 
 PACKAGE_ROOT = Path(package.__file__).resolve().parent
@@ -111,7 +112,7 @@ class FakeSender:
 def service(tmp: str, reply_policy=None) -> tuple[ConversationService, FakeAgent, FakeSender, Store]:
     store = Store(Path(tmp) / "bot.sqlite3")
     agent, sender = FakeAgent(), FakeSender()
-    policy = BotPolicy(
+    policy = bot_policy(
         frozenset({"42"}), 8, "Asia/Shanghai", False, False, 6, 0, 24, 30, 180, 150
     )
     return (

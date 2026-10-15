@@ -708,12 +708,9 @@
       "test_an_unrelated_message_recalls_nothing",
       "test_an_unspaced_sentence_finds_its_topic",
       "test_archive_retires_stale_low_value_rows",
-      "test_broken_embedder_degrades_to_lexical",
       "test_chinese_substring_search_uses_trigram_index",
       "test_contradiction_supersedes_the_old_fact",
       "test_dedupe_decisions",
-      "test_embedding_attach_stores_vectors_and_ranks",
-      "test_embedding_provider_is_off_by_default",
       "test_expiry_removes_memory_from_retrieval",
       "test_explicit_forget_api",
       "test_extract_ignores_unparsable_model_output",
@@ -723,7 +720,7 @@
       "test_extract_stores_facts_with_source_event",
       "test_extraction_is_incremental_and_does_not_resend_old_messages",
       "test_focus_subject_is_read_from_the_conversation_repository",
-      "test_forget_removes_row_fts_entry_and_vector",
+      "test_forget_removes_row_and_text_index",
       "test_forget_scope_clears_everything_in_it",
       "test_full_sentence_query_still_matches",
       "test_has_memory_matches_containment",
@@ -757,7 +754,7 @@
       "test_structured_recall_separates_fact_from_persona_use",
       "test_the_probe_list_is_deterministic"
     ],
-    "assertions": 178
+    "assertions": 158
   },
   "tests/infrastructure/test_model.py": {
     "tests": [
@@ -767,8 +764,10 @@
       "test_an_unknown_value_is_refused",
       "test_bad_request_is_permanent",
       "test_budget_window_expiry_restores_capacity",
+      "test_cache_report_includes_cache_write_tokens",
       "test_cache_report_marks_hit_only_from_provider_usage",
       "test_cache_report_without_provider_field_says_unknown",
+      "test_cache_write_fields_are_normalized_without_confusing_reads",
       "test_changed_persona_changes_prefix",
       "test_circuit_opens_after_threshold_and_fails_fast",
       "test_circuit_probes_again_after_cooldown",
@@ -808,7 +807,7 @@
       "test_tool_calls_pass_through_and_tools_are_forwarded",
       "test_transient_error_exhausts_attempts"
     ],
-    "assertions": 129
+    "assertions": 134
   },
   "tests/infrastructure/test_onebot.py": {
     "tests": [

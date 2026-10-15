@@ -1,7 +1,7 @@
 """Long-term memory: schema migration, write path, retrieval, lifecycle.
 
 Everything here is a unit test against a temporary SQLite file. Nothing
-connects to NapCat, a model endpoint or a real embedding service.
+connects to NapCat, a model endpoint or a remote retrieval service.
 """
 
 from __future__ import annotations
@@ -16,8 +16,7 @@ from pathlib import Path
 
 from tests.support import Store
 from qqbot.contracts.models import MessageEvent
-from qqbot.agent.memory import dedupe, ranking, text
-from qqbot.agent.memory.embeddings import HashingEmbedder, embeddings_from_env
+from qqbot.agent.memory import dedupe, text
 from qqbot.agent.memory.models import MemoryEvidence, MemoryItem, RetrievalHit
 from qqbot.agent.memory.service import MemoryService
 from qqbot.agent.orchestrator import Agent
@@ -49,11 +48,6 @@ END;
 """
 
 
-class FailingEmbedder:
-    name = "always-fails"
-
-    def embed(self, texts):
-        raise RuntimeError("provider down")
 
 
 class FakeModel:
@@ -124,7 +118,6 @@ class MemoryStoreTests(unittest.TestCase):
                 "expires_at",
                 "access_count",
                 "dedupe_key",
-                "embedding",
                 "updated_at",
                 "persona_summary",
                 "mention_policy",
@@ -191,7 +184,6 @@ class MemoryStoreTests(unittest.TestCase):
         self.assertEqual(rows[0]["match"], "like")
 
     def test_search_results_are_json_serialisable(self):
-        self.store.attach_embedder(HashingEmbedder(64))
         self.store.observe(SCOPE, "7", "小明喜欢蓝莓蛋糕")
         rows = self.store.search_memories(SCOPE, "蓝莓蛋糕")
         json.dumps(rows)  # the recall tool dumps rows for the model
@@ -292,59 +284,8 @@ class MemoryStoreTests(unittest.TestCase):
 
     # --------------------------------------------------------------- vectors
 
-    def test_embedding_attach_stores_vectors_and_ranks(self):
-        store = self.store.attach_embedder(HashingEmbedder(128))
-        store.observe(SCOPE, "7", "小明喜欢蓝莓蛋糕", source_event_id="m1")
-        store.observe(SCOPE, "7", "小红在准备考研", source_event_id="m2")
-        stats = store.stats(SCOPE)
-        self.assertEqual(stats["embedded"], 2)
-        hits = ranking.rank(
-            store.candidates(SCOPE, "蓝莓蛋糕"),
-            subject_user_id="7",
-            limit=2,
-        )
-        self.assertTrue(any(row.get("vector") is not None for row in store.candidates(
-            SCOPE, "蓝莓蛋糕"
-        )))
-        self.assertEqual(hits[0].item.content, "小明喜欢蓝莓蛋糕")
-        self.assertTrue(any("vector=" in reason for reason in hits[0].reasons))
 
-    def test_broken_embedder_degrades_to_lexical(self):
-        store = self.store.attach_embedder(FailingEmbedder())
-        with self.assertLogs("qqbot.infrastructure.storage.memory", level="WARNING"):
-            outcome = store.observe(SCOPE, "7", "小明喜欢蓝莓蛋糕", source_event_id="m1")
-            self.assertEqual(outcome["outcome"], "inserted")
-            rows = store.candidates(SCOPE, "蓝莓蛋糕")
-            self.assertEqual(len(rows), 1)
-            self.assertIsNone(rows[0].get("vector"))
-            self.assertEqual(store.stats(SCOPE)["embedded"], 0)
-            self.assertEqual(store.reindex_embeddings(SCOPE), 0)
 
-    def test_embedding_provider_is_off_by_default(self):
-        self.assertIsNone(embeddings_from_env({}))
-        self.assertIsNone(embeddings_from_env({"BOT_MEMORY_EMBEDDING_PROVIDER": ""}))
-        with self.assertLogs("qqbot.agent.memory.embeddings", level="WARNING"):
-            self.assertIsNone(
-                embeddings_from_env({"BOT_MEMORY_EMBEDDING_PROVIDER": "openai"})
-            )
-            self.assertIsNone(
-                embeddings_from_env({"BOT_MEMORY_EMBEDDING_PROVIDER": "nonsense"})
-            )
-        hashing = embeddings_from_env(
-            {"BOT_MEMORY_EMBEDDING_PROVIDER": "hash", "BOT_MEMORY_EMBEDDING_DIM": "64"}
-        )
-        self.assertIsNotNone(hashing)
-        self.assertEqual(len(hashing.embed(["小明"])[0]), 64)
-        offline = embeddings_from_env(
-            {
-                "BOT_MEMORY_EMBEDDING_PROVIDER": "openai",
-                "BOT_MEMORY_EMBEDDING_MODEL": "bge-m3",
-                "BOT_MEMORY_EMBEDDING_BASE_URL": "http://127.0.0.1:1",
-            }
-        )
-        self.assertIsNotNone(offline)
-        with self.assertLogs("qqbot.agent.memory.embeddings", level="WARNING"):
-            self.assertIsNone(offline.embed(["小明"]))  # unreachable -> no vectors
 
     # ------------------------------------------------------------- lifecycle
 
@@ -384,8 +325,8 @@ class MemoryStoreTests(unittest.TestCase):
         self.assertEqual(report["expired"], 1)
         self.assertEqual(self.store.stats(SCOPE)["by_status"], {"expired": 1})
 
-    def test_forget_removes_row_fts_entry_and_vector(self):
-        store = self.store.attach_embedder(HashingEmbedder(64))
+    def test_forget_removes_row_and_text_index(self):
+        store = self.store
         memory_id = store.observe(SCOPE, "7", "小明喜欢蓝莓蛋糕")["memory_id"]
         self.assertEqual(len(store.candidates(SCOPE, "蓝莓蛋糕")), 1)
         self.assertEqual(store.forget([memory_id]), 1)
@@ -399,7 +340,7 @@ class MemoryStoreTests(unittest.TestCase):
         self.assertEqual(store.stats(SCOPE)["total"], 0)
 
     def test_forget_scope_clears_everything_in_it(self):
-        store = self.store.attach_embedder(HashingEmbedder(64))
+        store = self.store
         store.observe(SCOPE, "7", "小明喜欢蓝莓蛋糕")
         store.observe(SCOPE, "8", "小红喜欢草莓", visibility="personal")
         store.observe(OTHER_SCOPE, "7", "小明喜欢蓝莓蛋糕")
@@ -408,7 +349,7 @@ class MemoryStoreTests(unittest.TestCase):
         self.assertEqual(len(store.list_memories(OTHER_SCOPE)), 1)
 
     def test_privacy_deletion_also_clears_indexes(self):
-        store = self.store.attach_embedder(HashingEmbedder(64))
+        store = self.store
         store.observe(SCOPE, "7", "小明喜欢蓝莓蛋糕", visibility="personal")
         store.observe(SCOPE, "8", "小红喜欢草莓", visibility="personal")
         forget_user(self.database, "7")
@@ -491,7 +432,7 @@ class MemoryServiceTests(unittest.TestCase):
         self.persona = self.root / "persona.md"
         self.persona.write_text("固定人格", encoding="utf-8")
         self.service = MemoryService(
-            FakeModel(), self.store, self.store, embeddings=False
+            FakeModel(), self.store, self.store
         )
 
     def tearDown(self):
@@ -560,7 +501,7 @@ class MemoryServiceTests(unittest.TestCase):
         self.assertEqual(self.service.related(SCOPE, "喜欢"), ["小红喜欢草莓"])
 
     def test_related_never_raises(self):
-        broken = MemoryService(FakeModel(), self.store, object(), embeddings=False)
+        broken = MemoryService(FakeModel(), self.store, object())
         with self.assertLogs("qqbot.agent.memory.service", level="ERROR"):
             self.assertEqual(broken.related(SCOPE, "蓝莓蛋糕"), [])
 
@@ -625,7 +566,7 @@ class MemoryServiceTests(unittest.TestCase):
                 ensure_ascii=False,
             )
         )
-        service = MemoryService(model, self.store, self.store, embeddings=False)
+        service = MemoryService(model, self.store, self.store)
         asyncio.run(service.extract(SCOPE))
         rows = self.store.list_memories(SCOPE)
         self.assertEqual(len(rows), 1)
@@ -643,7 +584,7 @@ class MemoryServiceTests(unittest.TestCase):
             "fact_type": "event", "confidence": 0.85, "importance": 4,
             "topic": "计算机考研", "evidence_event_ids": ["m1", "m2"],
         }], ensure_ascii=False))
-        service = MemoryService(model, self.store, self.store, embeddings=False)
+        service = MemoryService(model, self.store, self.store)
         asyncio.run(service.extract(SCOPE))
 
         memory = self.store.list_memories(SCOPE)[0]
@@ -662,7 +603,7 @@ class MemoryServiceTests(unittest.TestCase):
     def test_extraction_is_incremental_and_does_not_resend_old_messages(self):
         self.store.add_message("m1", SCOPE, "7", "小明", "user", "我喜欢蓝莓蛋糕")
         model = FakeModel("[]")
-        service = MemoryService(model, self.store, self.store, embeddings=False)
+        service = MemoryService(model, self.store, self.store)
         asyncio.run(service.extract(SCOPE))
         asyncio.run(service.extract(SCOPE))
         self.assertEqual(model.calls, 1)
@@ -681,7 +622,7 @@ class MemoryServiceTests(unittest.TestCase):
                 ensure_ascii=False,
             )
         )
-        service = MemoryService(model, self.store, self.store, embeddings=False)
+        service = MemoryService(model, self.store, self.store)
         asyncio.run(service.extract(SCOPE))
         row = self.store.list_memories(SCOPE)[0]
         self.assertEqual(row["user_id"], "_group_")
@@ -690,7 +631,7 @@ class MemoryServiceTests(unittest.TestCase):
     def test_extract_ignores_unparsable_model_output(self):
         self.store.add_message("m1", SCOPE, "7", "小明", "user", "你好")
         service = MemoryService(
-            FakeModel("我觉得他们可能喜欢蛋糕"), self.store, self.store, embeddings=False
+            FakeModel("我觉得他们可能喜欢蛋糕"), self.store, self.store
         )
         asyncio.run(service.extract(SCOPE))
         self.assertEqual(self.store.list_memories(SCOPE), [])
@@ -706,7 +647,7 @@ class MemoryServiceTests(unittest.TestCase):
                 ensure_ascii=False,
             )
         )
-        service = MemoryService(model, self.store, self.store, embeddings=False)
+        service = MemoryService(model, self.store, self.store)
         asyncio.run(service.extract(SCOPE))
         row = self.store.list_memories(SCOPE)[0]
         self.assertEqual(row["status"], "candidate")
@@ -764,7 +705,7 @@ class StablePrefixTests(unittest.TestCase):
         )
 
     def test_memory_updates_do_not_touch_the_stable_prefix(self):
-        service = MemoryService(FakeModel(), self.store, self.store, embeddings=False)
+        service = MemoryService(FakeModel(), self.store, self.store)
         agent = self.agent(service)
         before = agent.stable_prefix()
         service.remember(SCOPE, "7", "小明喜欢蓝莓蛋糕", visibility="group")
@@ -773,7 +714,7 @@ class StablePrefixTests(unittest.TestCase):
         self.assertEqual(agent.stable_prefix().encode(), before.encode())
 
     def test_memories_land_in_the_dynamic_suffix_only(self):
-        service = MemoryService(FakeModel(), self.store, self.store, embeddings=False)
+        service = MemoryService(FakeModel(), self.store, self.store)
         service.remember(SCOPE, "7", "小明喜欢蓝莓蛋糕", visibility="group")
         agent = self.agent(service)
         messages = agent.build_messages(
@@ -786,7 +727,7 @@ class StablePrefixTests(unittest.TestCase):
 
     def test_focus_subject_is_read_from_the_conversation_repository(self):
         self.store.add_message("e1", SCOPE, "7", "小明", "user", "蓝莓蛋糕")
-        service = MemoryService(FakeModel(), self.store, self.store, embeddings=False)
+        service = MemoryService(FakeModel(), self.store, self.store)
         self.assertEqual(service._focus_subject(SCOPE), "7")
         self.assertEqual(service._focus_subject(OTHER_SCOPE), None)
 

@@ -13,7 +13,9 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from qqbot.contracts.models import MessageEvent
-from qqbot.agent.service import BotPolicy, ConversationService
+from qqbot.agent.service import ConversationService
+from tests.support import bot_policy
+from qqbot.contracts.models import BotPolicy
 from tests.support import Store
 
 
@@ -120,7 +122,7 @@ class ServiceTests(unittest.TestCase):
             "private_enabled": False,
         }
         base.update(overrides)
-        return BotPolicy(**base)
+        return bot_policy(**base)
 
     def service(
         self,

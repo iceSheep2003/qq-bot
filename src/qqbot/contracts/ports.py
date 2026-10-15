@@ -90,6 +90,18 @@ class ReplyObserver(Protocol):
     async def observe(self, event: MessageEvent, bot_reply: str) -> None: ...
 
 
+class EmotionRepository(Protocol):
+    """Persistence for the Bot's scoped mood, independent of SQLite."""
+
+    def load(self, scope: str) -> dict[str, Any]: ...
+    def change(self, scope: str, values: dict[str, float], deltas: dict[str, int],
+               reason: str, *, dedupe_key: str | None = None, now: int | None = None) -> bool: ...
+    def seen(self, scope: str, dedupe_key: str) -> bool: ...
+    def events(self, scope: str) -> tuple[Any, ...]: ...
+    def event_count(self, scope: str) -> int: ...
+    def close(self) -> None: ...
+
+
 class ObservationRepository(Protocol):
     """Durable advisory outbox; the repository owns leases and recovery policy."""
 
@@ -166,7 +178,6 @@ class MemoryIndex(Protocol):
     these duck-typed and degrades to lexical-only recall when they are missing.
     """
 
-    def attach_embedder(self, embedder: Any) -> Any: ...
     def observe(
         self,
         scope: str,

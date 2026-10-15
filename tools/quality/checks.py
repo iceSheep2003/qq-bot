@@ -16,6 +16,8 @@ NEW_FILES = [
     "src/qqbot/agent/cognition/routes.py",
 ]
 CODE_FILES = NEW_FILES + [
+    'src/qqbot/infrastructure/storage/emotion.py', 'src/qqbot/agent/identity/emotion/system.py', 'src/qqbot/agent/identity/emotion/evaluator.py', 'src/qqbot/agent/identity/emotion/__init__.py', 'src/qqbot/features/mood/composition.py', 'src/qqbot/features/mood/register.py', 'src/qqbot/agent/memory/service.py', 'src/qqbot/bootstrap/app.py', 'src/qqbot/agent/service.py', 'src/qqbot/contracts/models.py', 'src/qqbot/contracts/ports.py', 'src/qqbot/actions/scheduling/registry.py', 'tests/features/test_slang.py', 'tests/features/test_reply_policy.py', 'tests/agent/test_conversation_maintenance.py', 'tests/agent/test_service.py', 'tests/agent/test_observation.py', 'tests/agent/test_core.py', 'tests/agent/test_identity_guard.py', 'tests/agent/test_inbound_media.py', 'tests/agent/test_relationships.py', 'tests/agent/test_delivery_boundary.py', 'tests/agent/test_emotion.py', 'tests/agent/test_memory.py', 'src/qqbot/agent/memory/ranking.py', 'src/qqbot/infrastructure/storage/memory.py', 'src/qqbot/agent/cognition/experience/retrieval.py', 'tests/interfaces/test_webui.py', 'tests/agent/test_embedding_retirement.py',
+    'src/qqbot/infrastructure/storage/emotion.py', 'src/qqbot/agent/identity/emotion/system.py', 'src/qqbot/agent/identity/emotion/evaluator.py', 'src/qqbot/agent/identity/emotion/__init__.py', 'src/qqbot/features/mood/composition.py', 'src/qqbot/features/mood/register.py', 'src/qqbot/agent/memory/service.py', 'src/qqbot/bootstrap/app.py', 'src/qqbot/agent/service.py', 'src/qqbot/contracts/models.py', 'src/qqbot/contracts/ports.py', 'src/qqbot/actions/scheduling/registry.py', 'tests/features/test_slang.py', 'tests/features/test_reply_policy.py', 'tests/agent/test_conversation_maintenance.py', 'tests/agent/test_service.py', 'tests/agent/test_observation.py', 'tests/agent/test_core.py', 'tests/agent/test_identity_guard.py', 'tests/agent/test_inbound_media.py', 'tests/agent/test_relationships.py', 'tests/agent/test_delivery_boundary.py', 'tests/agent/test_emotion.py', 'tests/agent/test_memory.py', 'tests/quality/test_core_io_boundaries.py',
     'src/qqbot/bootstrap/runtime.py', 'src/qqbot/bootstrap/app.py', 'src/qqbot/interfaces/qq/router.py', 'src/qqbot/interfaces/qq/__init__.py', 'src/qqbot/features/loader.py', 'tests/features/test_extensions.py', 'tests/bootstrap/test_assembly.py', 'tests/bootstrap/test_runtime_boundaries.py',
     'src/qqbot/agent/conversation/delivery.py', 'src/qqbot/agent/service.py', 'src/qqbot/agent/observation.py', 'src/qqbot/contracts/ports.py', 'tests/agent/test_delivery_boundary.py',
     "src/qqbot/agent/conversation/maintenance.py", "tests/agent/test_conversation_maintenance.py",
@@ -61,7 +63,8 @@ def main() -> int:
         "acceptance": [sys.executable, "-m", "pytest", "tests/agent/test_scene_refactor.py",
                        "-q", "--junitxml=.quality/acceptance.xml"],
         "regression": [sys.executable, "-m", "coverage", "run", "--branch",
-                       "--data-file=.coverage", "-m", "pytest", "tests", "-q",
+                       "--data-file=.coverage", "-m", "pytest", "tests", "-q", "-W", "error::RuntimeWarning",
+                       "-W", "error::pytest.PytestUnraisableExceptionWarning",
                        "--junitxml=.quality/regression.xml"],
         "lint": [str(Path(sys.executable).parent / "ruff"), "check", "--select",
                  "E9,F", *CODE_FILES, "tests/agent/test_scene_refactor.py", __file__],

@@ -1,4 +1,4 @@
-"""Hybrid ranking over retrieval candidates.
+"""Lexical ranking over retrieval candidates.
 
 The store returns candidates with raw signals (``lexical`` bm25, ``vector``
 cosine). This module turns those signals plus importance, recency, access count,
@@ -18,7 +18,6 @@ from qqbot.agent.memory.models import GROUP_SUBJECT, MemoryItem, RetrievalHit
 @dataclass(frozen=True)
 class RankingWeights:
     lexical: float = 1.0
-    vector: float = 0.9
     importance: float = 0.35
     recency: float = 0.25
     access: float = 0.15
@@ -71,10 +70,6 @@ def rank(
         if lex is not None:
             score += weights.lexical * lex
             reasons.append(f"lexical={lex:.2f}")
-        vec = row.get("vector")
-        if vec is not None:
-            score += weights.vector * float(vec)
-            reasons.append(f"vector={float(vec):.2f}")
         score += weights.importance * (item.importance / 5.0)
         reasons.append(f"importance={item.importance}")
         recency = _recency(item.created_at, now, weights.half_life_days)

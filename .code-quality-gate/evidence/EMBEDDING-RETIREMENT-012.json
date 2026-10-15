@@ -1,0 +1,63 @@
+{
+  "version": 1,
+  "id": "EMBEDDING-RETIREMENT-012",
+  "attempts": 0,
+  "red": {
+    "time": "2026-10-15T18:04:57.360Z",
+    "snapshot": {
+      "contract": "e9c1b5e6fa36c4cc2ac5329191b695a0b4a87b2231fe565ea80297ae4ab1e5ac",
+      "protected": {
+        ".code-quality-gate/EMBEDDING_RETIREMENT.md": "ee3be356959f8ae4c256a4a3bbbc122730968eeab21c6353a864e529eb4dd0c4",
+        ".code-quality-gate/REFACTOR_COMPLETION.md": "2ee7ed7b3f38a4df2d9fbd143e3f6641d46980035f105fbf50a75d5e0108058c",
+        ".code-quality-gate/TEST_MIGRATION.json": "db5799d4c1d68c8523374ba7b67cd5b1f6d8bd5f8788dc9068a1e5c4718ba46f",
+        ".code-quality-gate/ci-setup.sh": "8c6636d8a04487aa9d8c623fce23aaab751bec431c25aa8a402a841532a8a69f",
+        ".code-quality-gate/history/EMBEDDING-RETIREMENT-inputs.zip": "1e65928e2b425f0748b50a047a200bad367e4397a78bf5838704f25efa30d030",
+        ".code-quality-gate/tasks/EMBEDDING-RETIREMENT-012.json": "8213bc97029fd6b529ac664ad9230f8d0ab15a03a035497716275b137774b181",
+        ".importlinter": "dbe30e5e76cf5a7c1c2377d8ea87502421d2eb93c175711447bab2baee6f1eca",
+        "quality.config.json": "b6ff1c43fe877f7ab287f037ac258e1b0775297bc6cae391e4216b0eb006fda4",
+        "tests/agent/test_embedding_retirement.py": "da9e1aa06cf73af19f804d07a5cce50a4c5e0142e598abc3a2ef5bddaae9303c",
+        "tests/quality/test_core_io_boundaries.py": "e4e3a4d1a4c0c890ca663049002c5e01fc80761622174cd6922fdfe57355b400",
+        "tests/support.py": "8f8b8249170d8d68674e2ea28eaf1aa1edac8df894091c7747932c998ec335c0",
+        "tools/quality/checks.py": "6fa2eb95acb56139a72eb7f32b87c7672b64e2ebadd25d2c34d435a2b7392353",
+        "tools/quality/junit_report.py": "082cff7fb89c4f5cac8d71a198185f857b5d2501f7a59f74905cf4bf22b48c8b"
+      },
+      "code": {
+        ".env.example": "29ec16a9528e117b27a6a8296bc2cc4b630bcaaef62054c5c1a50c93b4e5686f",
+        "docs/design/CONVERSATION_INTELLIGENCE_DESIGN.md": "4d51afaf200ad4a3fdeb6c5013970090c7afbc0d3f788241beafff4762d1d29a",
+        "docs/guides/FEATURES.md": "c5f6cb2967a7e47aeb11c2d52ec89c64dc21167edbac0d9a22b951712aa1dc30",
+        "src/qqbot/actions/scheduling/registry.py": "76db83dd2303b1a3408dbd9f52c31d1903d63737e32a0c3e13177c1c25eb5667",
+        "src/qqbot/agent/cognition/experience/retrieval.py": "403d66ea0599480ba0f7463bc5e8806fb5cd3312a52a4180934fe741f84cb5fa",
+        "src/qqbot/agent/identity/emotion/__init__.py": "dacf3acf68c8a3756a367b41178ae98f145b010883e64d7a4ac2d1771021330c",
+        "src/qqbot/agent/identity/emotion/evaluator.py": "f41f0171369913a85e04514bd7db2f116aa92d600f97ab763533c1dfb6e615b9",
+        "src/qqbot/agent/identity/emotion/store.py": null,
+        "src/qqbot/agent/identity/emotion/system.py": "a6945d1d99d77ddd21ca3edee4f71e1e02127e6b321d0fa451fa605b61727c07",
+        "src/qqbot/agent/memory/embeddings.py": "d3921940112ff21f9c142c79a68d3b72c8944b9823f2c25ee931b0b54761ffba",
+        "src/qqbot/agent/memory/ranking.py": "f7777c636530ff9422c5ab2612105da1382eeb8053079a253c0f080957da8ecf",
+        "src/qqbot/agent/memory/service.py": "c5f9ee64aedd2287f6cf70c5720c6b2c8c7b93dfa7f171857539acee5ece197b",
+        "src/qqbot/agent/service.py": "f6990e341c58cc98fc146b61d8c8cf33aa41d462c38f317b69636e60eb2a33ac",
+        "src/qqbot/bootstrap/app.py": "f335e4f3acbccdfb1e0548938088e43dd3047244754e4cb91ab8dd41e62bce89",
+        "src/qqbot/contracts/models.py": "bc294a0e8351a0e2ebeb30e0fd3a19d733aebd8354e4620a078ebdf08be2321c",
+        "src/qqbot/contracts/ports.py": "0d62c598f8b12653d2a65eb31ea5c5ad15ec2155c5b70cc066010ef6c5c50ddf",
+        "src/qqbot/features/mood/composition.py": "6c1abfb48e23def2dfeee2d259a3ad6a4b1c519508a12a0cbfca19c7ea9b558e",
+        "src/qqbot/features/mood/register.py": "e1bd3cf5700cd923c2bad51113d95d4a269bb2ac5dcb6b84057b300856bcdd06",
+        "src/qqbot/infrastructure/adapters/embeddings.py": "35665ac49b66acc87767933226f6c9c934e86b1a586b04a60399350b29c2e050",
+        "src/qqbot/infrastructure/storage/emotion.py": "f4223fef49d1a10158c46dc2c2e37951c8a3a43fda2377d4564c48daee7956ec",
+        "src/qqbot/infrastructure/storage/memory.py": "b2db3dcc7a52dcd2e1dc72aafd93b3a40122eb8b5282f1437bcbaf16712bc425",
+        "tests/agent/test_conversation_maintenance.py": "1922a07f534258f035dd247475dd633d692b687abe864dad775df3f4d1b1c88a",
+        "tests/agent/test_core.py": "99d64052804580560b3ed7807f91a8304d8d7569b5b1958b10ca5f84ed4523f2",
+        "tests/agent/test_delivery_boundary.py": "7689a5936f51b8c674b0c87c26ea53ccb4ea9d95acf670917f088cd51fa35d21",
+        "tests/agent/test_emotion.py": "d12ab3045af0f7c07156f1061b8734a58661f36d4716415fdb51c61fab485015",
+        "tests/agent/test_identity_guard.py": "210c77b4afaa41742c73bd4425d787bf3dada52aeed4fd9dafb1b89a96b7e615",
+        "tests/agent/test_inbound_media.py": "6c403e01a612fab0b3f0a4e6ac70894125ee42962a444f39c64751e9bc1513e5",
+        "tests/agent/test_memory.py": "a3ee3381301b8e60c4d9b668b34a5937e271ee3641f4032aefa25524a8e823c7",
+        "tests/agent/test_observation.py": "8afd1a5d9ad1f6527b9a370eb6ba4f2f3c84b30c7ec868e5295945a617e0102b",
+        "tests/agent/test_relationships.py": "0f6dcedea757c18ecfb0f54d7d607ef49691163d31f2e76accfd6c8e55953f78",
+        "tests/agent/test_service.py": "7534755f6d0b99f3571dcf1aa0861e63c00d5ab423c64544248ed7369b4391fc",
+        "tests/features/test_reply_policy.py": "261290c38e8e486132493e9a30974783d334b51747f9b38ce51b03092f0c2be3",
+        "tests/features/test_slang.py": "65cb72839d12bc5491fdb4a15fb906b288dd26104d7f59b7254cc5cfe74dbe40",
+        "tests/interfaces/test_webui.py": "6c2ddc6d4cd42d5f1eaac700b0bd1ee24fb10093b22655b5f8bac5cfae32eead"
+      }
+    },
+    "report": ".quality/code-quality-gate/EMBEDDING-RETIREMENT-012/red-aab9b722-8483-4dba-9a0e-6fab9655397d.md"
+  }
+}

@@ -12,7 +12,6 @@ import ast
 import asyncio
 import json
 import sqlite3
-import sys
 import tempfile
 import unittest
 from dataclasses import replace
@@ -35,18 +34,17 @@ from qqbot.features.slang import (
 from qqbot.features.slang import mining
 from qqbot.features.slang.gloss import GlossEngine, GlossError
 from qqbot.features.slang.review import (
-    Review,
     ReviewFile,
     load_review,
     parse_review,
 )
 from qqbot.agent.orchestrator import Agent
 from qqbot.agent.context import ContextRegistry, Trust
-from qqbot.agent.service import BotPolicy, ConversationService
+from qqbot.agent.service import ConversationService
+from tests.support import bot_policy
 from qqbot.agent.skills.catalog import SkillCatalog
 from qqbot.actions.tools.registry import built_in_tools
 from qqbot.agent.memory.service import MemoryService
-from qqbot.infrastructure.storage.conversation import ConversationStore
 from qqbot.infrastructure.storage.database import SqliteDatabase, migration_modules
 from qqbot.infrastructure.storage.slang import SlangStore
 from tests.support import Store
@@ -1271,7 +1269,7 @@ class BoundaryTests(SlangTestCase):
             )
             service = ConversationService(
                 agent, store, store, store, _SilentSender(),
-                BotPolicy(frozenset({"42"}), 8, "Asia/Shanghai", False),
+                bot_policy(frozenset({"42"}), 8, "Asia/Shanghai", False),
             )
 
             async def run():

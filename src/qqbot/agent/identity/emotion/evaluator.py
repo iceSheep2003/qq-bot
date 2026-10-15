@@ -18,9 +18,8 @@ import re
 import time
 
 from qqbot.contracts.models import MessageEvent
-from qqbot.contracts.ports import ChatModel
+from qqbot.contracts.ports import ChatModel, EmotionRepository
 from qqbot.agent.identity.emotion.state import DIMENSIONS, MAX_DELTA, EmotionPolicy, Mood
-from qqbot.agent.identity.emotion.store import EmotionStore
 
 log = logging.getLogger(__name__)
 
@@ -97,7 +96,7 @@ class MoodEvaluator:
     def __init__(
         self,
         model: ChatModel,
-        store: EmotionStore,
+        store: EmotionRepository,
         policy: EmotionPolicy,
         *,
         auto_enabled: bool = True,

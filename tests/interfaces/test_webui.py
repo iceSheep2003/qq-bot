@@ -146,6 +146,7 @@ def test_http_api_requires_auth_and_updates_allowlisted_config(tmp_path: Path) -
         httpd.shutdown()
         httpd.server_close()
         thread.join(timeout=2)
+    denied.value.close()
 
 
 def test_memory_dashboard_endpoints_are_owner_only_and_json_stable(tmp_path: Path) -> None:
@@ -177,6 +178,7 @@ def test_memory_dashboard_endpoints_are_owner_only_and_json_stable(tmp_path: Pat
         httpd.shutdown()
         httpd.server_close()
         thread.join(timeout=2)
+    denied.value.close()
 
 
 def test_the_review_queue_is_owner_only_and_writes_the_file_the_feature_reads(
@@ -253,6 +255,9 @@ def test_the_review_queue_is_owner_only_and_writes_the_file_the_feature_reads(
         httpd.shutdown()
         httpd.server_close()
         thread.join(timeout=2)
+    denied.value.close()
+    broken.value.close()
+    bad_action.value.close()
 
 
 def test_the_slang_projection_carries_the_meaning_the_console_edits(
@@ -363,3 +368,6 @@ def test_the_persona_queue_is_owner_only_and_records_decisions(tmp_path: Path) -
         httpd.server_close()
         thread.join(timeout=2)
         database.close()
+    denied.value.close()
+    bad.value.close()
+    missing.value.close()

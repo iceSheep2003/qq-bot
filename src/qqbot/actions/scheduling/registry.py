@@ -24,7 +24,7 @@ from qqbot.actions.scheduling.spec import JobSpec
 from qqbot.actions.replies import ReplyDraft
 
 if TYPE_CHECKING:
-    from qqbot.agent.service import BotPolicy
+    from qqbot.contracts.models import BotPolicy
 
 log = logging.getLogger(__name__)
 

@@ -1,0 +1,52 @@
+{
+  "version": 1,
+  "id": "CORE-IO-POLICY-011",
+  "attempts": 0,
+  "red": {
+    "time": "2026-10-15T17:57:08.553Z",
+    "snapshot": {
+      "contract": "3b9d0f1d221f78f3b10c036da8f633e0cf44b259996abf51b9530e115f50fce7",
+      "protected": {
+        ".code-quality-gate/REFACTOR_COMPLETION.md": "2ee7ed7b3f38a4df2d9fbd143e3f6641d46980035f105fbf50a75d5e0108058c",
+        ".code-quality-gate/ci-setup.sh": "8c6636d8a04487aa9d8c623fce23aaab751bec431c25aa8a402a841532a8a69f",
+        ".code-quality-gate/tasks/CORE-IO-POLICY-011.json": "ad59d7f62162c9344190f61e9af33978c84619e260df0039e48dd0bf5ce50d97",
+        ".importlinter": "dbe30e5e76cf5a7c1c2377d8ea87502421d2eb93c175711447bab2baee6f1eca",
+        "quality.config.json": "1dfe888466c6d1b28592cc752ea7aaf3030e8d88ffde842cd1a06b18c4aa331c",
+        "tests/quality/test_core_io_boundaries.py": "7eb2cd3129c978beafe9aa321125dd16805bcc2f4526e86d132ad4e7591e107e",
+        "tests/support.py": "3bb9c83c3753874fd87b2641bf73a7b70c443ee59cf0994925dd9d56ef552fa5",
+        "tools/quality/checks.py": "1315448184c82631b39ced05a51f8e072217e6d7fbdcc255dd2b3e1db02ed9b7",
+        "tools/quality/junit_report.py": "082cff7fb89c4f5cac8d71a198185f857b5d2501f7a59f74905cf4bf22b48c8b"
+      },
+      "code": {
+        "src/qqbot/actions/scheduling/registry.py": "feaf9f1298ebe0a56e88ab5e008c025f4e6fdaa0cea848c537d705e473ad4a31",
+        "src/qqbot/agent/identity/emotion/__init__.py": "49a68d7f59636cd71b0061e1ab472a238feaf9e8537b394e4c1a4263a52f1d91",
+        "src/qqbot/agent/identity/emotion/evaluator.py": "2f191c6e517ecb1c38d4edcc7a85f2f3826388b279898564d34c7a643dca1e14",
+        "src/qqbot/agent/identity/emotion/store.py": "f4223fef49d1a10158c46dc2c2e37951c8a3a43fda2377d4564c48daee7956ec",
+        "src/qqbot/agent/identity/emotion/system.py": "b82c63e96a594be0af4832ad7df9d46d88546844ffece9e0764c73586ed795be",
+        "src/qqbot/agent/memory/embeddings.py": "c52334dc64792553481a5be3b19ce4d1243ff592089f11c7b9b3b9b4a544af5c",
+        "src/qqbot/agent/memory/service.py": "986b87d3e7f0683661a29af87bdeae690641083c29533d7c4a2b5eb3a71cef06",
+        "src/qqbot/agent/service.py": "5b3272a15f8e629a9ecb7a58475be3cba2a2ee01cbebc668647517e0cb9586f7",
+        "src/qqbot/bootstrap/app.py": "576ddb80f2899b06a258b41bf12f3af77cdaa35c3fb80061a3a641a61d205a0a",
+        "src/qqbot/contracts/models.py": "3787968d66680c3ca9e71e8cd96742ab251eeeb03f0c0550abcebb17e2787005",
+        "src/qqbot/contracts/ports.py": "8b75543ba31d1a3efe8bbba04ec11910f771ceaa00de2c633414eb7cadcf7fd1",
+        "src/qqbot/features/mood/composition.py": null,
+        "src/qqbot/features/mood/register.py": "d81af68937ea93e24029110c583d036f8d4e0ee6b53c9f64d4432250228ff4ea",
+        "src/qqbot/infrastructure/adapters/embeddings.py": null,
+        "src/qqbot/infrastructure/storage/emotion.py": null,
+        "tests/agent/test_conversation_maintenance.py": "1922a07f534258f035dd247475dd633d692b687abe864dad775df3f4d1b1c88a",
+        "tests/agent/test_core.py": "f566d8ff0a2e84093a787c72415736944e305ba1a886e7d8cee75ccac76352a4",
+        "tests/agent/test_delivery_boundary.py": "7689a5936f51b8c674b0c87c26ea53ccb4ea9d95acf670917f088cd51fa35d21",
+        "tests/agent/test_emotion.py": "d12ab3045af0f7c07156f1061b8734a58661f36d4716415fdb51c61fab485015",
+        "tests/agent/test_identity_guard.py": "210c77b4afaa41742c73bd4425d787bf3dada52aeed4fd9dafb1b89a96b7e615",
+        "tests/agent/test_inbound_media.py": "6c403e01a612fab0b3f0a4e6ac70894125ee42962a444f39c64751e9bc1513e5",
+        "tests/agent/test_memory.py": "6257eeab7ce4df9a62eedf0cd2be15dff095308888e696c8c530baf12f30eb6d",
+        "tests/agent/test_observation.py": "8afd1a5d9ad1f6527b9a370eb6ba4f2f3c84b30c7ec868e5295945a617e0102b",
+        "tests/agent/test_relationships.py": "0f6dcedea757c18ecfb0f54d7d607ef49691163d31f2e76accfd6c8e55953f78",
+        "tests/agent/test_service.py": "7534755f6d0b99f3571dcf1aa0861e63c00d5ab423c64544248ed7369b4391fc",
+        "tests/features/test_reply_policy.py": "261290c38e8e486132493e9a30974783d334b51747f9b38ce51b03092f0c2be3",
+        "tests/features/test_slang.py": "3b05d1e11b7d39589bc9e42c3b3ecc2f427f6b65e6e01a001118e7a7b1c8a96c"
+      }
+    },
+    "report": ".quality/code-quality-gate/CORE-IO-POLICY-011/red-6426469d-d32e-451b-940b-6e7879607503.md"
+  }
+}

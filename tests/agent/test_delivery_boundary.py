@@ -7,7 +7,8 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from qqbot.agent.conversation.delivery import ConversationDelivery
-from qqbot.agent.service import BotPolicy, ConversationService
+from qqbot.agent.service import ConversationService
+from tests.support import bot_policy
 from qqbot.actions.replies.models import PartReceipt, ReplyPlan
 from tests.agent.test_service import FakeAgent, FakeSender, event
 from tests.support import Store
@@ -27,7 +28,7 @@ class DeliveryBoundaryTests(unittest.IsolatedAsyncioTestCase):
 
     def new(self, **options):
         service = ConversationService(FakeAgent(), self.store, self.store, self.store,
-            FakeSender(), BotPolicy(frozenset({'42'}), 8, 'UTC', False),
+            FakeSender(), bot_policy(frozenset({'42'}), 8, 'UTC', False),
             restore_last_reply=False, **options)
         self.services.append(service)
         self.assertIsInstance(getattr(service, 'delivery', None), ConversationDelivery)

@@ -318,6 +318,68 @@
         ]
       },
       {
+        "id": "core-io-boundary",
+        "title": "Pure Agent dependencies, canonical policy and explicit I/O adapters",
+        "command": [
+          ".venv/bin/python",
+          "-m",
+          "pytest",
+          "tests/quality/test_core_io_boundaries.py",
+          "-q",
+          "--junitxml=.quality/core-io-boundary.xml"
+        ],
+        "report": ".quality/core-io-boundary.xml",
+        "format": "junit",
+        "metrics": [
+          {
+            "name": "Acceptance cases",
+            "path": "tests",
+            "min": 10
+          },
+          {
+            "name": "Success rate",
+            "path": "successRate",
+            "equals": 100
+          },
+          {
+            "name": "Skipped",
+            "path": "skipped",
+            "equals": 0
+          }
+        ]
+      },
+      {
+        "id": "no-embedding",
+        "title": "Embedding removal with non-destructive historical data compatibility",
+        "command": [
+          ".venv/bin/python",
+          "-m",
+          "pytest",
+          "tests/agent/test_embedding_retirement.py",
+          "-q",
+          "--junitxml=.quality/no-embedding.xml"
+        ],
+        "report": ".quality/no-embedding.xml",
+        "format": "junit",
+        "metrics": [
+          {
+            "name": "Acceptance cases",
+            "path": "tests",
+            "min": 8
+          },
+          {
+            "name": "Success rate",
+            "path": "successRate",
+            "equals": 100
+          },
+          {
+            "name": "Skipped",
+            "path": "skipped",
+            "equals": 0
+          }
+        ]
+      },
+      {
         "id": "regression",
         "title": "Complete legacy and new Python regression suite",
         "command": [

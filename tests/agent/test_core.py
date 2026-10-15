@@ -24,7 +24,9 @@ from qqbot.features.exam_poster.renderer import ExamCountdownPoster
 from qqbot.features.scheduled_chat.job import ChatJobHandler
 from qqbot.actions.scheduling import JobHandlerRegistry, Scheduler, next_occurrence
 from qqbot.actions.scheduling.runner import JobRunner
-from qqbot.agent.service import BotPolicy, ConversationService
+from qqbot.agent.service import ConversationService
+from tests.support import bot_policy
+from qqbot.contracts.models import BotPolicy
 from qqbot.agent.skills.catalog import SkillCatalog
 from tests.support import Store
 from qqbot.actions.tools.registry import built_in_tools
@@ -106,7 +108,7 @@ class CoreTests(unittest.TestCase):
             self.store,
             self.store,
             sender,
-            BotPolicy(frozenset({"42"}), 8, "Asia/Shanghai", False),
+            bot_policy(frozenset({"42"}), 8, "Asia/Shanghai", False),
         )
 
         async def run():
@@ -225,7 +227,7 @@ class CoreTests(unittest.TestCase):
             self.store,
             self.store,
             sender,
-            BotPolicy(frozenset({"42"}), 8, "Asia/Shanghai", False),
+            bot_policy(frozenset({"42"}), 8, "Asia/Shanghai", False),
         )
         private = MessageEvent(
             "private:1", "private:7", None, "7", "小明", "你好", (), False, (), 0
@@ -370,7 +372,7 @@ class ScheduleTests(unittest.TestCase):
             "job_freshness_minutes": 180,
         }
         base.update(overrides)
-        return BotPolicy(**base)
+        return bot_policy(**base)
 
     def service(
         self, sender, *, posters=None, policy=None, handlers=None
@@ -417,7 +419,7 @@ class ScheduleTests(unittest.TestCase):
         sender = FakeSender()
         # A far-future exam date keeps the assertion independent of the clock.
         today = datetime.now(ZoneInfo("Asia/Shanghai")).date()
-        service = self.service(
+        self.service(
             sender, posters=ExamCountdownPoster(today + timedelta(days=365))
         )
         asyncio.run(self.job_runner.run(self.job(action="poster", prompt="")))
@@ -429,26 +431,26 @@ class ScheduleTests(unittest.TestCase):
     def test_poster_job_skips_after_exam_and_sends_nothing(self):
         sender = FakeSender()
         posters = ExamCountdownPoster(date(2020, 1, 1))
-        service = self.service(sender, posters=posters)
+        self.service(sender, posters=posters)
         with self.assertRaises(JobSkipped):
             asyncio.run(self.job_runner.run(self.job(action="poster", prompt="")))
         self.assertEqual(sender.sent, [])
 
     def test_poster_job_without_renderer_is_skipped(self):
-        service = self.service(FakeSender())
+        self.service(FakeSender())
         with self.assertRaises(JobSkipped):
             asyncio.run(self.job_runner.run(self.job(action="poster", prompt="")))
 
     def test_configured_chat_job_runs_when_group_is_quiet(self):
         sender = FakeSender()
-        service = self.service(sender)
+        self.service(sender)
         asyncio.run(self.job_runner.run(self.job()))
         self.assertEqual([m["text"] for m in sender.sent], ["收到。"])
 
     def test_chat_job_posts_when_group_is_lively(self):
         self.store.add_message("m1", "group:42", "7", "小明", "user", "今天数学好难")
         sender = FakeSender()
-        service = self.service(sender)
+        self.service(sender)
         asyncio.run(self.job_runner.run(self.job()))
         self.assertEqual([m["text"] for m in sender.sent], ["收到。"])
         self.assertEqual(self.store.proactive_count_since("42", 0, "cron"), 1)
@@ -471,7 +473,7 @@ class ScheduleTests(unittest.TestCase):
     def test_explicit_chat_schedule_is_its_own_frequency_limit(self):
         self.store.add_message("m1", "group:42", "7", "小明", "user", "在吗")
         sender = FakeSender()
-        service = self.service(sender, policy=self.policy(job_daily_limit=1))
+        self.service(sender, policy=self.policy(job_daily_limit=1))
         asyncio.run(self.job_runner.run(self.job()))
         asyncio.run(self.job_runner.run(self.job(run_id=2)))
         self.assertEqual(len(sender.sent), 2)
@@ -591,7 +593,7 @@ class ScheduleTests(unittest.TestCase):
         registry = JobHandlerRegistry()
         registry.register(RollCallJob())
         sender = FakeSender()
-        service = self.service(sender, handlers=registry)
+        self.service(sender, handlers=registry)
         asyncio.run(self.job_runner.run(self.job(action="rollcall")))
         self.assertEqual([m["text"] for m in sender.sent], ["打卡第 1 天"])
 
@@ -636,7 +638,7 @@ class ScheduleTests(unittest.TestCase):
             registry.get("nope")
 
         sender = FakeSender()
-        service = self.service(sender, handlers=self.registry)
+        self.service(sender, handlers=self.registry)
         with self.assertRaises(JobSkipped):
             asyncio.run(self.job_runner.run(self.job(action="nonexistent")))
         self.assertEqual(sender.sent, [])
@@ -656,7 +658,7 @@ class ScheduleTests(unittest.TestCase):
         registry = JobHandlerRegistry()
         registry.register(RudeJob())
         sender = FakeSender()
-        service = self.service(
+        self.service(
             sender,
             handlers=registry,
             policy=self.policy(active_start_hour=0, active_end_hour=0),

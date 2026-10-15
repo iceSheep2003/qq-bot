@@ -1,7 +1,7 @@
 """Scoped long-term memory rows.
 
 This module owns the *write path* (idempotent, conflict aware) and *retrieval
-signals* (lexical rank, vector cosine). Ordering and explanation live in
+signals* (lexical rank). Ordering and explanation live in
 ``qqbot.agent.memory.ranking``; distillation lives in ``qqbot.agent.memory.service``.
 Nothing here imports a model client or a network library: an embedding
 provider is attached duck-typed and every failure degrades to lexical search.
@@ -13,7 +13,6 @@ import hashlib
 import logging
 import sqlite3
 import time
-from array import array
 
 from qqbot.agent.memory.text import query_tokens
 from qqbot.agent.memory.scope import ConversationScope
@@ -52,32 +51,6 @@ def dedupe_key(scope: str, subject_user_id: str, content: str) -> str:
     return hashlib.sha1(payload.encode("utf-8")).hexdigest()
 
 
-def _encode_vector(vector) -> bytes:
-    return array("f", [float(x) for x in vector]).tobytes()
-
-
-def _decode_vector(blob) -> array | None:
-    if not blob:
-        return None
-    try:
-        values = array("f")
-        values.frombytes(blob)
-    except (ValueError, TypeError):
-        return None
-    return values or None
-
-
-def _cosine(left, right) -> float | None:
-    if left is None or right is None or len(left) != len(right) or not len(left):
-        return None
-    dot = sum(a * b for a, b in zip(left, right))
-    norm_left = sum(a * a for a in left) ** 0.5
-    norm_right = sum(b * b for b in right) ** 0.5
-    if not norm_left or not norm_right:
-        return None
-    return max(0.0, min(1.0, dot / (norm_left * norm_right)))
-
-
 # Columns added after the original prototype schema. Additive only: an existing
 # deployment keeps every row it already has.
 _EXTRA_COLUMNS = (
@@ -90,8 +63,6 @@ _EXTRA_COLUMNS = (
     ("last_accessed_at", "INTEGER"),
     ("access_count", "INTEGER NOT NULL DEFAULT 0"),
     ("dedupe_key", "TEXT"),
-    ("embedding", "BLOB"),
-    ("embedding_model", "TEXT"),
     ("merged_into", "INTEGER"),
     ("updated_at", "INTEGER NOT NULL DEFAULT 0"),
     ("persona_summary", "TEXT NOT NULL DEFAULT ''"),
@@ -305,20 +276,10 @@ def migrate(db) -> None:
 
 
 class MemoryStore(SqliteRepository):
-    """``memories`` table plus its lexical/vector indexes.
+    """``memories`` table plus its lexical indexes."""
 
-    The optional embedding provider is injected, never imported: when it is
-    missing or broken every read falls back to lexical matching and every
-    write still succeeds.
-    """
-
-    def __init__(self, database, embedder=None):
+    def __init__(self, database):
         super().__init__(database)
-        self.embedder = embedder
-
-    def attach_embedder(self, embedder) -> "MemoryStore":
-        self.embedder = embedder
-        return self
 
     # ---------------------------------------------------------- extraction audit
 
@@ -586,9 +547,6 @@ class MemoryStore(SqliteRepository):
         )
         status = ACTIVE if confidence >= CANDIDATE_CONFIDENCE else CANDIDATE
         key = dedupe_key(scope, subject_user_id, content)
-        # Network call, deliberately outside the write transaction.
-        embedding = self._embed(content)
-
         with self.transaction():
             row = self.db.execute(
                 "SELECT * FROM memories WHERE dedupe_key=?", (key,)
@@ -605,9 +563,9 @@ class MemoryStore(SqliteRepository):
             cursor = self.db.execute(
                 "INSERT INTO memories(scope,user_id,content,importance,source_event_id,"
                 "created_at,fact_type,confidence,status,visibility,origin_user_id,"
-                "expires_at,last_accessed_at,access_count,dedupe_key,embedding,"
-                "embedding_model,updated_at,persona_summary,mention_policy) "
-                "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,NULL,0,?,?,?,?,?,?)",
+                "expires_at,last_accessed_at,access_count,dedupe_key,updated_at,"
+                "persona_summary,mention_policy) "
+                "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,NULL,0,?,?,?,?)",
                 (
                     scope,
                     subject_user_id,
@@ -622,8 +580,6 @@ class MemoryStore(SqliteRepository):
                     origin_user_id,
                     expires_at,
                     key,
-                    _encode_vector(embedding) if embedding else None,
-                    self._embedding_name() if embedding else None,
                     now,
                     persona_summary.strip()[:120],
                     mention_policy,
@@ -755,6 +711,7 @@ class MemoryStore(SqliteRepository):
     def _public(row) -> dict:
         entry = dict(row)
         entry.pop("embedding", None)
+        entry.pop("embedding_model", None)
         return entry
 
     def similar_candidates(
@@ -799,24 +756,17 @@ class MemoryStore(SqliteRepository):
         limit: int = 48,
         now: int | None = None,
     ) -> list[dict]:
-        """Raw retrieval: rows that pass the hard filters, each annotated with
-        the signals ``lexical`` (bm25, lower is better), ``vector`` (cosine,
-        0..1 or None) and ``match``. Ordering is the caller's job."""
+        """Raw lexical retrieval; ordering is the caller's job."""
         now = int(now or time.time())
         rows: dict[int, dict] = {}
         for row in self._lexical_rows(scope, query, subject_user_id, include_candidates, now, limit):
             rows[row["id"]] = row
-        for row in self._vector_rows(scope, query, subject_user_id, include_candidates, now, limit):
-            existing = rows.get(row["id"])
-            if existing is not None:
-                existing["vector"] = row["vector"]
-            else:
-                rows[row["id"]] = row
         for row in self._topic_rows(scope, query, subject_user_id, include_candidates, now, limit):
             rows.setdefault(row["id"], row)
         for row in rows.values():
             # Raw blobs are not JSON serialisable and the recall tool dumps rows.
             row.pop("embedding", None)
+            row.pop("embedding_model", None)
         return list(rows.values())
 
     def _topic_rows(
@@ -830,7 +780,7 @@ class MemoryStore(SqliteRepository):
         matched = " OR ".join("t.canonical_name LIKE ? OR m.content LIKE ?" for _ in tokens)
         patterns = [value for token in tokens for value in (f"%{token}%", f"%{token}%")]
         rows = self.db.execute(
-            "SELECT m.*,NULL AS lexical,NULL AS vector,'topic' AS match "
+            "SELECT m.*,NULL AS lexical,'topic' AS match "
             "FROM memory_topics t JOIN memory_topic_links l ON l.topic_id=t.id "
             "JOIN memories m ON m.id=l.memory_id "
             f"WHERE t.scope=? AND t.status='active' AND ({matched}) AND {where} "
@@ -977,74 +927,6 @@ class MemoryStore(SqliteRepository):
         }
         return [token for token in sorted(tokens) if token][:8]
 
-    def _vector_rows(
-        self,
-        scope: str,
-        query: str,
-        subject_user_id: str | None,
-        include_candidates: bool,
-        now: int,
-        limit: int,
-    ) -> list[dict]:
-        if self.embedder is None or not query.strip():
-            return []
-        query_vector = self._embed(query)
-        if not query_vector:
-            return []
-        where, params = self._filters(scope, subject_user_id, include_candidates, now)
-        rows = self.db.execute(
-            "SELECT m.*, NULL AS lexical, 'vector' AS match FROM memories m "
-            f"WHERE m.embedding IS NOT NULL AND {where} "
-            "ORDER BY m.importance DESC, m.created_at DESC LIMIT ?",
-            (*params, max(1, int(limit) * 20)),
-        ).fetchall()
-        scored: list[dict] = []
-        for row in rows:
-            entry = dict(row)
-            entry["vector"] = _cosine(_decode_vector(row["embedding"]), query_vector)
-            if entry["vector"] is not None:
-                scored.append(entry)
-        scored.sort(key=lambda item: -item["vector"])
-        return scored[: max(1, int(limit))]
-
-    def _embed(self, text: str):
-        if self.embedder is None:
-            return None
-        try:
-            vectors = self.embedder.embed([text])
-        except Exception as exc:  # never let a provider break a write or a reply
-            log.warning("embedding provider failed, using lexical only: %s", exc)
-            return None
-        if not vectors:
-            return None
-        return list(vectors[0])
-
-    def _embedding_name(self) -> str:
-        return str(getattr(self.embedder, "name", "") or "unknown")
-
-    def reindex_embeddings(self, scope: str | None = None, limit: int = 200) -> int:
-        """Backfill vectors for rows written before a provider was configured."""
-        if self.embedder is None:
-            return 0
-        clause = "AND scope=?" if scope else ""
-        params = (scope,) if scope else ()
-        rows = self.db.execute(
-            "SELECT id,content FROM memories WHERE embedding IS NULL "
-            f"AND status IN (?,?) {clause} ORDER BY id DESC LIMIT ?",
-            (ACTIVE, CANDIDATE, *params, max(1, int(limit))),
-        ).fetchall()
-        updated = 0
-        for row in rows:
-            vector = self._embed(row["content"])
-            if not vector:
-                continue
-            self.db.execute(
-                "UPDATE memories SET embedding=?, embedding_model=? WHERE id=?",
-                (_encode_vector(vector), self._embedding_name(), row["id"]),
-            )
-            updated += 1
-        return updated
-
     # --------------------------------------------------------------- lifecycle
 
     def expire(self, now: int | None = None) -> int:
@@ -1142,10 +1024,4 @@ class MemoryStore(SqliteRepository):
             params,
         ).fetchall()
         counts = {row["status"]: row["total"] for row in rows}
-        vectors = self.db.execute(
-            "SELECT count(*) FROM memories "
-            + (f"{clause} AND " if clause else "WHERE ")
-            + "embedding IS NOT NULL",
-            params,
-        ).fetchone()[0]
-        return {"by_status": counts, "embedded": int(vectors), "total": sum(counts.values())}
+        return {"by_status": counts, "total": sum(counts.values())}

@@ -1,0 +1,68 @@
+{
+  "version": 1,
+  "id": "EMBEDDING-RETIREMENT-012",
+  "title": "Embedding removal with non-destructive historical data compatibility",
+  "requirements": [
+    "Delete embedding providers, configuration, constructor parameters, storage computation, reindexing, vector scoring and metrics. Preserve old DB contents without creating vector columns in new DBs.",
+    "Only contracts.models defines BotPolicy; production, scheduling and tests use the canonical composite without an obsolete service alias.",
+    "Agent imports no outer implementation layer, SQLite or HTTP client. EmotionSystem consumes an injected repository; concrete store and builder move to infrastructure and feature composition with unchanged tables and dedupe behavior.",
+    "All non-vector lifecycle, privacy, evidence and scoped-memory tests remain. Only the three explicitly retired vector-only tests are removed with archived baseline and documented inventory update.",
+    "Complete pending policy/IO refactoring and fix test resource cleanup; public type annotations resolve without reintroducing a flat policy alias."
+  ],
+  "testFiles": [
+    "tests/agent/test_embedding_retirement.py",
+    "tests/quality/test_core_io_boundaries.py"
+  ],
+  "codeFiles": [
+    "src/qqbot/agent/identity/emotion/store.py",
+    "src/qqbot/infrastructure/storage/emotion.py",
+    "src/qqbot/agent/identity/emotion/system.py",
+    "src/qqbot/agent/identity/emotion/evaluator.py",
+    "src/qqbot/agent/identity/emotion/__init__.py",
+    "src/qqbot/features/mood/composition.py",
+    "src/qqbot/features/mood/register.py",
+    "src/qqbot/agent/memory/service.py",
+    "src/qqbot/bootstrap/app.py",
+    "src/qqbot/agent/service.py",
+    "src/qqbot/contracts/models.py",
+    "src/qqbot/contracts/ports.py",
+    "src/qqbot/actions/scheduling/registry.py",
+    "tests/features/test_slang.py",
+    "tests/features/test_reply_policy.py",
+    "tests/agent/test_conversation_maintenance.py",
+    "tests/agent/test_service.py",
+    "tests/agent/test_observation.py",
+    "tests/agent/test_core.py",
+    "tests/agent/test_identity_guard.py",
+    "tests/agent/test_inbound_media.py",
+    "tests/agent/test_relationships.py",
+    "tests/agent/test_delivery_boundary.py",
+    "tests/agent/test_emotion.py",
+    "tests/agent/test_memory.py",
+    "src/qqbot/agent/memory/embeddings.py",
+    "src/qqbot/infrastructure/adapters/embeddings.py",
+    "src/qqbot/agent/memory/ranking.py",
+    "src/qqbot/infrastructure/storage/memory.py",
+    ".env.example",
+    "docs/guides/FEATURES.md",
+    "docs/design/CONVERSATION_INTELLIGENCE_DESIGN.md",
+    "src/qqbot/agent/cognition/experience/retrieval.py",
+    "tests/interfaces/test_webui.py"
+  ],
+  "testChecks": [
+    "no-embedding",
+    "core-io-boundary"
+  ],
+  "protectedFiles": [
+    "tools/quality/checks.py",
+    "tools/quality/junit_report.py",
+    ".importlinter",
+    ".code-quality-gate/REFACTOR_COMPLETION.md",
+    ".code-quality-gate/ci-setup.sh",
+    "tests/support.py",
+    ".code-quality-gate/EMBEDDING_RETIREMENT.md",
+    ".code-quality-gate/TEST_MIGRATION.json",
+    ".code-quality-gate/history/EMBEDDING-RETIREMENT-inputs.zip"
+  ],
+  "maxAttempts": 11
+}

@@ -15,17 +15,16 @@ import logging
 import time
 
 from qqbot.contracts.models import MessageEvent
-from qqbot.contracts.ports import ChatModel
+from qqbot.contracts.ports import ChatModel, EmotionRepository
 from qqbot.agent.identity.emotion.config import EmotionConfig
 from qqbot.agent.identity.emotion.evaluator import MoodEvaluator
 from qqbot.agent.identity.emotion.state import EmotionPolicy, Mood, MoodSnapshot, replay, timeline
-from qqbot.agent.identity.emotion.store import EmotionStore
 
 log = logging.getLogger(__name__)
 
 
 class EmotionSystem:
-    def __init__(self, config: EmotionConfig, model: ChatModel, *, clock=time.time):
+    def __init__(self, config: EmotionConfig, model: ChatModel, *, store: EmotionRepository, clock=time.time):
         self.config = config
         self.clock = clock
         self.policy = EmotionPolicy(
@@ -34,7 +33,7 @@ class EmotionSystem:
             min_sociability=config.min_sociability,
             coupling=config.coupling,
         )
-        self.store = EmotionStore(config.db_path)
+        self.store = store
         self.evaluator = MoodEvaluator(
             model,
             self.store,
@@ -74,10 +73,3 @@ class EmotionSystem:
 
     def close(self) -> None:
         self.store.close()
-
-
-def build_emotion(
-    config: EmotionConfig, model: ChatModel, *, clock=time.time
-) -> EmotionSystem:
-    """Composition helper for app.py. Assumes config.enabled is already true."""
-    return EmotionSystem(config, model, clock=clock)

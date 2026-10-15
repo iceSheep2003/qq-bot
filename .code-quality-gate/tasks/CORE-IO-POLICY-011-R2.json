@@ -1,0 +1,59 @@
+{
+  "version": 1,
+  "id": "CORE-IO-POLICY-011-R2",
+  "title": "Pure Agent dependencies, canonical policy and explicit I/O adapters",
+  "requirements": [
+    "Only contracts.models defines BotPolicy; production, scheduling and tests use the canonical composite without an obsolete service alias.",
+    "Agent imports no outer implementation layer, SQLite or HTTP client. EmotionSystem consumes an injected repository; concrete store and builder move to infrastructure and feature composition with unchanged tables and dedupe behavior.",
+    "MemoryService never creates embedding HTTP clients from environment; bootstrap builds and closes the explicitly injected adapter while deterministic local embeddings remain in Agent.",
+    "Migrate test imports and policy fixture construction without reducing test cases or assertions. Runtime/unraisable coroutine warnings block full regression.",
+    "Public constructor type annotations must resolve to the canonical policy type without restoring an obsolete service.BotPolicy re-export."
+  ],
+  "testFiles": [
+    "tests/quality/test_core_io_boundaries.py"
+  ],
+  "codeFiles": [
+    "src/qqbot/agent/identity/emotion/store.py",
+    "src/qqbot/infrastructure/storage/emotion.py",
+    "src/qqbot/agent/identity/emotion/system.py",
+    "src/qqbot/agent/identity/emotion/evaluator.py",
+    "src/qqbot/agent/identity/emotion/__init__.py",
+    "src/qqbot/features/mood/composition.py",
+    "src/qqbot/features/mood/register.py",
+    "src/qqbot/agent/memory/embeddings.py",
+    "src/qqbot/infrastructure/adapters/embeddings.py",
+    "src/qqbot/agent/memory/service.py",
+    "src/qqbot/bootstrap/app.py",
+    "src/qqbot/agent/service.py",
+    "src/qqbot/contracts/models.py",
+    "src/qqbot/contracts/ports.py",
+    "src/qqbot/actions/scheduling/registry.py",
+    "tests/features/test_slang.py",
+    "tests/features/test_reply_policy.py",
+    "tests/agent/test_conversation_maintenance.py",
+    "tests/agent/test_service.py",
+    "tests/agent/test_observation.py",
+    "tests/agent/test_core.py",
+    "tests/agent/test_identity_guard.py",
+    "tests/agent/test_inbound_media.py",
+    "tests/agent/test_relationships.py",
+    "tests/agent/test_delivery_boundary.py",
+    "tests/agent/test_emotion.py",
+    "tests/agent/test_memory.py"
+  ],
+  "testChecks": [
+    "core-io-boundary"
+  ],
+  "protectedFiles": [
+    "tools/quality/checks.py",
+    "tools/quality/junit_report.py",
+    ".importlinter",
+    ".code-quality-gate/REFACTOR_COMPLETION.md",
+    ".code-quality-gate/ci-setup.sh",
+    "tests/support.py",
+    ".code-quality-gate/history/CORE-IO-011-R1-inputs.zip",
+    ".code-quality-gate/CORE_IO_TEST_REVIEW.md",
+    ".code-quality-gate/evidence/CORE-IO-POLICY-011.json"
+  ],
+  "maxAttempts": 12
+}

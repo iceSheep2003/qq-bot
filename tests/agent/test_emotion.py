@@ -16,11 +16,11 @@ from qqbot.agent.identity.emotion import (
     EmotionConfig,
     EmotionPolicy,
     Mood,
-    build_emotion,
     loop_gain,
 )
 from qqbot.agent.identity.emotion.evaluator import dedupe_key, parse_verdict
-from qqbot.agent.identity.emotion.store import EmotionStore
+from qqbot.infrastructure.storage.emotion import EmotionStore
+from qqbot.features.mood.composition import build_emotion
 from qqbot.features.mood.register import register as register_mood
 from qqbot.features.mood.register import validate as validate_mood
 from qqbot.features.proactive_chat.runner import ProactiveChat, ProactiveConfig
@@ -276,7 +276,8 @@ class ProactiveGateTests(unittest.TestCase):
 
     def service(self, emotions, sender):
         from qqbot.agent.orchestrator import Agent
-        from qqbot.agent.service import BotPolicy, ConversationService
+        from qqbot.agent.service import ConversationService
+        from tests.support import bot_policy
         from qqbot.agent.skills.catalog import SkillCatalog
         from qqbot.actions.tools.registry import built_in_tools
 
@@ -289,7 +290,7 @@ class ProactiveGateTests(unittest.TestCase):
             built_in_tools(self.store),
             self.persona,
         )
-        policy_ = BotPolicy(
+        policy_ = bot_policy(
             frozenset({"42"}),
             8,
             "Asia/Shanghai",

@@ -168,13 +168,10 @@ class SchedulePolicy:
 
 @dataclass(frozen=True)
 class BotPolicy:
-    """The bot's operating policy, composed of its two halves.
+    """Canonical operating policy with separate conversation and scheduling values.
 
-    ``runtime.service`` and ``scheduling.guards`` read these values by their
-    flat legacy names, so the composite exposes them as properties rather than
-    forcing a change to modules this work does not own. See the delivery report
-    for the one-line wiring that removes the duplicate flat dataclass still in
-    ``src/qqbot/agent/service.py``.
+    Read-only properties expose shared runtime settings without duplicating
+    their state or requiring scheduling code to own conversation configuration.
     """
 
     conversation: ConversationPolicy

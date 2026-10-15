@@ -11,7 +11,8 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from qqbot.actions.replies.models import ReplyDraft
-from qqbot.agent.service import BotPolicy, ConversationService
+from qqbot.agent.service import ConversationService
+from tests.support import bot_policy
 from qqbot.contracts.models import MessageEvent
 from qqbot.infrastructure.storage.database import SqliteDatabase
 from qqbot.infrastructure.storage.observations import ObservationOutbox
@@ -287,7 +288,7 @@ class ObservationTests(unittest.IsolatedAsyncioTestCase):
         owner_type = type(self.new())
         service = ConversationService(SimpleNamespace(), SimpleNamespace(), SimpleNamespace(),
                                       SimpleNamespace(), SimpleNamespace(),
-                                      BotPolicy(frozenset(), 8, "UTC", False), restore_last_reply=False)
+                                      bot_policy(frozenset(), 8, "UTC", False), restore_last_reply=False)
         try:
             self.assertIsInstance(getattr(service, "post_reply", None), owner_type)
             self.assertIs(service.observations, service.post_reply.stats)

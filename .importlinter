@@ -103,3 +103,13 @@ forbidden_modules =
     qqbot.features
     qqbot.bootstrap
     qqbot.interfaces
+
+[importlinter:contract:agent-core]
+name = The entire Agent package uses ports without outer layer dependencies
+type = forbidden
+source_modules = qqbot.agent
+forbidden_modules =
+    qqbot.infrastructure
+    qqbot.features
+    qqbot.bootstrap
+    qqbot.interfaces

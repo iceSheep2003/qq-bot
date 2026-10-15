@@ -9,7 +9,8 @@ module with ``BOT_MOOD_AUTO_ENABLED=false``, which keeps state readable but
 never calls the model.
 """
 
-from qqbot.agent.identity.emotion import EmotionConfig, build_emotion
+from qqbot.agent.identity.emotion import EmotionConfig
+from qqbot.features.mood.composition import build_emotion
 from qqbot.agent.context import Trust
 
 

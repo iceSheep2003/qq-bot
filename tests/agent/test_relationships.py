@@ -19,7 +19,8 @@ from qqbot.agent.memory.relationships import (
 )
 from qqbot.agent.memory.relationships.evaluator import DECAY_INTERVAL_SECONDS
 from qqbot.agent.orchestrator import Agent
-from qqbot.agent.service import BotPolicy, ConversationService
+from qqbot.agent.service import ConversationService
+from tests.support import bot_policy
 from qqbot.agent.skills.catalog import SkillCatalog
 from qqbot.actions.tools.registry import built_in_tools
 from qqbot.infrastructure.storage.database import SqliteDatabase
@@ -674,7 +675,7 @@ class GroupMessageCannotScoreTests(unittest.TestCase):
             self.persona,
         )
         sender = RecordingSender()
-        policy_ = BotPolicy(
+        policy_ = bot_policy(
             frozenset({"42"}), 8, "Asia/Shanghai", affection_auto, False
         )
         return ConversationService(

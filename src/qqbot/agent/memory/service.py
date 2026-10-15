@@ -10,7 +10,7 @@ Responsibilities are split deliberately:
 * injection    — :meth:`MemoryService.related`, the only method the Agent calls
 
 The module never imports an extension, a network client or a storage adapter.
-Retrieval always degrades to lexical search when embeddings are unavailable.
+Retrieval is deliberately lexical until the Wiki reader replaces this path.
 """
 
 from __future__ import annotations
@@ -24,7 +24,6 @@ import time
 from qqbot.contracts.ports import ChatModel, ConversationRepository, MemoryRepository
 from qqbot.agent.memory import dedupe, ranking
 from qqbot.agent.memory.context import MemoryContextPolicy
-from qqbot.agent.memory.embeddings import embeddings_from_env
 from qqbot.agent.memory.graph import (
     GraphError,
     GraphExtractor,
@@ -89,7 +88,6 @@ class MemoryService:
         model: ChatModel,
         conversations: ConversationRepository,
         memories: MemoryRepository,
-        embeddings=None,
         *,
         maintain_interval: int = MAINTAIN_INTERVAL_SECONDS,
         context_char_budget: int | None = None,
@@ -109,9 +107,6 @@ class MemoryService:
             if knowledge is not None
             else None
         )
-        # ``None`` means "whatever the environment configures"; pass ``False``
-        # to force lexical-only retrieval.
-        self.embeddings = embeddings_from_env() if embeddings is None else embeddings
         self.maintain_interval = maintain_interval
         self.context_policy = (
             MemoryContextPolicy.from_env() if context_char_budget is None
@@ -119,11 +114,6 @@ class MemoryService:
         )
         self.context_char_budget = self.context_policy.char_budget
         self._last_maintain = 0.0
-        if self.embeddings:
-            attach = getattr(memories, "attach_embedder", None)
-            if callable(attach):
-                attach(self.embeddings)
-                log.info("memory vector path enabled: %s", getattr(self.embeddings, "name", "?"))
 
     # ------------------------------------------------------------- injection
 
@@ -731,6 +721,7 @@ class MemoryService:
             return None
         public = dict(item)
         public.pop("embedding", None)
+        public.pop("embedding_model", None)
         evidence = getattr(self.memories, "evidence", None)
         revisions = getattr(self.memories, "revisions", None)
         public["evidence"] = evidence(memory_id) if callable(evidence) else []
