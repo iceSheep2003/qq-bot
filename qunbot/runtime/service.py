@@ -21,10 +21,11 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import json
 import re
 import time
 from collections import OrderedDict
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, replace, asdict
 from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
@@ -33,6 +34,7 @@ from ..ports import (
     ActivityRepository,
     AffectionObserver,
     AgentRunner,
+    InboundMediaPort,
     ConversationRepository,
     ConversationIntelligencePort,
     MediaProcessor,
@@ -49,8 +51,14 @@ from ..ports import (
     ReplyPlanner,
     TurnGuard,
 )
-from ..replies import DefaultReplyPlanner, ReplyDispatcher, ReplyDraft, parse_reply_draft
+from ..replies import (
+    DefaultReplyPlanner,
+    ReplyDispatcher,
+    ReplyDraft,
+    parse_reply_draft,
+)
 from ..replies.repetition import repeats_recent
+from .fairness import ScopeWorkBudget
 
 log = logging.getLogger(__name__)
 
@@ -125,6 +133,8 @@ class ConversationService:
         observation_backlog: int | None = None,
         observation_workers: int | None = None,
         observation_dedupe: int | None = None,
+        observation_store=None,
+        inbound_media: InboundMediaPort | None = None,
         restore_last_reply: bool = True,
     ):
         self.agent, self.conversations, self.activity = agent, conversations, activity
@@ -132,6 +142,7 @@ class ConversationService:
         self.sender, self.policy = sender, policy
         self.affection = affection
         self.media = media
+        self.inbound_media = inbound_media
         self.reply_planner = reply_planner or DefaultReplyPlanner()
         self.reply_dispatcher = reply_dispatcher or ReplyDispatcher(sender, media)
         self.conversation_intelligence = conversation_intelligence
@@ -160,8 +171,19 @@ class ConversationService:
         self._workers: list[asyncio.Task] = []
         self._seen: OrderedDict[str, None] = OrderedDict()
         self._extract_tasks: set[asyncio.Task] = set()
+        # Compaction is maintenance, never part of the interactive reply
+        # latency. One task per scope prevents a hot group from creating a
+        # model-call backlog; the model adapter still enforces the global cap.
+        self._compaction_tasks: dict[str, asyncio.Task] = {}
+        self._compaction_budget = ScopeWorkBudget(max_per_scope=2)
         self._closed = False
         self.observations = ObservationStats()
+        self.observation_store = observation_store
+        self._durable_handlers = {}
+        for observer in (affection, *observers):
+            if observer is not None:
+                identity = type(observer).__module__ + "." + type(observer).__qualname__
+                self._durable_handlers[identity] = observer
         if restore_last_reply:
             self.restore_last_reply()
 
@@ -218,6 +240,8 @@ class ConversationService:
         """Full inbound path: ingest, decide, execute. Entry point for app.py."""
         if not await self.ingest(event):
             return
+        if self.inbound_media is not None:
+            event = await self.inbound_media.prepare(event)
         if await self.maybe_light_interaction(event):
             return
         await self.maybe_react(event)
@@ -242,7 +266,10 @@ class ConversationService:
             )
             log.info(
                 "Reacted event=%s emoji=%s(%s) reason=%s",
-                event.event_id, decision.name, decision.emoji_id, decision.reason,
+                event.event_id,
+                decision.name,
+                decision.emoji_id,
+                decision.reason,
             )
             return True
         except Exception:
@@ -253,7 +280,10 @@ class ConversationService:
 
     async def maybe_light_interaction(self, event: MessageEvent) -> bool:
         """Handle repetition and tiny native games without spending API tokens."""
-        if self.light_interaction_policy is None or self.native_interaction_sender is None:
+        if (
+            self.light_interaction_policy is None
+            or self.native_interaction_sender is None
+        ):
             return False
         try:
             decision = self.light_interaction_policy.decide(
@@ -275,7 +305,9 @@ class ConversationService:
                 event, transcript, event_id=f"local:{decision.kind}:{event.event_id}"
             )
             self.last_reply[event.scope] = time.time()
-            log.info("Local interaction event=%s kind=%s", event.event_id, decision.kind)
+            log.info(
+                "Local interaction event=%s kind=%s", event.event_id, decision.kind
+            )
             return True
         except Exception:
             log.exception("Local interaction failed event=%s", event.event_id)
@@ -294,7 +326,9 @@ class ConversationService:
             return event
         action = getattr(decision, "action", "ignore")
         if action != "allow":
-            log.info("Turn ignored by identity guard: %s", getattr(decision, "reason", ""))
+            log.info(
+                "Turn ignored by identity guard: %s", getattr(decision, "reason", "")
+            )
             return None
         cue = str(getattr(decision, "category", ""))
         return replace(event, social_cue=cue) if cue else event
@@ -310,12 +344,20 @@ class ConversationService:
             return False
         if event.group_id and event.group_id not in self.policy.allowed_groups:
             return False
-        text = event.text or ("[图片]" if event.image_urls else "")
+        text = event.text or (
+            "[非文字消息]" if event.image_urls or event.inbound_parts else ""
+        )
         if not text:
             return False
-        if not self.conversations.add_message(
-            event.event_id, event.scope, event.user_id, event.nickname, "user", text
-        ):
+        add_event = getattr(self.conversations, "add_event", None)
+        inserted = (
+            add_event(event)
+            if callable(add_event)
+            else self.conversations.add_message(
+                event.event_id, event.scope, event.user_id, event.nickname, "user", text
+            )
+        )
+        if not inserted:
             return False
         self.people.observe_user(event.user_id, event.nickname)
         if event.group_id:
@@ -350,7 +392,10 @@ class ConversationService:
             detail = getattr(getattr(self.reply_policy, "last", None), "reason", "")
             log.info(
                 "Reply admission event=%s scope=%s allowed=%s reason=%s",
-                event.event_id, event.scope, decision, detail,
+                event.event_id,
+                event.scope,
+                decision,
+                detail,
             )
             return decision
         except Exception:
@@ -392,23 +437,25 @@ class ConversationService:
             if event.group_id and self._is_unrequested_echo(event, plan.semantic_text):
                 log.info("Suppressing unrequested model echo event=%s", event.event_id)
                 return None
-            delivered = await self.reply_dispatcher.dispatch(
+            delivered = await self._deliver(
                 plan,
                 group_id=event.group_id,
                 user_id=None if event.group_id else event.user_id,
                 allowed_at=self._roster(event),
+                event=event,
             )
             if not delivered.sent:
                 return None
             clean = delivered.transcript
-            self.conversations.add_message(
-                f"reply:{event.event_id}",
-                event.scope,
-                "bot",
-                "Bot",
-                "assistant",
-                clean,
-            )
+            if not getattr(self.reply_dispatcher, "supports_part_receipts", False):
+                self.conversations.add_message(
+                    f"reply:{event.event_id}",
+                    event.scope,
+                    "bot",
+                    "Bot",
+                    "assistant",
+                    clean,
+                )
             commit = getattr(self.agent, "commit_delivered_reply", None)
             if callable(commit):
                 commit(reply, event, clean)
@@ -418,6 +465,7 @@ class ConversationService:
             if callable(record):
                 record(event, clean)
             self.dispatch_post_reply(event, clean, draft)
+            self._schedule_compaction(event)
             return clean
 
     def _is_unrequested_echo(self, event: MessageEvent, text: str) -> bool:
@@ -437,9 +485,11 @@ class ConversationService:
         self, trigger: MessageEvent, text: str, *, event_id: str
     ) -> None:
         """Persist and index one actual outbound turn through one boundary."""
-        self.conversations.add_message(
-            event_id, trigger.scope, "bot", "Bot", "assistant", text
-        )
+        has_delivery = getattr(self.conversations, "has_delivery", None)
+        if not (callable(has_delivery) and has_delivery(f"reply:{trigger.event_id}")):
+            self.conversations.add_message(
+                event_id, trigger.scope, "bot", "Bot", "assistant", text
+            )
         if self.prompt_sessions is not None and text.strip():
             try:
                 self.prompt_sessions.append(
@@ -448,6 +498,10 @@ class ConversationService:
             except Exception:
                 log.exception("Could not sync local assistant turn event=%s", event_id)
         self._observe_assistant(trigger, text, event_id)
+
+    def record_outbound(self, trigger, text, *, event_id):
+        """Scheduling port uses the same actual-delivery recording boundary."""
+        self.record_assistant_turn(trigger, text, event_id=event_id)
 
     def _observe_assistant(
         self, trigger: MessageEvent, text: str, event_id: str
@@ -458,22 +512,26 @@ class ConversationService:
         if trigger.origin == "operator":
             latest = self.conversation_intelligence.latest_frame(trigger.scope)
             reply_to = latest.focus.platform_message_id if latest is not None else ""
-        self.conversation_intelligence.observe(MessageEvent(
-            event_id=event_id,
-            scope=trigger.scope,
-            group_id=trigger.group_id,
-            user_id="bot",
-            nickname="Kinna",
-            text=text,
-            image_urls=(),
-            at_bot=False,
-            at_users=(),
-            timestamp=int(time.time()),
-            platform_message_id=event_id,
-            reply_to_message_id=reply_to,
-            reply_to_user_id=trigger.user_id if trigger.origin != "operator" else "",
-            origin="assistant",
-        ))
+        self.conversation_intelligence.observe(
+            MessageEvent(
+                event_id=event_id,
+                scope=trigger.scope,
+                group_id=trigger.group_id,
+                user_id="bot",
+                nickname="Kinna",
+                text=text,
+                image_urls=(),
+                at_bot=False,
+                at_users=(),
+                timestamp=int(time.time()),
+                platform_message_id=event_id,
+                reply_to_message_id=reply_to,
+                reply_to_user_id=trigger.user_id
+                if trigger.origin != "operator"
+                else "",
+                origin="assistant",
+            )
+        )
 
     async def send_reply(
         self,
@@ -506,13 +564,76 @@ class ConversationService:
         the same delivery boundary used by ordinary inbound turns.
         """
         plan = await self.reply_planner.plan(draft, event)
-        result = await self.reply_dispatcher.dispatch(
+        result = await self._deliver(
             plan,
             group_id=group_id,
             user_id=user_id,
             allowed_at=self._roster(event) if event else frozenset(),
+            event=event,
         )
         return result.transcript if result.sent else ""
+
+    async def _deliver(self, plan, *, group_id, user_id, allowed_at, event=None):
+        kwargs = {"group_id": group_id, "user_id": user_id, "allowed_at": allowed_at}
+        if event is not None and getattr(
+            self.reply_dispatcher, "supports_part_receipts", False
+        ):
+            begin_part = getattr(self.conversations, "begin_part", None)
+            if callable(begin_part):
+
+                async def intent(index, kind, text):
+                    return begin_part(
+                        f"reply:{event.event_id}", index, event.scope, kind, text
+                    )
+
+                kwargs["on_intent"] = intent
+
+            async def record(receipt):
+                settle = getattr(self.conversations, "settle_part", None)
+                if callable(settle):
+                    settle(f"reply:{event.event_id}", receipt)
+                if receipt.status != "sent":
+                    log.warning(
+                        "Uncertain delivery event=%s part=%s",
+                        event.event_id,
+                        receipt.index,
+                    )
+                    return
+                event_id = f"part:reply:{event.event_id}:{receipt.index}"
+                metadata = {
+                    "origin": "agent",
+                    "event_time": int(time.time() * 1000),
+                    "platform_message_id": receipt.platform_message_id,
+                    "reply_to_id": plan.quote_message_id,
+                    "parent_id": f"reply:{event.event_id}",
+                    "delivery_status": "sent",
+                    "parts": [{"kind": "text", "text": receipt.transcript}],
+                }
+                # Concrete store supports receipt metadata; small test adapters
+                # keep the original narrow repository interface.
+                if callable(getattr(self.conversations, "actual_recent", None)):
+                    self.conversations.add_message(
+                        event_id,
+                        event.scope,
+                        "bot",
+                        "Bot",
+                        "assistant",
+                        receipt.transcript,
+                        metadata=metadata,
+                    )
+                else:
+                    self.conversations.add_message(
+                        event_id,
+                        event.scope,
+                        "bot",
+                        "Bot",
+                        "assistant",
+                        receipt.transcript,
+                    )
+                self._observe_assistant(event, receipt.transcript, event_id)
+
+            kwargs["on_receipt"] = record
+        return await self.reply_dispatcher.dispatch(plan, **kwargs)
 
     @staticmethod
     def _roster(event: MessageEvent | None) -> frozenset[str]:
@@ -572,6 +693,42 @@ class ConversationService:
         """
         if self._closed:
             return False
+        if self.observation_store is not None:
+            base = (
+                observer.observer if isinstance(observer, _DraftObserver) else observer
+            )
+            identity = type(base).__module__ + "." + type(base).__qualname__
+            self._durable_handlers[identity] = base
+            # Mood and affection have transactional source-event dedupe. Style
+            # directives are advisory but may lack it, so crash recovery must
+            # not blindly repeat those consumers.
+            replayable = identity in {
+                "qunbot.relationships.evaluator.AffectionEvaluator",
+                "qunbot.emotion.system.EmotionSystem",
+            }
+            draft = (
+                asdict(observer.draft)
+                if isinstance(observer, _DraftObserver)
+                and isinstance(observer.draft, ReplyDraft)
+                else None
+            )
+            status = self.observation_store.enqueue(
+                key,
+                identity,
+                asdict(event),
+                bot_reply,
+                draft,
+                replayable=replayable,
+                capacity=self._observation_backlog,
+            )
+            if status == "queued":
+                self.observations.enqueued += 1
+                return True
+            if status == "duplicate":
+                self.observations.deduplicated += 1
+            else:
+                self.observations.dropped += 1
+            return False
         if key in self._seen:
             self.observations.deduplicated += 1
             return False
@@ -621,7 +778,40 @@ class ConversationService:
 
     @property
     def pending_observations(self) -> int:
+        if self.observation_store is not None:
+            return self.observation_store.pending()
         return self._queue.qsize() if self._queue is not None else 0
+
+    async def durable_observation_loop(self):
+        if self.observation_store is None:
+            return
+        self.observation_store.recover()
+        while not self._closed:
+            row = self.observation_store.lease(tuple(self._durable_handlers))
+            if row is None:
+                await asyncio.sleep(0.25)
+                continue
+            observer = self._durable_handlers[row["handler_id"]]
+            try:
+                event = MessageEvent(**json.loads(row["event_json"]))
+                if row["draft_json"] and callable(
+                    getattr(observer, "observe_draft", None)
+                ):
+                    draft = ReplyDraft(**json.loads(row["draft_json"]))
+                    await observer.observe_draft(event, row["reply"], draft)
+                else:
+                    await observer.observe(event, row["reply"])
+                self.observation_store.complete(row["id"])
+                self.observations.completed += 1
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                self.observation_store.failed(row["id"])
+                self.observations.failed += 1
+                log.warning(
+                    "Durable observation failed handler=%s; bounded policy applied",
+                    row["handler_id"],
+                )
 
     async def aclose(self, timeout: float = 5.0) -> None:
         """Stop accepting new work, drain the queue, then cancel what remains.
@@ -652,6 +842,12 @@ class ConversationService:
                 task.cancel()
             await asyncio.gather(*workers, return_exceptions=True)
         self._workers = []
+        compactions = list(self._compaction_tasks.values())
+        for task in compactions:
+            task.cancel()
+        if compactions:
+            await asyncio.gather(*compactions, return_exceptions=True)
+        self._compaction_tasks.clear()
         tasks = list(self._extract_tasks)
         for task in tasks:
             task.cancel()
@@ -682,6 +878,39 @@ class ConversationService:
             log.exception("Memory extraction failed for %s", scope)
         finally:
             self.extracting.discard(scope)
+
+    def _schedule_compaction(self, event: MessageEvent) -> None:
+        """Schedule short-term maintenance after delivery has been committed.
+
+        A provider timeout or a slow summarizer can no longer block the next
+        conversational turn. The ledger remains authoritative while this task
+        is pending, and the compactor's compare-and-swap commit discards a
+        stale result safely if new messages arrive first.
+        """
+        if event.origin == "operator":
+            return
+        compactor = getattr(self.agent, "conversation_compactor", None)
+        if (
+            compactor is None
+            or event.scope in self._compaction_tasks
+            or not self._compaction_budget.admit(event.scope)
+        ):
+            return
+        task = asyncio.get_running_loop().create_task(
+            self._compact_safe(compactor, event.scope, event.event_id)
+        )
+        self._compaction_tasks[event.scope] = task
+        task.add_done_callback(
+            lambda done, scope=event.scope: self._compaction_tasks.pop(scope, None)
+        )
+
+    async def _compact_safe(self, compactor, scope: str, event_id: str) -> None:
+        try:
+            await compactor.compact_if_needed(scope, current_event_id=event_id)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            log.exception("Background short-term compaction failed scope=%s", scope)
 
     def scope_lock(self, scope: str) -> asyncio.Lock:
         return self.scope_locks.setdefault(scope, asyncio.Lock())

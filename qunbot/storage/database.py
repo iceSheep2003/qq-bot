@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import pkgutil
 import sqlite3
 import threading
 from contextlib import contextmanager
@@ -11,22 +10,32 @@ from pathlib import Path
 
 
 def migration_modules() -> list:
-    """Every storage module that declares a ``migrate(db)`` hook.
+    """Explicit built-in migrations. Skills never contribute a migration.
 
-    Discovered rather than listed: a new repository adds its own table by
-    dropping a file in this package with a ``migrate`` function, and never has
-    to edit this one. Alphabetical order keeps the sequence deterministic —
-    the tables are independent, so no ordering constraint exists.
+    Existing additive migrations are retained for upgrade compatibility. New
+    kernel persistence must be reviewed into this versioned bootstrap list.
     """
-    package_dir = str(Path(__file__).resolve().parent)
-    modules = []
-    for info in sorted(pkgutil.iter_modules([package_dir]), key=lambda i: i.name):
-        if info.name == "base":
-            continue
-        module = import_module(f"{__package__}.{info.name}")
-        if callable(getattr(module, "migrate", None)):
-            modules.append(module)
-    return modules
+    names = (
+        "activity",
+        "assets",
+        "continuation",
+        "conversation",
+        "executions",
+        "extraction_runs",
+        "jobs",
+        "knowledge",
+        "memory",
+        "observations",
+        "ontology",
+        "operations",
+        "persona_review",
+        "prompt_sessions",
+        "relationships",
+        "slang",
+        "style",
+        "topic_observations",
+    )
+    return [import_module(f"{__package__}.{name}") for name in names]
 
 
 class SqliteDatabase:

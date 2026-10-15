@@ -220,7 +220,7 @@ class RoomReadingPolicy:
 
         if self._is_filler(text):
             add(-0.6, "寒暄或语气词")
-        if event.image_urls and not text:
+        if event.has_image and not text:
             add(-0.8, "只有图片")
 
         if self._is_burst(rows, now):

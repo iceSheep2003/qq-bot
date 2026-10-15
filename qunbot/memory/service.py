@@ -17,11 +17,13 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import re
 import time
 
 from ..ports import ChatModel, ConversationRepository, MemoryRepository
 from . import dedupe, ranking
+from .context import MemoryContextPolicy
 from .embeddings import embeddings_from_env
 from .graph import (
     GraphError,
@@ -31,6 +33,7 @@ from .graph import (
     settings_from_env,
 )
 from .models import (
+    FACT_TYPES,
     GROUP_SUBJECT,
     MemoryEvidence,
     MemoryProposal,
@@ -51,6 +54,7 @@ MODEL_CONFIDENCE_CAP = 0.9
 FOCUS_TTL_SECONDS = 900
 MAINTAIN_INTERVAL_SECONDS = 300
 EXTRACTION_STRATEGY_VERSION = "evidence-topics-v1"
+DEFAULT_CONTEXT_CHAR_BUDGET = 1800
 
 EXTRACT_PROMPT = (
     "从聊天中提取最多3条明确、可长期保留的事实或偏好。不要推断私人敏感信息，"
@@ -88,6 +92,7 @@ class MemoryService:
         embeddings=None,
         *,
         maintain_interval: int = MAINTAIN_INTERVAL_SECONDS,
+        context_char_budget: int | None = None,
         knowledge=None,
         graph_settings: GraphSettings | None = None,
     ):
@@ -108,6 +113,11 @@ class MemoryService:
         # to force lexical-only retrieval.
         self.embeddings = embeddings_from_env() if embeddings is None else embeddings
         self.maintain_interval = maintain_interval
+        self.context_policy = (
+            MemoryContextPolicy.from_env() if context_char_budget is None
+            else MemoryContextPolicy(context_char_budget)
+        )
+        self.context_char_budget = self.context_policy.char_budget
         self._last_maintain = 0.0
         if self.embeddings:
             attach = getattr(memories, "attach_embedder", None)
@@ -141,7 +151,15 @@ class MemoryService:
             log.warning("memory reinforcement failed for scope=%s", scope, exc_info=True)
         return [hit.item.content for hit in hits]
 
-    def related_context(self, scope: str, query: str, limit: int = 4) -> dict:
+    def related_context(
+        self,
+        scope: str,
+        query: str,
+        limit: int = 4,
+        *,
+        char_budget: int | None = None,
+        subject_user_id: str | None = None,
+    ) -> dict:
         """Structured dual-channel recall for natural, non-mechanical use.
 
         Canonical facts answer "what is known". Persona hints answer only "how
@@ -149,11 +167,11 @@ class MemoryService:
         from being repeated aloud like a CRM record.
         """
         try:
-            focus = self._focus_subject(scope)
+            focus = subject_user_id if subject_user_id is not None else self._focus_subject(scope)
             hits = self.recall(scope, query, limit, subject_user_id=focus)
         except Exception:
             log.exception("memory context retrieval failed for scope=%s", scope)
-            return {"items": [], "usage_rule": "本轮不使用长期记忆"}
+            return {"items": [], "topics": [], "usage_rule": "本轮不使用长期记忆"}
         items = []
         for hit in hits:
             item = hit.item
@@ -168,19 +186,32 @@ class MemoryService:
                     "medium" if item.confidence >= .6 else "low"
                 ),
             })
+        topics = []
+        topic_reader = getattr(self.memories, "topic_context", None)
+        if callable(topic_reader):
+            try:
+                topics = list(topic_reader(scope, query, limit=3, subject_user_id=focus))
+            except Exception:
+                log.warning("long-memory topic lookup failed for scope=%s", scope, exc_info=True)
+        policy = self.context_policy if char_budget is None else MemoryContextPolicy(char_budget)
+        payload = policy.assemble(items, topics)
+        items = payload["items"]
         if items:
             try:
-                self.memories.reinforce([hit.item.id for hit in hits])
+                selected_ids = {int(item["id"]) for item in items if item.get("id") is not None}
+                self.memories.reinforce(
+                    [hit.item.id for hit in hits if hit.item.id in selected_ids]
+                )
             except Exception:
                 log.warning("memory reinforcement failed for scope=%s", scope, exc_info=True)
-        return {
-            "items": items,
-            "usage_rule": (
-                "记忆仅是背景事实，不是本轮话题。direct 可在确有帮助时自然提起；"
-                "soft_echo 只轻描淡写地呼应；tone_only 只改变语气，禁止说出记忆内容；"
-                "avoid_unless_asked 除非对方明确问起，否则不要提。"
-            ),
-        }
+        return payload
+
+    def context_for_turn(self, event, query: str, limit: int = 4) -> dict:
+        # Do not infer the subject from the latest row: another group member
+        # may have spoken between admission and prompt assembly.
+        return self.related_context(
+            event.scope, query, limit, subject_user_id=event.user_id
+        )
 
     def recall(
         self,
@@ -464,6 +495,8 @@ class MemoryService:
             confidence = float(item.get("confidence", DEFAULT_CONFIDENCE))
         except (TypeError, ValueError):
             confidence = DEFAULT_CONFIDENCE
+        if not math.isfinite(confidence) or item.get("fact_type", "fact") not in FACT_TYPES:
+            return None
         confidence = max(0.0, min(MODEL_CONFIDENCE_CAP, confidence))
         try:
             importance = max(1, min(5, int(item.get("importance", 1))))
@@ -472,12 +505,16 @@ class MemoryService:
         requested_ids = item.get("evidence_event_ids") or []
         if not isinstance(requested_ids, list):
             requested_ids = []
-        evidence_rows = [by_event[str(key)] for key in requested_ids if str(key) in by_event]
-        if not evidence_rows:
-            evidence_rows = [
-                row for row in by_event.values()
-                if group_level or str(_field(row, "user_id", "")) == subject
-            ][-4:]
+        # Missing or invented evidence IDs are a rejection, not permission to
+        # attach arbitrary recent messages. Personal self-reports require an
+        # observation authored by that subject.
+        if not requested_ids or any(str(key) not in by_event for key in requested_ids):
+            return None
+        evidence_rows = [by_event[key] for key in dict.fromkeys(str(key) for key in requested_ids)]
+        if not group_level and not any(
+            str(_field(row, "user_id", "")) == subject for row in evidence_rows
+        ):
+            return None
         evidence = tuple(
             MemoryEvidence(
                 event_id=str(_field(row, "event_id", "")),

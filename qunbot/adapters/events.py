@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from ..domain import MessageEvent
+from ..domain import InboundPart, MessageEvent
 
 
 def parse_message(data: dict) -> MessageEvent | None:
@@ -20,6 +20,41 @@ def parse_message(data: dict) -> MessageEvent | None:
     parts = data.get("message", [])
     if not isinstance(parts, list):
         parts = [{"type": "text", "data": {"text": str(data.get("raw_message", ""))}}]
+    parts = [
+        p
+        for p in parts[:100]
+        if isinstance(p, dict) and isinstance(p.get("data", {}), dict)
+    ]
+    structured = []
+    for part in parts:
+        kind, payload = part.get("type"), part.get("data", {})
+        if kind == "text":
+            structured.append(
+                InboundPart("text", text=str(payload.get("text", ""))[:12000])
+            )
+        elif kind in {"image", "record"}:
+            structured.append(
+                InboundPart(
+                    "image" if kind == "image" else "audio",
+                    file_ref=str(payload.get("file", ""))[:2000],
+                    url=str(payload.get("url", ""))[:4000],
+                )
+            )
+        elif kind == "face":
+            structured.append(
+                InboundPart("face", face_id=str(payload.get("id", ""))[:160])
+            )
+        elif kind in {"at", "reply"}:
+            structured.append(
+                InboundPart(
+                    "at" if kind == "at" else "quote",
+                    target_id=str(payload.get("qq" if kind == "at" else "id", ""))[
+                        :160
+                    ],
+                )
+            )
+        else:
+            structured.append(InboundPart("unknown"))
     text = "".join(
         str(p.get("data", {}).get("text", "")) for p in parts if p.get("type") == "text"
     ).strip()
@@ -51,4 +86,5 @@ def parse_message(data: dict) -> MessageEvent | None:
         platform_message_id=str(data.get("message_id") or ""),
         reply_to_message_id=str(reply_data.get("id") or ""),
         reply_to_user_id=str(reply_data.get("user_id") or ""),
+        inbound_parts=tuple(structured),
     )

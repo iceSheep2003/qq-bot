@@ -143,7 +143,7 @@ class PersonaDirector:
                             "situation": {
                                 "message": event.text[:300],
                                 "bot_reply": (bot_reply or "")[:200],
-                                "has_image": bool(event.image_urls),
+                                "has_image": event.has_image,
                                 "addressed_to_bot": bool(event.at_bot),
                             },
                         },

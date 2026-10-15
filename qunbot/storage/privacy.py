@@ -13,6 +13,7 @@ from __future__ import annotations
 import logging
 
 from .database import SqliteDatabase
+from .ontology import GraphStore
 
 log = logging.getLogger(__name__)
 
@@ -60,12 +61,39 @@ def forget_user(database: SqliteDatabase, user_id: str) -> int:
         ).fetchall()
     }
     removed = 0
+    # The new graph stores typed references rather than user_id columns, so
+    # column discovery alone would falsely claim complete deletion.
+    graph = GraphStore(database)
+    for scope in prompt_scopes:
+        removed += graph.forget_person(scope, user_id)
     with database.transaction():
         for scope in prompt_scopes:
             cursor = database.db.execute(
                 "DELETE FROM prompt_session_events WHERE scope=?", (scope,)
             )
             removed += cursor.rowcount or 0
+            database.db.execute(
+                "DELETE FROM conversation_snapshots WHERE scope=?", (scope,)
+            )
+            event_ids = [
+                str(row[0])
+                for row in database.db.execute(
+                    "SELECT event_id FROM messages WHERE scope=? AND user_id=?",
+                    (scope, user_id),
+                )
+            ]
+            for event_id in event_ids:
+                database.db.execute(
+                    "DELETE FROM conversation_projection_outbox WHERE event_id=?",
+                    (event_id,),
+                )
+                database.db.execute(
+                    "DELETE FROM message_metadata WHERE event_id=?", (event_id,)
+                )
+            database.db.execute(
+                "DELETE FROM observation_outbox WHERE json_extract(event_json,'$.scope')=? AND json_extract(event_json,'$.user_id')=?",
+                (scope, user_id),
+            )
         for table in _personal_tables(database):
             cursor = database.db.execute(
                 f"DELETE FROM {table} WHERE user_id=?", (user_id,)

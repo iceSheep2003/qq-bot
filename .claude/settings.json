@@ -2,7 +2,8 @@
   "permissions": {
     "allow": [
       "Bash(.venv/bin/python -m pip install -e . -q)",
-      "Bash(.venv/bin/python -c \"import qunbot.emotion; print\\('ok', qunbot.emotion.__all__\\)\")"
+      "Bash(.venv/bin/python -c \"import qunbot.emotion; print\\('ok', qunbot.emotion.__all__\\)\")",
+      "Bash(python3 -m pytest tests/test_slang.py -q)"
     ]
   }
 }

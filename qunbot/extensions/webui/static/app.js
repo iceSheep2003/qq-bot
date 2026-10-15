@@ -9,7 +9,8 @@ const glyphs = {
   moderation: "◇", media: "▣", system: "⚙", memory: "◎", schedules: "◷", guide: "?",
 };
 
-let memoryView = { tab: "overview", scope: "" };
+let memoryView = { tab: "overview", scope: "", after: "", previous: [], query: "", status: "" };
+let memoryRenderEpoch = 0;
 let graphController = null;
 let scheduleView = { tab: "jobs", overview: null, jobs: [] };
 
@@ -81,7 +82,7 @@ function formatTime(value) {
 }
 
 function statusBadge(status) {
-  const labels = { active: "有效", candidate: "候选", archived: "归档", expired: "过期", superseded: "已替代", succeeded: "成功", failed: "失败", running: "进行中", approved: "已审核", rejected: "已拒绝" };
+  const labels = { active: "有效", candidate: "候选", accepted_as_report: "已接纳的说法", accepted: "已接纳", disputed: "有争议", withdrawn: "已撤回", observed: "已观察", unknown: "未确认", retired: "已停用", archived: "归档", expired: "过期", superseded: "已替代", succeeded: "成功", failed: "失败", running: "进行中", approved: "已审核", rejected: "已拒绝" };
   return `<span class="data-badge status-${escapeHtml(status || "unknown")}">${escapeHtml(labels[status] || status || "未知")}</span>`;
 }
 
@@ -119,38 +120,42 @@ function renderOverview(data) {
   const statuses = memory.by_status || {};
   const latest = memory.latest_extraction;
   return `<div class="metric-grid">
-    <article class="metric-card"><span>长期记忆</span><strong>${memory.total || 0}</strong><small>${statuses.active || 0} 条当前有效</small></article>
+    <article class="metric-card"><span>长期记忆</span><strong>${memory.total || 0}</strong><small>${data.source === "ontology" ? `${statuses.accepted_as_report || 0} 条已接纳的说法` : `${statuses.active || 0} 条当前有效`}</small></article>
     <article class="metric-card"><span>Topic</span><strong>${memory.topics || 0}</strong><small>由长期事实关联形成</small></article>
     <article class="metric-card"><span>群友档案</span><strong>${data.people || 0}</strong><small>身份与关系状态</small></article>
-    <article class="metric-card"><span>黑话候选</span><strong>${data.slang || 0}</strong><small>包含待审核内容</small></article>
+    <article class="metric-card"><span>黑话释义</span><strong>${data.slang || 0}</strong><small>词义证据与起源分开记录</small></article>
   </div>
   <div class="overview-grid">
     <article class="data-panel"><div class="panel-title"><h3>记忆状态</h3></div>
       <div class="status-stack">${Object.keys(statuses).length ? Object.entries(statuses).map(([key, value]) => `<div><span>${statusBadge(key)}</span><b>${value}</b></div>`).join("") : `<p class="muted">还没有长期记忆。</p>`}</div>
     </article>
     <article class="data-panel"><div class="panel-title"><h3>最近一次提炼</h3></div>
-      ${latest ? `<dl class="fact-grid"><div><dt>状态</dt><dd>${statusBadge(latest.status)}</dd></div><div><dt>消息范围</dt><dd>${latest.start_message_id}—${latest.end_message_id}</dd></div><div><dt>采用 / 拒绝</dt><dd>${latest.accepted_count} / ${latest.rejected_count}</dd></div><div><dt>完成时间</dt><dd>${formatTime(latest.finished_at)}</dd></div></dl>${latest.error ? `<p class="inline-error">${escapeHtml(latest.error)}</p>` : ""}` : emptyState("尚未执行提炼", "达到消息间隔后会在后台自动运行。")}
+      ${latest ? `<dl class="fact-grid"><div><dt>状态</dt><dd>${statusBadge(latest.status)}</dd></div><div><dt>消息范围</dt><dd>${latest.start_message_id}—${latest.end_message_id}</dd></div><div><dt>${data.source === "ontology" ? "写入 / 拒绝" : "采用 / 拒绝"}</dt><dd>${data.source === "ontology" ? latest.written : latest.accepted_count} / ${data.source === "ontology" ? latest.rejected : latest.rejected_count}</dd></div><div><dt>完成时间</dt><dd>${formatTime(latest.finished_at)}</dd></div></dl>${latest.error ? `<p class="inline-error">${escapeHtml(latest.error)}</p>` : ""}` : emptyState("尚未执行提炼", "达到消息间隔后会在后台自动运行。")}
     </article>
   </div>`;
 }
 
 function renderMemories(rows) {
+  if (rows[0]?.ontology) return renderOntologyRecords(rows);
   if (!rows.length) return emptyState("还没有长期记忆", "新的提炼结果会在这里显示，并附带来源证据和修订记录。");
   return `<div class="list-head"><div><h3>长期记忆</h3><p>点击一条记录查看证据、Topic 和修订历史。</p></div><input id="memory-filter" type="search" placeholder="搜索记忆内容"></div>
   <div class="record-list" id="memory-records">${rows.map((row) => `<button class="record-card" data-memory-id="${row.id}" data-filter="${escapeHtml(row.content.toLowerCase())}"><div class="record-main"><div class="record-meta">${statusBadge(row.status)}<span>${escapeHtml(row.fact_type)}</span><span>${escapeHtml(row.user_id === "_group_" ? "群共享" : row.user_id)}</span></div><strong>${escapeHtml(row.content)}</strong></div><div class="record-side"><b>${Math.round(Number(row.confidence || 0) * 100)}%</b><small>${formatTime(row.updated_at)}</small></div></button>`).join("")}</div>`;
 }
 
 function renderTopics(rows) {
+  if (rows[0]?.ontology) return renderOntologyRecords(rows);
   if (!rows.length) return emptyState("还没有长期 Topic", "带 Topic 的记忆提炼成功后会自动建立关联。");
   return `<div class="card-grid">${rows.map((row) => `<button class="topic-card" data-topic-id="${row.id}"><div class="topic-orbit"></div><span>${row.memory_count} 条记忆</span><h3>${escapeHtml(row.canonical_name)}</h3><p>${escapeHtml(row.summary || "暂无摘要")}</p><small>最近出现 ${formatTime(row.last_seen_at)}</small></button>`).join("")}</div>`;
 }
 
 function renderPeople(rows) {
+  if (rows[0]?.ontology) return renderOntologyRecords(rows);
   if (!rows.length) return emptyState("还没有人物档案", "群友发言后会建立分群身份和关系记录。");
   return `<div class="people-grid">${rows.map((row) => `<button class="person-card" data-group-id="${escapeHtml(row.group_id)}" data-user-id="${escapeHtml(row.user_id)}"><span class="avatar-dot">${escapeHtml((row.nickname || row.user_id).slice(0, 1))}</span><div><h3>${escapeHtml(row.card || row.nickname || row.user_id)}</h3><p>${escapeHtml(row.stage_label || "普通关系")} · ${escapeHtml(row.group_id)}</p><small>${escapeHtml(row.relationship_note || "暂无关系变化")}</small></div><strong>${row.affection || 0}</strong></button>`).join("")}</div>`;
 }
 
 function renderSlang(rows) {
+  if (rows[0]?.ontology) return renderOntologyRecords(rows);
   if (!rows.length) return emptyState("还没有黑话候选", "达到跨用户、跨日期和出现次数门槛后才会记录候选词。");
   return `<div class="slang-grid">${rows.map((row) => {
     const term = escapeHtml(row.term);
@@ -208,7 +213,22 @@ async function submitReview(term, action, meaning) {
 
 function renderExtractions(rows) {
   if (!rows.length) return emptyState("还没有提炼记录", "下一次记忆提炼会记录消息边界、结果和错误原因。");
+  if (rows[0]?.source === "ontology") return `<div class="run-list">${rows.map((row) => `<article class="run-card"><div class="run-marker ${escapeHtml(row.status)}"></div><div><div class="record-meta">${statusBadge(row.status)}<span>${escapeHtml(row.strategy_version)}</span><span>${escapeHtml(row.scope)}</span></div><h3>消息 ${row.start_message_id}—${row.end_message_id}</h3><p>读取 ${row.message_count} 条 · 提议 ${row.proposed} 条 · 写入 ${row.written} 条 · 拒绝 ${row.rejected} 条</p>${row.error ? `<small class="inline-error">${escapeHtml(row.error)}</small>` : `<small>${formatTime(row.finished_at || row.started_at)}</small>`}</div></article>`).join("")}</div>`;
   return `<div class="run-list">${rows.map((row) => `<article class="run-card"><div class="run-marker ${escapeHtml(row.status)}"></div><div><div class="record-meta">${statusBadge(row.status)}<span>${escapeHtml(row.strategy_version)}</span></div><h3>消息 ${row.start_message_id}—${row.end_message_id}</h3><p>处理 ${row.message_count} 条，采用 ${row.accepted_count} 条，拒绝 ${row.rejected_count} 条。</p>${row.error ? `<small class="inline-error">${escapeHtml(row.error)}</small>` : `<small>${formatTime(row.finished_at || row.started_at)}</small>`}</div></article>`).join("")}</div>`;
+}
+
+function ontologyButton(row, label = row.label) {
+  return `<button class="linked-memory" data-ontology-id="${escapeHtml(row.ref_id)}" data-ontology-scope="${escapeHtml(row.scope)}">${statusBadge(row.status)}<span>${escapeHtml(String(label))}</span></button>`;
+}
+
+function bindOntologyDetails(root = document) {
+  root.querySelectorAll("[data-ontology-id]").forEach((button) => {
+    button.onclick = () => openOntology({scope: button.dataset.ontologyScope, ref_id: button.dataset.ontologyId});
+  });
+}
+
+function renderOntologyRecords(rows) {
+  return `<div class="record-list">${rows.map((row) => `<button class="record-card" data-ontology-id="${escapeHtml(row.ref_id)}" data-ontology-scope="${escapeHtml(row.scope)}"><div class="record-main"><div class="record-meta">${statusBadge(row.status)}<span>${escapeHtml(row.scope)}</span>${row.metadata.map((value) => `<span>${escapeHtml(value)}</span>`).join("")}</div><strong>${escapeHtml(String(row.label))}</strong>${row.summary ? `<p>${escapeHtml(row.summary)}</p>` : ""}</div><div class="record-side"><small>${formatTime(row.updated_at_ms / 1000)}</small></div></button>`).join("")}</div>`;
 }
 
 async function showDetail(title, content) {
@@ -226,6 +246,26 @@ async function openMemory(id) {
     <section class="detail-section"><h4>修订历史</h4>${revisions.length ? revisions.map((item) => `<div class="revision"><span>${escapeHtml(item.action)}</span><p>${escapeHtml(item.new_content || item.old_content || item.reason)}</p><small>${formatTime(item.created_at)}</small></div>`).join("") : `<p class="muted">暂无修订记录。</p>`}</section>`);
 }
 
+async function openOntology(node) {
+  try {
+    const row = (await api(`/api/memory/ontology-detail?scope=${encodeURIComponent(node.scope)}&id=${encodeURIComponent(node.ref_id)}`)).data;
+    const item = row.node;
+    const labels = {candidate: "候选说法", accepted_as_report: "已接纳的说法", disputed: "有争议", superseded: "已修订", expired: "已过期", withdrawn: "已撤回"};
+    const state = row.display?.status || item.epistemic_status || item.status || "observed";
+    const label = row.display?.label ?? item.typed_value?.value ?? item.name ?? item.definition ?? item.account_ref ?? node.label ?? item.type;
+    showDetail("图谱记录", `<div class="detail-lead"><span class="status-badge">${escapeHtml(labels[state] || state)}</span><h3>${escapeHtml(String(label))}</h3><p>${escapeHtml(row.interpretation)}</p></div>
+      <section class="detail-section"><h4>来源证据</h4>${(row.evidence || []).map((e) => `<article class="evidence"><p>${escapeHtml(e.excerpt)}</p><small>${escapeHtml(e.source_id)} · ${escapeHtml(e.role)}</small></article>`).join("") || '<p class="muted">此记录没有可展示的原文证据。</p>'}</section>
+      ${item.type === "SlangSense" ? `<section class="detail-section"><h4>词义与来源</h4><p>${escapeHtml(item.definition)}</p><small>首次观察 ${formatTime(item.first_observed_at / 1000)}；首次观察不等于起源。</small>${(row.origin_evidence || []).map((e) => `<article class="evidence"><p>${escapeHtml(e.excerpt)}</p></article>`).join("") || '<p class="muted">尚无证明起源的证据。</p>'}</section>` : ""}
+      ${item.type === "SocialState" ? `<section class="detail-section"><h4>互动状态</h4><p>好感度 ${Number(item.affection)} · ${escapeHtml(item.relationship_stage)}</p><div class="chip-row">${Object.entries(item.emotion).map(([key, value]) => `<span>${escapeHtml(key)} ${Number(value)}</span>`).join("")}</div></section>` : ""}
+      <section class="detail-section"><h4>关联记录</h4>${(row.related || []).map((record) => ontologyButton(record, `${record.relation} · ${record.label}`)).join("") || '<p class="muted">没有关联记录。</p>'}</section>
+      <section class="detail-section"><h4>修订历史</h4>${(row.revisions || []).map((revision) => `<div class="revision"><span>版本 ${revision.revision}</span><p>${escapeHtml(revision.reason)}</p><small>${statusBadge(revision.node.epistemic_status || revision.node.status || "observed")} · ${formatTime(revision.node.updated_at / 1000)}</small></div>`).join("")}</section>
+      <section class="detail-section"><small>版本 ${row.revision} · ${escapeHtml(item.type)} · ${escapeHtml(item.id)}</small></section>`);
+    bindOntologyDetails($("#detail-content"));
+  } catch (error) {
+    showDetail("图谱记录", `<p class="inline-error">${escapeHtml(error.message || "读取失败，请重新加载图谱。")}</p>`);
+  }
+}
+
 async function openTopic(id) {
   const row = (await api(`/api/memory/topics/${id}`)).data;
   showDetail(row.canonical_name, `<div class="detail-lead"><h3>${escapeHtml(row.summary || row.canonical_name)}</h3><p>${row.memory_count || (row.memories || []).length} 条关联记忆 · 最近出现 ${formatTime(row.last_seen_at)}</p></div><section class="detail-section"><h4>关联记忆</h4>${(row.memories || []).map((item) => `<button class="linked-memory" data-memory-id="${item.id}">${statusBadge(item.status)}<span>${escapeHtml(item.content)}</span></button>`).join("") || `<p class="muted">暂无关联记忆。</p>`}</section>`);
@@ -239,6 +279,8 @@ async function openPerson(groupId, userId) {
 }
 
 async function renderMemory(tab = memoryView.tab) {
+  const epoch = ++memoryRenderEpoch;
+  if (tab !== memoryView.tab) { memoryView.after = ""; memoryView.previous = []; }
   memoryView.tab = tab;
   if (graphController) { graphController.destroy(); graphController = null; }
   document.querySelectorAll(".nav-item").forEach((item) => item.classList.toggle("active", item.dataset.target === "memory"));
@@ -248,11 +290,12 @@ async function renderMemory(tab = memoryView.tab) {
   history.replaceState(null, "", "#memory");
   try {
     const overview = await memoryApi("overview");
+    const page = `limit=200${memoryView.after ? `&after=${encodeURIComponent(memoryView.after)}` : ""}`;
     let payload = null;
-    if (tab === "items") payload = await memoryApi("items?limit=200");
-    if (tab === "topics") payload = await memoryApi("topics?limit=200");
-    if (tab === "people") payload = await memoryApi("people?limit=200");
-    if (tab === "slang") payload = await memoryApi("slang?limit=200");
+    if (tab === "items") payload = await memoryApi(`items?${page}&q=${encodeURIComponent(memoryView.query)}&status=${encodeURIComponent(memoryView.status)}`);
+    if (tab === "topics") payload = await memoryApi(`topics?${page}`);
+    if (tab === "people") payload = await memoryApi(`people?${page}`);
+    if (tab === "slang") payload = await memoryApi(`slang?${page}`);
     if (tab === "persona_review") payload = (await api(`/api/review/persona${memoryView.scope ? `?scope=${encodeURIComponent(memoryView.scope)}` : ""}`)).data;
     if (tab === "extractions") payload = await memoryApi("extractions?limit=200");
     if (tab === "graph") payload = await memoryApi("graph?limit=120");
@@ -263,9 +306,23 @@ async function renderMemory(tab = memoryView.tab) {
       : tab === "slang" ? renderSlang(payload)
       : tab === "persona_review" ? renderPersonaQueue(payload)
       : tab === "extractions" ? renderExtractions(payload)
+      : overview.source === "ontology" && !memoryView.scope ? emptyState("选择一个群查看图谱", "右上角选择会话范围；不同群的图谱分别展示。")
       : `<div class="graph-shell"><div class="graph-note"><b>关系图谱</b><span>滚轮缩放 · 拖动画布 · 拖拽节点 · 点击查看详情</span></div><canvas id="memory-graph" aria-label="记忆关系图谱"></canvas><div class="graph-legend"><span class="legend-topic">Topic</span><span class="legend-memory">记忆</span><span class="legend-person">群友</span><span class="legend-bot">Bot</span></div></div>`;
-    $("#content").innerHTML = memoryChrome(overview, body);
-    $("#memory-scope").onchange = (event) => { memoryView.scope = event.target.value; renderMemory(); };
+    if (epoch !== memoryRenderEpoch) return;
+    const paged = overview.source === "ontology" && ["items", "topics", "people", "slang"].includes(tab);
+    const pagination = paged ? `<div class="review-actions"><button id="memory-previous" ${memoryView.previous.length ? "" : "disabled"}>上一页</button><span>本页 ${payload.length} 条</span><button id="memory-next" ${payload.length >= 200 ? "" : "disabled"}>下一页</button></div>` : "";
+    const filters = overview.source === "ontology" && tab === "items" ? `<form id="ontology-search" class="memory-toolbar"><input id="ontology-query" type="search" placeholder="搜索记忆内容" value="${escapeHtml(memoryView.query)}"><select id="ontology-status" aria-label="记忆状态">${["", "candidate", "accepted_as_report", "disputed", "superseded", "expired", "withdrawn"].map((state) => `<option value="${state}" ${state === memoryView.status ? "selected" : ""}>${({candidate: "候选", accepted_as_report: "已接纳的说法", disputed: "有争议", superseded: "已替代", expired: "过期", withdrawn: "已撤回"})[state] || "全部状态"}</option>`).join("")}</select><button type="submit">搜索</button></form>` : "";
+    $("#content").innerHTML = memoryChrome(overview, filters + body + pagination);
+    if ($("#ontology-search")) $("#ontology-search").onsubmit = (event) => {
+      event.preventDefault(); memoryView.query = $("#ontology-query").value; memoryView.status = $("#ontology-status").value;
+      memoryView.after = ""; memoryView.previous = []; renderMemory();
+    };
+    $("#memory-scope").onchange = (event) => { memoryView.scope = event.target.value; memoryView.after = ""; memoryView.previous = []; renderMemory(); };
+    if (paged) {
+      $("#memory-next").onclick = () => { memoryView.previous.push(memoryView.after); memoryView.after = payload.at(-1).cursor; renderMemory(); };
+      $("#memory-previous").onclick = () => { memoryView.after = memoryView.previous.pop() || ""; renderMemory(); };
+    }
+    bindOntologyDetails();
     document.querySelectorAll("[data-memory-tab]").forEach((button) => { button.onclick = () => renderMemory(button.dataset.memoryTab); });
     document.querySelectorAll("[data-memory-id]").forEach((button) => { button.onclick = () => openMemory(button.dataset.memoryId); });
     document.querySelectorAll("[data-topic-id]").forEach((button) => { button.onclick = () => openTopic(button.dataset.topicId); });
@@ -296,8 +353,9 @@ async function renderMemory(tab = memoryView.tab) {
     });
     const filter = $("#memory-filter");
     if (filter) filter.oninput = () => document.querySelectorAll("#memory-records .record-card").forEach((item) => item.classList.toggle("hidden", !item.dataset.filter.includes(filter.value.trim().toLowerCase())));
-    if (tab === "graph") graphController = createMemoryGraph($("#memory-graph"), payload);
+    if (tab === "graph" && $("#memory-graph")) graphController = createMemoryGraph($("#memory-graph"), payload);
   } catch (error) {
+    if (epoch !== memoryRenderEpoch) return;
     $("#content").innerHTML = `<section class="memory-workspace">${emptyState("记忆中心加载失败", error.message || "请稍后重试")}</section>`;
   }
 }
@@ -435,9 +493,12 @@ function createMemoryGraph(canvas, data) {
   }, { signal: signal.signal });
   canvas.addEventListener("pointerup", (event) => {
     if (!moved && dragged) {
-      if (dragged.kind === "memory") openMemory(dragged.ref_id);
-      if (dragged.kind === "topic") openTopic(dragged.ref_id);
-      if (dragged.kind === "person") openPerson(dragged.group_id, dragged.ref_id);
+      if (dragged.ontology) openOntology(dragged);
+      else {
+        if (dragged.kind === "memory") openMemory(dragged.ref_id);
+        if (dragged.kind === "topic") openTopic(dragged.ref_id);
+        if (dragged.kind === "person") openPerson(dragged.group_id, dragged.ref_id);
+      }
     }
     dragged = null; last = null; canvas.releasePointerCapture(event.pointerId);
   }, { signal: signal.signal });

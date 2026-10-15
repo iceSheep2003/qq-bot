@@ -10,5 +10,6 @@ if TYPE_CHECKING:
 
 class SqliteRepository:
     def __init__(self, database: SqliteDatabase):
+        self.database = database
         self.db = database.db
         self.transaction = database.transaction

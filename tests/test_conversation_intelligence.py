@@ -20,55 +20,79 @@ from qunbot.storage.topic_observations import TopicObservationStore
 
 
 class _Rows:
-    def recent(self, scope, limit=18): return []
+    def recent(self, scope, limit=18):
+        return []
 
 
 class _ActualDialogue:
     def recent(self, scope, limit=240):
         rows = []
         for i in range(30):
-            rows.append({
-                "event_id": f"e{i}", "role": "assistant" if i % 2 else "user",
-                "nickname": "Bot" if i % 2 else "小明",
-                "user_id": "bot" if i % 2 else "7",
-                "content": f"实际对话{i}",
-            })
+            rows.append(
+                {
+                    "event_id": f"e{i}",
+                    "role": "assistant" if i % 2 else "user",
+                    "nickname": "Bot" if i % 2 else "小明",
+                    "user_id": "bot" if i % 2 else "7",
+                    "content": f"实际对话{i}",
+                }
+            )
         return rows[-limit:]
 
 
 class _People:
-    def profile(self, group_id, user_id): return {"relationship_note": ""}
+    def profile(self, group_id, user_id):
+        return {"relationship_note": ""}
 
 
 class _Memories:
-    def related(self, scope, query, limit=4): return []
-    async def extract(self, scope): return None
+    def related(self, scope, query, limit=4):
+        return []
+
+    async def extract(self, scope):
+        return None
 
 
 class _RecordingModel:
-    def __init__(self): self.requests = []
-    async def complete(self, messages, tools=None, *, temperature=.7):
+    def __init__(self):
+        self.requests = []
+
+    async def complete(self, messages, tools=None, *, temperature=0.7):
         self.requests.append(messages)
         number = len(self.requests)
-        return {"choices": [{"message": {"role": "assistant", "content": f'{{"text":"r{number}","channels":["text"]}}'}}]}
+        return {
+            "choices": [
+                {
+                    "message": {
+                        "role": "assistant",
+                        "content": f'{{"text":"r{number}","channels":["text"]}}',
+                    }
+                }
+            ]
+        }
 
 
 class _CompactionModel:
-    def __init__(self): self.requests = []
-    async def complete(self, messages, tools=None, *, temperature=.7):
+    def __init__(self):
+        self.requests = []
+
+    async def complete(self, messages, tools=None, *, temperature=0.7):
         self.requests.append(messages)
-        content = json.dumps({
-            "scene_summary": "大家在聊强化阶段",
-            "active_threads": [{"summary": "择校", "participants": ["小明"]}],
-            "open_loops": [{"summary": "等模考分数", "owner": "小明"}],
-            "participant_stances": [],
-            "callbacks": [{"summary": "赛博鸡蛋", "ttl_turns": 12}],
-        }, ensure_ascii=False)
+        content = json.dumps(
+            {
+                "scene_summary": "大家在聊强化阶段",
+                "active_threads": [{"summary": "择校", "participants": ["小明"]}],
+                "open_loops": [{"summary": "等模考分数", "owner": "小明"}],
+                "participant_stances": [],
+                "callbacks": [{"summary": "赛博鸡蛋", "ttl_turns": 12}],
+            },
+            ensure_ascii=False,
+        )
         return {"choices": [{"message": {"role": "assistant", "content": content}}]}
 
 
 class _InvalidCompactionModel:
-    async def complete(self, messages, tools=None, *, temperature=.7):
+    async def complete(self, messages, tools=None, *, temperature=0.7):
         return {"choices": [{"message": {"role": "assistant", "content": "not json"}}]}
 
 
@@ -77,15 +101,24 @@ class _ConcurrentCompactionModel(_CompactionModel):
         super().__init__()
         self.sessions = sessions
 
-    async def complete(self, messages, tools=None, *, temperature=.7):
+    async def complete(self, messages, tools=None, *, temperature=0.7):
         self.sessions.append("group:42", [{"role": "user", "content": "刚到的新消息"}])
         return await super().complete(messages, tools, temperature=temperature)
 
 
 def event(mid, user, text, *, ts, reply="", at=()):
     return MessageEvent(
-        f"bot:{mid}", "group:42", "42", user, f"u{user}", text, (),
-        "99" in at, tuple(at), ts, platform_message_id=str(mid),
+        f"bot:{mid}",
+        "group:42",
+        "42",
+        user,
+        f"u{user}",
+        text,
+        (),
+        "99" in at,
+        tuple(at),
+        ts,
+        platform_message_id=str(mid),
         reply_to_message_id=str(reply),
     )
 
@@ -118,6 +151,10 @@ class ConversationIntelligenceTests(unittest.TestCase):
         payload = frame.prompt_payload()
         self.assertNotIn("messages", payload["topic_hint"])
         self.assertEqual(len(payload["recent_scene"]), 5)
+        compact = frame.prompt_payload(include_recent_scene=False)
+        self.assertNotIn("recent_scene", compact)
+        self.assertEqual(compact["recent_scene_source"], "conversation_ledger_messages")
+        self.assertEqual(compact["recent_scene_count"], 5)
 
     def test_short_reply_inherits_quoted_topic(self):
         ci = ConversationIntelligence()
@@ -125,7 +162,9 @@ class ConversationIntelligenceTests(unittest.TestCase):
         second = event(11, "2", "这个呢", ts=30, reply="10", at=("99",))
         ci.observe(first)
         frame = ci.frame(second)
-        self.assertEqual([m.platform_message_id for m in frame.topic.messages], ["10", "11"])
+        self.assertEqual(
+            [m.platform_message_id for m in frame.topic.messages], ["10", "11"]
+        )
 
     def test_real_group_ellipsis_stays_with_immediately_preceding_topic(self):
         ci = ConversationIntelligence()
@@ -146,12 +185,15 @@ class ConversationIntelligenceTests(unittest.TestCase):
         ci.observe(question)
         answer = replace(
             event(51, "bot", "先列三个目标院校", ts=201, reply="50"),
-            nickname="Kinna", origin="assistant",
+            nickname="Kinna",
+            origin="assistant",
         )
         ci.observe(answer)
         follow = event(52, "1", "那第二个呢", ts=202, reply="51")
         frame = ci.frame(follow)
-        self.assertEqual([m.origin for m in frame.topic.messages], ["human", "assistant", "human"])
+        self.assertEqual(
+            [m.origin for m in frame.topic.messages], ["human", "assistant", "human"]
+        )
 
     def test_operator_instruction_is_not_observed_as_group_chatter(self):
         ci = ConversationIntelligence()
@@ -170,7 +212,9 @@ class ConversationIntelligenceTests(unittest.TestCase):
         second = event(10, "2", "这个逻辑有点问题", ts=400, reply="90")
         ci.observe(first)
         frame = ci.frame(second)
-        self.assertEqual([m.platform_message_id for m in frame.topic.messages], ["90", "10"])
+        self.assertEqual(
+            [m.platform_message_id for m in frame.topic.messages], ["90", "10"]
+        )
 
     def test_recent_scene_resets_after_a_long_silence(self):
         ci = ConversationIntelligence(window_seconds=300)
@@ -188,16 +232,23 @@ class ConversationIntelligenceTests(unittest.TestCase):
         self.assertEqual(len(ci.frame(item).topic.messages), 1)
 
     def test_onebot_reply_segment_is_preserved(self):
-        parsed = parse_message({
-            "post_type": "message", "message_type": "group", "message_id": 8,
-            "self_id": 99, "user_id": 7, "group_id": 42, "time": 1,
-            "sender": {"nickname": "小明"},
-            "message": [
-                {"type": "reply", "data": {"id": "6", "user_id": "5"}},
-                {"type": "at", "data": {"qq": "99"}},
-                {"type": "text", "data": {"text": "这个呢"}},
-            ],
-        })
+        parsed = parse_message(
+            {
+                "post_type": "message",
+                "message_type": "group",
+                "message_id": 8,
+                "self_id": 99,
+                "user_id": 7,
+                "group_id": 42,
+                "time": 1,
+                "sender": {"nickname": "小明"},
+                "message": [
+                    {"type": "reply", "data": {"id": "6", "user_id": "5"}},
+                    {"type": "at", "data": {"qq": "99"}},
+                    {"type": "text", "data": {"text": "这个呢"}},
+                ],
+            }
+        )
         self.assertEqual(parsed.platform_message_id, "8")
         self.assertEqual(parsed.reply_to_message_id, "6")
         self.assertEqual(parsed.reply_to_user_id, "5")
@@ -210,19 +261,44 @@ class ConversationIntelligenceTests(unittest.TestCase):
             db = SqliteDatabase(root / "bot.sqlite3")
             sessions = PromptSessionStore(db)
             model = _RecordingModel()
+            from qunbot.storage.conversation import ConversationStore
+
+            ledger = ConversationStore(db)
             agent = Agent(
-                model, _Rows(), _People(), _Memories(), SkillCatalog(root / "skills"),
-                ToolRegistry(), persona, prompt_sessions=sessions,
+                model,
+                ledger,
+                _People(),
+                _Memories(),
+                SkillCatalog(root / "skills"),
+                ToolRegistry(),
+                persona,
+                prompt_sessions=sessions,
             )
             first = event(20, "1", "第一问", ts=20, at=("99",))
             second = event(21, "1", "第二问", ts=21, at=("99",))
             reply = asyncio.run(agent.reply(first))
             self.assertEqual(sessions.load(first.scope), [])
             agent.commit_delivered_reply(reply, first, "实际发出的第一答")
+            ledger.add_message(
+                first.event_id,
+                first.scope,
+                first.user_id,
+                first.nickname,
+                "user",
+                first.text,
+            )
+            ledger.add_message(
+                "reply:" + first.event_id,
+                first.scope,
+                "bot",
+                "Bot",
+                "assistant",
+                "实际发出的第一答",
+            )
             committed = sessions.load(first.scope)
-            self.assertEqual(committed[-1], {
-                "role": "assistant", "content": "实际发出的第一答"
-            })
+            self.assertEqual(
+                committed[-1], {"role": "assistant", "content": "实际发出的第一答"}
+            )
             asyncio.run(agent.reply(second))
             second_request = model.requests[1]
             self.assertEqual(second_request[1:3], committed)
@@ -236,28 +312,60 @@ class ConversationIntelligenceTests(unittest.TestCase):
             persona.write_text("固定人格", encoding="utf-8")
             db = SqliteDatabase(root / "bot.sqlite3")
             sessions = PromptSessionStore(db)
-            sessions.append("group:42", [
-                {"role": "user", "content": "旧话题：DS 是数据结构"},
-                {"role": "assistant", "content": "旧回答"},
-            ])
+            sessions.append(
+                "group:42",
+                [
+                    {"role": "user", "content": "旧话题：DS 是数据结构"},
+                    {"role": "assistant", "content": "旧回答"},
+                ],
+            )
             db.db.execute(
                 "UPDATE prompt_session_events SET created_at=created_at-7200 "
                 "WHERE scope='group:42'"
             )
-            sessions.append("group:42", [
-                {"role": "user", "content": "刚才说的是模型"},
-                {"role": "assistant", "content": "我刚才理解错了"},
-            ])
+            sessions.append(
+                "group:42",
+                [
+                    {"role": "user", "content": "刚才说的是模型"},
+                    {"role": "assistant", "content": "我刚才理解错了"},
+                ],
+            )
+            from qunbot.storage.conversation import ConversationStore
+
+            ledger = ConversationStore(db)
+            ledger.add_message(
+                "old", "group:42", "1", "u1", "user", "旧话题：DS 是数据结构"
+            )
+            db.db.execute(
+                "UPDATE messages SET created_at=created_at-7200 WHERE event_id='old'"
+            )
+            ledger.add_message(
+                "recent", "group:42", "1", "u1", "user", "刚才说的是模型"
+            )
+            ledger.add_message(
+                "recent-reply", "group:42", "bot", "Bot", "assistant", "我刚才理解错了"
+            )
             agent = Agent(
-                _RecordingModel(), _Rows(), _People(), _Memories(),
-                SkillCatalog(root / "skills"), ToolRegistry(), persona,
+                _RecordingModel(),
+                ledger,
+                _People(),
+                _Memories(),
+                SkillCatalog(root / "skills"),
+                ToolRegistry(),
+                persona,
                 prompt_sessions=sessions,
             )
-            request = agent.build_messages(event(22, "1", "之前是 DS", ts=22, at=("99",)))
+            request = agent.build_messages(
+                event(22, "1", "之前是 DS", ts=22, at=("99",))
+            )
             history = request[1:-1]
-            self.assertEqual([item["content"] for item in history], [
-                "刚才说的是模型", "我刚才理解错了",
-            ])
+            self.assertEqual(
+                [item["content"] for item in history],
+                [
+                    "u1: 刚才说的是模型",
+                    "我刚才理解错了",
+                ],
+            )
             self.assertEqual(len(sessions.load("group:42")), 4)
             db.close()
 
@@ -271,17 +379,22 @@ class ConversationIntelligenceTests(unittest.TestCase):
             restored = ConversationIntelligence(observations=store)
             follow = event(32, "2", "这个呢", ts=32, reply="31", at=("99",))
             frame = restored.frame(follow)
-            self.assertEqual([m.platform_message_id for m in frame.topic.messages], ["31", "32"])
+            self.assertEqual(
+                [m.platform_message_id for m in frame.topic.messages], ["31", "32"]
+            )
             db.close()
 
     def test_grok_compaction_is_one_explicit_series_boundary(self):
         with tempfile.TemporaryDirectory() as directory:
             db = SqliteDatabase(Path(directory) / "bot.sqlite3")
             sessions = PromptSessionStore(db)
-            sessions.append("group:42", [
-                {"role": "user" if i % 2 == 0 else "assistant", "content": f"m{i}"}
-                for i in range(81)
-            ])
+            sessions.append(
+                "group:42",
+                [
+                    {"role": "user" if i % 2 == 0 else "assistant", "content": f"m{i}"}
+                    for i in range(81)
+                ],
+            )
             model = _CompactionModel()
             compactor = ConversationCompactor(model, sessions)
             self.assertTrue(asyncio.run(compactor.compact_if_needed("group:42")))
@@ -297,17 +410,28 @@ class ConversationIntelligenceTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             db = SqliteDatabase(Path(directory) / "bot.sqlite3")
             sessions = PromptSessionStore(db)
-            sessions.append("group:42", [
-                {"role": "user", "content": (
-                    "本轮动态上下文：" + "记忆技能情绪表情列表" * 100
-                    + f"\n\n当前消息：小明: 问题{i}"
-                )}
-                for i in range(20)
-            ])
+            sessions.append(
+                "group:42",
+                [
+                    {
+                        "role": "user",
+                        "content": (
+                            "本轮动态上下文："
+                            + "记忆技能情绪表情列表" * 100
+                            + f"\n\n当前消息：小明: 问题{i}"
+                        ),
+                    }
+                    for i in range(20)
+                ],
+            )
             model = _CompactionModel()
             compactor = ConversationCompactor(
-                model, sessions, _ActualDialogue(),
-                max_messages=100, max_chars=100, tail_messages=6,
+                model,
+                sessions,
+                _ActualDialogue(),
+                max_messages=100,
+                max_chars=100,
+                tail_messages=6,
             )
             self.assertTrue(asyncio.run(compactor.compact_if_needed("group:42")))
             request_text = model.requests[0][1]["content"]
@@ -336,9 +460,9 @@ class ConversationIntelligenceTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             db = SqliteDatabase(Path(directory) / "bot.sqlite3")
             sessions = PromptSessionStore(db)
-            sessions.append("group:42", [
-                {"role": "user", "content": "x" * 20} for _ in range(20)
-            ])
+            sessions.append(
+                "group:42", [{"role": "user", "content": "x" * 20} for _ in range(20)]
+            )
             model = _ConcurrentCompactionModel(sessions)
             compactor = ConversationCompactor(
                 model, sessions, max_messages=100, max_chars=10, tail_messages=4
@@ -351,15 +475,21 @@ class ConversationIntelligenceTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             db = SqliteDatabase(Path(directory) / "bot.sqlite3")
             sessions = PromptSessionStore(db)
-            sessions.append("group:42", [
-                {"role": "user", "content": "正常问题"},
-                {"role": "assistant", "content": "正常回答"},
-                {"role": "user", "content": (
-                    '本轮动态上下文：{\"当前场景\": \"主动群聊\", '
-                    '\"当前发言人\": {\"id\": \"bot\", \"nickname\": \"Bot\"}}'
-                )},
-                {"role": "assistant", "content": "定时任务结果"},
-            ])
+            sessions.append(
+                "group:42",
+                [
+                    {"role": "user", "content": "正常问题"},
+                    {"role": "assistant", "content": "正常回答"},
+                    {
+                        "role": "user",
+                        "content": (
+                            '本轮动态上下文：{"当前场景": "主动群聊", '
+                            '"当前发言人": {"id": "bot", "nickname": "Bot"}}'
+                        ),
+                    },
+                    {"role": "assistant", "content": "定时任务结果"},
+                ],
+            )
             self.assertEqual(
                 [m["content"] for m in sessions.load("group:42")],
                 ["正常问题", "正常回答"],

@@ -16,6 +16,7 @@ import time
 from array import array
 
 from ..memory.text import query_tokens
+from ..memory.scope import ConversationScope
 from .base import SqliteRepository
 
 log = logging.getLogger(__name__)
@@ -24,7 +25,6 @@ log = logging.getLogger(__name__)
 GROUP_SUBJECT = "_group_"
 CANDIDATE_CONFIDENCE = 0.6
 REINFORCE_STEP = 0.15
-ACCESS_CONFIDENCE_STEP = 0.02
 CONTAINMENT_MIN_CHARS = 4
 
 ACTIVE = "active"
@@ -497,6 +497,52 @@ class MemoryStore(SqliteRepository):
         ).fetchall()
         return [dict(row) for row in rows]
 
+    def topic_context(
+        self, scope: str, query: str, limit: int = 3, *,
+        subject_user_id: str | None = None, now: int | None = None,
+    ) -> list[dict]:
+        """Return compact long-memory topic summaries matching the query.
+
+        Facts and topic summaries are separate read channels.  A topic is
+        background context only; it must never displace the current scene or
+        become a prompt instruction.  Matching stays lexical and scoped so an
+        unavailable embedding provider cannot make long-memory injection fail.
+        """
+        tokens = self._tokens(query)
+        if not tokens:
+            return []
+        now = int(time.time()) if now is None else int(now)
+        where, params = self._filters(scope, subject_user_id, False, now)
+        matched = " OR ".join(
+            "t.canonical_name LIKE ? OR m.content LIKE ?" for _ in tokens
+        )
+        patterns = [value for token in tokens for value in (f"%{token}%", f"%{token}%")]
+        rows = self.db.execute(
+            "SELECT t.id,t.canonical_name,m.content,m.confidence,m.updated_at,m.id AS memory_id "
+            "FROM memory_topics t JOIN memory_topic_links l ON l.topic_id=t.id "
+            "JOIN memories m ON m.id=l.memory_id "
+            "WHERE t.scope=? AND t.status='active' AND (" + matched + ") AND " + where +
+            " ORDER BY m.updated_at DESC,m.id DESC LIMIT 48",
+            (scope, *patterns, *params),
+        ).fetchall()
+        # Stored topic.summary is an owner archive; it may include withdrawn,
+        # expired or private facts. Rebuild the prompt view from eligible linked
+        # records instead. Deleting a fact then automatically removes it here.
+        grouped = {}
+        for row in rows:
+            if row[0] not in grouped:
+                if len(grouped) >= max(0, min(3, int(limit))):
+                    continue
+                grouped[row[0]] = {
+                    "name": str(row[1]), "facts": [], "memory_ids": [],
+                    "authority": "background_only",
+                }
+            topic = grouped[row[0]]
+            if len(topic["facts"]) < 3 and len(row[2]) <= 240:
+                topic["facts"].append(row[2])
+                topic["memory_ids"].append(row[5])
+        return [topic for topic in grouped.values() if topic["facts"]]
+
     # ------------------------------------------------------------------ write
 
     def observe(
@@ -525,6 +571,7 @@ class MemoryStore(SqliteRepository):
         ``candidate`` and are not retrieved until a repeat observation or an
         access promotes them.
         """
+        scope = ConversationScope.validate(scope)
         content = content.strip()[:1000]
         if not content:
             raise ValueError("empty memory")
@@ -652,21 +699,22 @@ class MemoryStore(SqliteRepository):
         return retired
 
     def reinforce(self, memory_ids, now: int | None = None) -> int:
-        """Access reinforcement: touching a memory raises its confidence."""
-        ids = [int(i) for i in memory_ids]
+        """Record retrieval usefulness; access is not supporting evidence."""
+        ids = list(dict.fromkeys(int(i) for i in memory_ids))
         if not ids:
             return 0
         now = int(now or time.time())
+        touched = 0
         with self.transaction():
             for memory_id in ids:
-                self.db.execute(
+                cursor = self.db.execute(
                     "UPDATE memories SET access_count=access_count+1, "
-                    "last_accessed_at=?, confidence=min(1.0, confidence+?), "
-                    "status=CASE WHEN status=? THEN ? ELSE status END, updated_at=? "
-                    "WHERE id=?",
-                    (now, ACCESS_CONFIDENCE_STEP, CANDIDATE, ACTIVE, now, memory_id),
+                    "last_accessed_at=? WHERE id=? AND status=? "
+                    "AND (expires_at IS NULL OR expires_at>?)",
+                    (now, memory_id, ACTIVE, now),
                 )
-        return len(ids)
+                touched += cursor.rowcount
+        return touched
 
     # ------------------------------------------------------------ read helpers
 
@@ -684,6 +732,8 @@ class MemoryStore(SqliteRepository):
         subject_user_id: str | None = None,
         limit: int = 100,
     ) -> list[dict]:
+        if scope:
+            scope = ConversationScope.validate(scope)
         clauses, params = [], []
         if scope:
             clauses.append("scope=?")
@@ -777,13 +827,13 @@ class MemoryStore(SqliteRepository):
         if not tokens:
             return []
         where, params = self._filters(scope, subject_user_id, include_candidates, now)
-        matched = " OR ".join("t.canonical_name LIKE ? OR t.summary LIKE ?" for _ in tokens)
+        matched = " OR ".join("t.canonical_name LIKE ? OR m.content LIKE ?" for _ in tokens)
         patterns = [value for token in tokens for value in (f"%{token}%", f"%{token}%")]
         rows = self.db.execute(
             "SELECT m.*,NULL AS lexical,NULL AS vector,'topic' AS match "
             "FROM memory_topics t JOIN memory_topic_links l ON l.topic_id=t.id "
             "JOIN memories m ON m.id=l.memory_id "
-            f"WHERE t.scope=? AND ({matched}) AND {where} "
+            f"WHERE t.scope=? AND t.status='active' AND ({matched}) AND {where} "
             "ORDER BY l.weight DESC,t.last_seen_at DESC LIMIT ?",
             (scope, *patterns, *params, max(1, int(limit))),
         ).fetchall()
@@ -801,6 +851,10 @@ class MemoryStore(SqliteRepository):
     def _filters(
         self, scope: str, subject_user_id: str | None, include_candidates: bool, now: int
     ) -> tuple[str, list]:
+        # Validate at the storage boundary as well as at the agent boundary.
+        # This prevents a future caller from using an arbitrary user-provided
+        # scope as a cross-group lookup key.
+        scope = ConversationScope.validate(scope)
         clauses = [
             "m.scope=?",
             "m.status IN (?,?)" if include_candidates else "m.status=?",
@@ -997,8 +1051,8 @@ class MemoryStore(SqliteRepository):
         now = int(now or time.time())
         cursor = self.db.execute(
             "UPDATE memories SET status=?, updated_at=? "
-            "WHERE status=? AND expires_at IS NOT NULL AND expires_at<=?",
-            (EXPIRED, now, ACTIVE, now),
+            "WHERE status IN (?,?) AND expires_at IS NOT NULL AND expires_at<=?",
+            (EXPIRED, now, ACTIVE, CANDIDATE, now),
         )
         return cursor.rowcount or 0
 

@@ -37,6 +37,7 @@ from enum import Enum
 import httpx
 
 from ..domain import normalize_reasoning_effort
+from .schema_projection import model_tool_projection
 
 log = logging.getLogger(__name__)
 
@@ -396,6 +397,8 @@ class ModelClient:
         *,
         timeout: float = 90.0,
         reasoning_effort: str | None = None,
+        thinking_enabled: bool | None = None,
+        max_completion_tokens: int | None = None,
         capabilities: ModelCapabilities | None = None,
         retry: RetryPolicy | None = None,
         circuit: CircuitPolicy | None = None,
@@ -405,11 +408,16 @@ class ModelClient:
         clock=time.monotonic,
         jitter_source=random.random,
         metrics_limit: int = 128,
+        max_concurrency: int = 4,
     ):
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
         self.model = model
         self.reasoning_effort = normalize_reasoning_effort(reasoning_effort)
+        self.thinking_enabled = thinking_enabled
+        if max_completion_tokens is not None and not 1 <= max_completion_tokens <= 32768:
+            raise ValueError("Invalid completion token budget")
+        self.max_completion_tokens = max_completion_tokens
         self.capabilities = capabilities or ModelCapabilities(model=model)
         self.retry = retry or RetryPolicy()
         self.circuit = circuit or CircuitPolicy()
@@ -418,6 +426,10 @@ class ModelClient:
         self._sleep = sleep
         self._clock = clock
         self._jitter = jitter_source
+        if not 1 <= int(max_concurrency) <= 64:
+            raise ValueError("max_concurrency must be 1..64")
+        self.max_concurrency = int(max_concurrency)
+        self._concurrency = asyncio.Semaphore(self.max_concurrency)
         self._metrics: deque[ModelCallMetrics] = deque(maxlen=max(1, metrics_limit))
         self._last_prefix_hash: str | None = None
         self._prefix_changes = 0
@@ -566,9 +578,26 @@ class ModelClient:
         *,
         temperature: float = 0.7,
     ) -> dict:
+        """Run one provider call under the process-wide model budget.
+
+        The client is shared by all groups and all background memory/persona
+        observers.  Limiting here, rather than in a group handler, prevents
+        several groups plus maintenance jobs from overwhelming one provider.
+        """
+        async with self._concurrency:
+            return await self._complete(messages, tools, temperature=temperature)
+
+    async def _complete(
+        self,
+        messages: list[dict],
+        tools: list[dict] | None = None,
+        *,
+        temperature: float = 0.7,
+    ) -> dict:
         if not self.api_key:
             raise ModelConfigError("BOT_MODEL_API_KEY is not configured")
 
+        tools = model_tool_projection(tools)
         fingerprint = prefix_fingerprint(messages, tools)
         prefix_changed = (
             self._last_prefix_hash is not None
@@ -588,6 +617,10 @@ class ModelClient:
         }
         if self.reasoning_effort:
             payload["reasoning_effort"] = self.reasoning_effort
+        if self.thinking_enabled is not None:
+            payload["thinking"] = {"type":"enabled" if self.thinking_enabled else "disabled"}
+        if self.max_completion_tokens is not None:
+            payload["max_tokens"] = self.max_completion_tokens
         if tools:
             payload["tools"] = tools
             payload["tool_choice"] = "auto"

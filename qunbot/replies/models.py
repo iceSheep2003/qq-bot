@@ -61,3 +61,12 @@ class DeliveryResult:
     @property
     def sent(self) -> bool:
         return self.sent_text or self.sent_meme or self.sent_voice or self.sent_qq_face
+
+
+@dataclass(frozen=True)
+class PartReceipt:
+    index: int
+    kind: str
+    transcript: str
+    platform_message_id: str = ""
+    status: str = "sent"

@@ -26,6 +26,7 @@ from qunbot.runtime.tools import built_in_tools
 from qunbot.storage.database import SqliteDatabase
 from qunbot.storage.memory import MemoryStore, dedupe_key, normalize_content
 from qunbot.storage.privacy import forget_user
+from qunbot.memory.scope import ConversationScope, ScopeViolation
 
 SCOPE = "group:42"
 OTHER_SCOPE = "group:43"
@@ -200,6 +201,20 @@ class MemoryStoreTests(unittest.TestCase):
         self.assertEqual(self.store.candidates(OTHER_SCOPE, "蓝莓蛋糕"), [])
         self.assertEqual(self.store.search_memories(OTHER_SCOPE, "蓝莓蛋糕"), [])
 
+    def test_same_qq_identity_is_namespaced_by_conversation_scope(self):
+        self.assertNotEqual(
+            ConversationScope.subject_key(SCOPE, "7"),
+            ConversationScope.subject_key(OTHER_SCOPE, "7"),
+        )
+        self.store.observe(SCOPE, "7", "只在蓝莓群提过的事")
+        self.store.observe(OTHER_SCOPE, "7", "只在草莓群提过的事")
+        self.assertEqual(self.store.search_memories(OTHER_SCOPE, "蓝莓"), [])
+        self.assertEqual(self.store.search_memories(SCOPE, "草莓"), [])
+
+    def test_scope_policy_rejects_untrusted_cross_tenant_keys(self):
+        with self.assertRaises(ScopeViolation):
+            ConversationScope.validate("group:../../private")
+
     def test_personal_memories_need_a_matching_subject(self):
         self.store.observe(SCOPE, "7", "小明喜欢蓝莓蛋糕", visibility="personal")
         self.store.observe(SCOPE, "8", "小红喜欢草莓", visibility="personal")
@@ -359,7 +374,9 @@ class MemoryStoreTests(unittest.TestCase):
         row = self.store.get(memory_id)
         self.assertEqual(row["access_count"], 2)
         self.assertIsNotNone(row["last_accessed_at"])
-        self.assertGreater(row["confidence"], 0.7)
+        # Retrieval is not supporting evidence; it records access without
+        # silently making a model claim more trustworthy.
+        self.assertEqual(row["confidence"], 0.7)
 
     def test_maintain_reports_work(self):
         self.store.observe(SCOPE, "7", "小明这周在出差", expires_at=int(time.time()) - 5)
@@ -519,6 +536,21 @@ class MemoryServiceTests(unittest.TestCase):
         self.assertEqual(item["mention_policy"], "tone_only")
         self.assertIn("禁止说出记忆内容", context["usage_rule"])
 
+    def test_long_memory_adds_scoped_topic_channel_with_budget(self):
+        self.service.remember(
+            SCOPE, "7", "小明最近在准备计算机统考",
+            fact_type="event", visibility="group", topic="计算机统考",
+        )
+        context = self.service.related_context(
+            SCOPE, "计算机统考怎么安排", char_budget=700
+        )
+        self.assertEqual(context["topics"][0]["name"], "计算机统考")
+        self.assertLessEqual(
+            len(json.dumps({"items": context["items"], "topics": context["topics"]}, ensure_ascii=False)),
+            700,
+        )
+        self.assertIn("现场优先", context["usage_rule"])
+
     def test_related_focus_comes_from_the_latest_message(self):
         self.store.add_message("e1", SCOPE, "7", "小明", "user", "你好")
         self.service.remember(SCOPE, "7", "小明喜欢蓝莓蛋糕", visibility="personal")
@@ -585,6 +617,7 @@ class MemoryServiceTests(unittest.TestCase):
                         "fact": "小明喜欢蓝莓蛋糕",
                         "fact_type": "preference",
                         "confidence": 0.8,
+                        "evidence_event_ids": ["m1"],
                     },
                     {"user_id": "999", "fact": "陌生人说了什么", "confidence": 0.9},
                     {"user_id": "7", "fact": "短", "confidence": 0.9},
@@ -597,7 +630,7 @@ class MemoryServiceTests(unittest.TestCase):
         rows = self.store.list_memories(SCOPE)
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]["content"], "小明喜欢蓝莓蛋糕")
-        self.assertEqual(rows[0]["source_event_id"], "m2")
+        self.assertEqual(rows[0]["source_event_id"], "m1")
         self.assertEqual(rows[0]["fact_type"], "preference")
         self.assertEqual(rows[0]["visibility"], "personal")
         self.assertEqual(rows[0]["user_id"], "7")
@@ -644,7 +677,7 @@ class MemoryServiceTests(unittest.TestCase):
         self.store.add_message("m1", SCOPE, "7", "小明", "user", "每周五开黑")
         model = FakeModel(
             json.dumps(
-                [{"user_id": "_group_", "fact": "群里每周五开黑", "confidence": 0.9}],
+                [{"user_id": "_group_", "fact": "群里每周五开黑", "confidence": 0.9, "evidence_event_ids": ["m1"]}],
                 ensure_ascii=False,
             )
         )
@@ -669,7 +702,7 @@ class MemoryServiceTests(unittest.TestCase):
         self.store.add_message("m1", SCOPE, "7", "小明", "user", "我好像要去北京")
         model = FakeModel(
             json.dumps(
-                [{"user_id": "7", "fact": "小明好像要去北京", "confidence": 0.3}],
+                [{"user_id": "7", "fact": "小明好像要去北京", "confidence": 0.3, "evidence_event_ids": ["m1"]}],
                 ensure_ascii=False,
             )
         )

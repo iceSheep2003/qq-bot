@@ -24,13 +24,25 @@ from .extensions.loader import (
 )
 from .adapters.events import parse_message
 from .adapters.model import ModelClient
+from .adapters.structured import InstructorOutput
+from .adapters.perception import configured_perception
+from .adapters.inbound_media import configured_media_source
+from .perception.inbound import InboundMedia
+from .perception.service import PerceptionService
+from .storage.assets import AssetStore
 from .memory.service import MemoryService
 from .identity_guard import IdentityGuard
 from .adapters.onebot import OneBotGateway
 from .relationships.evaluator import AffectionEvaluator
 from .relationships.state import policy_from_env
 from .conversation_intelligence import ConversationIntelligence
-from .replies import CasualMediaPolicy, DefaultReplyPlanner, HumanizedPacer, QQFacePolicy, ReplyDispatcher
+from .replies import (
+    CasualMediaPolicy,
+    DefaultReplyPlanner,
+    HumanizedPacer,
+    QQFacePolicy,
+    ReplyDispatcher,
+)
 from .replies.quotes import QuotePolicy
 from .scheduling import Scheduler
 from .scheduling.runner import JobRunner
@@ -42,16 +54,33 @@ from .storage.conversation import ConversationStore
 from .storage.database import SqliteDatabase
 from .storage.jobs import JobsStore
 from .storage.knowledge import KnowledgeStore
+from .storage.ontology import GraphStore
+from .storage.executions import ExecutionStore
+from .storage.observations import ObservationOutbox
+from .social.projection import SocialProjector
+from .knowledge.service import KnowledgeService
+from .knowledge.extractor import SemanticExtractor
+from .knowledge.coordinator import OntologyMemory
+from .storage.extraction_runs import ExtractionRunStore
+from .conversation.projection import ConversationProjector
+from .harness.tools import KernelTools
+from .skills.host import OwnerSkills
+from .bootstrap.tool_handlers import BuiltinHandlers
 from .storage.memory import MemoryStore
 from .storage.prompt_sessions import PromptSessionStore
 from .conversation_compaction import ConversationCompactor
 from .social_interactions import (
-    LightInteractionPolicy, LightInteractionSettings, PokeController, PokeSettings,
-    ReactionPolicy, ReactionSettings,
+    LightInteractionPolicy,
+    LightInteractionSettings,
+    PokeController,
+    PokeSettings,
+    ReactionPolicy,
+    ReactionSettings,
 )
 from .storage.topic_observations import TopicObservationStore
 from .storage.relationships import RelationshipsStore
 from .runtime.tools import built_in_tools
+from .experience.runtime import configured_behavior_experience
 
 log = logging.getLogger(__name__)
 
@@ -126,6 +155,18 @@ class BotApp:
         database = SqliteDatabase(config.db_path)
         self._closers.append(database.db.close)
         conversations = ConversationStore(database)
+        conversations.recover_parts()
+        graph = GraphStore(database)
+        executions = ExecutionStore(database)
+        executions.recover_uncertain()
+        ontology = KnowledgeService(graph)
+        assets = AssetStore(database, config.db_path.parent / "assets", graph)
+        vision, asr = configured_perception()
+        for provider in (vision, asr):
+            if provider is not None:
+                self._closers.append(provider.close)
+        perception = PerceptionService(assets, vision=vision, asr=asr)
+        projector = ConversationProjector(conversations, graph)
         people = RelationshipsStore(database, policy=policy_from_env())
         memories = MemoryStore(database)
         knowledge = KnowledgeStore(database)
@@ -138,11 +179,24 @@ class BotApp:
             config.model_api_key,
             config.model_name,
             reasoning_effort=config.model_reasoning_effort or None,
+            thinking_enabled=config.model_thinking_enabled,
+            max_completion_tokens=config.model_max_completion_tokens,
+            max_concurrency=config.model_max_concurrency,
         )
         self._closers.append(model.close)
         skills = SkillCatalog(config.skills_path, enabled_skills(config))
-        memory = MemoryService(
+        legacy_memory = MemoryService(
             model, conversations, memories, knowledge=knowledge
+        )
+        extraction_runs = ExtractionRunStore(database)
+        extraction_runs.recover()
+        memory = OntologyMemory(
+            ontology,
+            SemanticExtractor(ontology, InstructorOutput(model)),
+            projector,
+            conversations,
+            legacy_memory,
+            runs=extraction_runs,
         )
         conversation_intelligence = ConversationIntelligence(
             observations=topic_observations,
@@ -159,21 +213,45 @@ class BotApp:
         features = build_features(
             config, model, built_in_tools(memories), memory=memory
         )
+        tool_handlers = BuiltinHandlers(
+            conversations,
+            ontology,
+            skills,
+            legacy_tools=features.tools,
+            features=features,
+            perception=perception,
+        )
+        available = frozenset(tool_handlers.handlers())
+        skills = OwnerSkills(config.skills_path, skills, available)
+        tool_handlers.skills = skills
+        kernel_tools = KernelTools(
+            tool_handlers.handlers(),
+            allowed_scopes=frozenset(f"group:{g}" for g in config.group_allowlist),
+            executions=executions,
+        )
         # A feature may open an HTTP client (voice, weather). Captured here so a
         # later assembly failure closes it too.
         self._closers.extend(features.closers)
+        features.observers.append(
+            SocialProjector(graph, people, features.proactive_gate)
+        )
         agent = Agent(
             model,
             conversations,
             people,
             memory,
             skills,
-            features.tools,
+            kernel_tools,
             config.persona_path,
             features.context,
             conversation_intelligence=conversation_intelligence,
             prompt_sessions=prompt_sessions,
             conversation_compactor=conversation_compactor,
+            behavior_experience=configured_behavior_experience(),
+            history_char_budget=config.conversation_window_chars,
+            history_message_limit=config.conversation_window_messages,
+            live_scene_seconds=config.conversation_window_seconds,
+            continuity_ttl_seconds=config.conversation_snapshot_ttl_seconds,
         )
         gateway = OneBotGateway(
             config.onebot_host,
@@ -184,6 +262,8 @@ class BotApp:
             request_timeout=config.onebot_request_timeout,
             max_frame_bytes=config.onebot_max_frame_kb * 1024,
         )
+        inbound_source = configured_media_source(gateway)
+        self._closers.append(inbound_source.close)
         # Handlers under scheduling/handlers/ are discovered here; both config
         # validation and dispatch follow whatever they declare.
         handlers = build_registry(config)
@@ -219,8 +299,10 @@ class BotApp:
             AffectionEvaluator(model, people, policy_from_env()),
             media,
             tuple(features.observers),
+            inbound_media=InboundMedia(inbound_source, assets, conversations),
             reply_planner=DefaultReplyPlanner(
-                features.reply_capabilities(), qq_faces=QQFacePolicy.from_env(),
+                features.reply_capabilities(),
+                qq_faces=QQFacePolicy.from_env(),
                 quotes=QuotePolicy.from_env(),
                 casual_media=CasualMediaPolicy.from_env(),
             ),
@@ -240,10 +322,12 @@ class BotApp:
             observation_backlog=config.observer_queue_size,
             observation_workers=config.observer_workers,
             observation_dedupe=config.observer_dedupe,
+            observation_store=ObservationOutbox(database),
         )
         # Last in, first out: the service drains the observation queue on the
         # way down, and those observers write to the database.
         self._closers.append(service.aclose)
+        tool_handlers.bind(service)
         # Features that need a runtime collaborator get it here, rather than
         # app.py importing each feature module to wire it by hand.
         job_runner = JobRunner(service, handlers)
@@ -271,10 +355,16 @@ class BotApp:
                     log.exception("Extension inbound handler failed")
             event = parse_message(raw)
             if event:
+                if event.group_id and event.group_id not in config.group_allowlist:
+                    return
+                if not event.group_id and not config.private_enabled:
+                    return
                 try:
                     if event.reply_to_message_id:
                         try:
-                            quoted = await gateway.resolve_quote(event.reply_to_message_id)
+                            quoted = await gateway.resolve_quote(
+                                event.reply_to_message_id, group_id=event.group_id
+                            )
                             event = replace(
                                 event,
                                 quoted_text=str(quoted.get("text") or ""),
@@ -306,7 +396,20 @@ class BotApp:
         self.workers = build_workers(config, service, gateway, features) + [
             worker() for worker in features.workers
         ]
+
+        async def project_ledger():
+            while True:
+                try:
+                    projector.process(40)
+                except Exception:
+                    log.warning(
+                        "Conversation graph projection failed; durable rows retained"
+                    )
+                await asyncio.sleep(1)
+
+        self._kernel_workers = (project_ledger, service.durable_observation_loop)
         self.features = features
+        self.ontology, self.projector = ontology, projector
 
     async def run(self) -> None:
         try:
@@ -314,6 +417,7 @@ class BotApp:
                 self.gateway.run(),
                 self.scheduler.loop(self.job_runner.run),
                 *self.workers,
+                *(worker() for worker in self._kernel_workers),
             )
         finally:
             # Reverse order, appended at construction: drain the observation

@@ -8,6 +8,8 @@ dependencies = [
     "httpx>=0.27,<1",
     "croniter>=2,<7",
     "Markdown>=3.7,<4",
+    "jsonschema>=4.23,<5",
+    "instructor==1.17.0",
 ]
 
 [project.optional-dependencies]

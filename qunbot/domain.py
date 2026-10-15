@@ -62,6 +62,18 @@ class JobSkipped(Exception):
 
 
 @dataclass(frozen=True)
+class InboundPart:
+    """Platform data only. File/URL locators never become model instructions."""
+
+    kind: Literal["text", "image", "audio", "face", "at", "quote", "unknown"]
+    text: str = ""
+    file_ref: str = ""
+    url: str = ""
+    target_id: str = ""
+    face_id: str = ""
+
+
+@dataclass(frozen=True)
 class MessageEvent:
     event_id: str
     scope: str
@@ -95,6 +107,22 @@ class MessageEvent:
     # Trusted, turn-local classification from the guard. Never copied from
     # platform text or persisted as a group member's instruction.
     social_cue: str = ""
+    # Host-only control for internal wording generation. Platform text cannot
+    # set this flag; it prevents nested announcements from invoking tools.
+    tools_enabled: bool = True
+    inbound_parts: tuple[InboundPart, ...] = ()
+    # Host-normalised V1 message parts; no external URLs or filesystem paths.
+    ledger_parts: tuple[dict, ...] = ()
+
+    @property
+    def has_image(self) -> bool:
+        return bool(self.image_urls) or any(
+            part.kind == "image" for part in self.inbound_parts
+        )
+
+    @property
+    def has_audio(self) -> bool:
+        return any(part.kind == "audio" for part in self.inbound_parts)
 
 
 # --------------------------------------------------------------------------- #

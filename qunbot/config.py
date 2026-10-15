@@ -73,11 +73,18 @@ class Config:
     conversation_window_messages: int = 40
     conversation_window_seconds: int = 300
     conversation_window_chars: int = 4800
+    # TTL for the short-term continuity snapshot. It is background context,
+    # not a durable fact; once this expires the next turn starts from the
+    # current scene and long-term memory instead.
+    conversation_snapshot_ttl_seconds: int = 5400
     # Reasoning budget sent to the provider, or "" to send no field. A chat bot
     # spends most of its latency thinking: measured against the local proxy, a
     # short reply cost ~1500 reasoning tokens at the default and ~830 at "low",
     # which was the difference between a 30s and an 18s turn.
     model_reasoning_effort: str = ""
+    model_thinking_enabled: bool | None = None
+    model_max_completion_tokens: int | None = None
+    model_max_concurrency: int = 4
     extensions: frozenset[str] = frozenset({"scheduled_chat"})
     # Which contract version this configuration claims to satisfy. Stamped by
     # from_env; validated so a .env written for a newer build is refused rather
@@ -157,14 +164,29 @@ class Config:
             raise ConfigError("BOT_CONVERSATION_WINDOW_SECONDS must be 30..3600")
         if not 400 <= self.conversation_window_chars <= 12000:
             raise ConfigError("BOT_CONVERSATION_WINDOW_CHARS must be 400..12000")
+        if not 300 <= self.conversation_snapshot_ttl_seconds <= 21600:
+            raise ConfigError(
+                "BOT_CONVERSATION_SNAPSHOT_TTL_SECONDS must be 300..21600"
+            )
         # Checked here rather than at the first reply: a typo would otherwise
         # surface as slow turns with no explanation.
         normalize_reasoning_effort(self.model_reasoning_effort)
+        if (
+            self.model_max_completion_tokens is not None
+            and not 1 <= self.model_max_completion_tokens <= 32768
+        ):
+            raise ConfigError("BOT_MODEL_MAX_TOKENS must be 1..32768")
+        if not 1 <= self.model_max_concurrency <= 64:
+            raise ConfigError("BOT_MODEL_MAX_CONCURRENCY must be 1..64")
 
     @classmethod
     def from_env(cls) -> Config:
         def integer(key: str, default: int) -> int:
             return int(os.getenv(key, str(default)))
+
+        thinking = os.getenv("BOT_MODEL_THINKING", "").strip().lower()
+        if thinking not in {"", "enabled", "disabled"}:
+            raise ConfigError("BOT_MODEL_THINKING must be enabled, disabled or empty")
 
         config = cls(
             model_base_url=os.getenv(
@@ -173,6 +195,11 @@ class Config:
             model_api_key=os.getenv("BOT_MODEL_API_KEY", ""),
             model_name=os.getenv("BOT_MODEL_NAME", "deepseek-chat"),
             model_reasoning_effort=os.getenv("BOT_MODEL_REASONING_EFFORT", ""),
+            model_thinking_enabled=None if not thinking else thinking == "enabled",
+            model_max_completion_tokens=integer("BOT_MODEL_MAX_TOKENS", 6000)
+            if os.getenv("BOT_MODEL_MAX_TOKENS")
+            else None,
+            model_max_concurrency=max(1, integer("BOT_MODEL_MAX_CONCURRENCY", 4)),
             onebot_host=os.getenv("BOT_ONEBOT_HOST", "127.0.0.1"),
             onebot_port=integer("BOT_ONEBOT_PORT", 6199),
             onebot_token=os.getenv("BOT_ONEBOT_TOKEN", ""),
@@ -208,11 +235,10 @@ class Config:
             conversation_window_messages=integer(
                 "BOT_CONVERSATION_WINDOW_MESSAGES", 40
             ),
-            conversation_window_seconds=integer(
-                "BOT_CONVERSATION_WINDOW_SECONDS", 300
-            ),
-            conversation_window_chars=integer(
-                "BOT_CONVERSATION_WINDOW_CHARS", 4800
+            conversation_window_seconds=integer("BOT_CONVERSATION_WINDOW_SECONDS", 300),
+            conversation_window_chars=integer("BOT_CONVERSATION_WINDOW_CHARS", 4800),
+            conversation_snapshot_ttl_seconds=integer(
+                "BOT_CONVERSATION_SNAPSHOT_TTL_SECONDS", 5400
             ),
             extensions=(
                 ids("BOT_EXTENSIONS")

@@ -386,7 +386,9 @@ class OneBotGateway:
         if is_media_placeholder(text):
             if not any((image, voice, qq_face)):
                 raise ValueError("refusing to send a media placeholder without media")
-            log.warning("Dropping transcript-only media placeholder from outbound message")
+            log.warning(
+                "Dropping transcript-only media placeholder from outbound message"
+            )
             text = ""
         try:
             target = int(group_id or user_id)
@@ -408,7 +410,9 @@ class OneBotGateway:
             try:
                 reply_id = int(reply_to)
             except (TypeError, ValueError) as error:
-                raise OneBotError(f"non-numeric reply message id: {reply_to!r}") from error
+                raise OneBotError(
+                    f"non-numeric reply message id: {reply_to!r}"
+                ) from error
             if group_id:
                 message.append({"type": "reply", "data": {"id": str(reply_id)}})
         if at_qq is not None and group_id:
@@ -433,7 +437,9 @@ class OneBotGateway:
             },
         )
 
-    async def resolve_quote(self, message_id: str, *, max_depth: int = 3) -> dict:
+    async def resolve_quote(
+        self, message_id: str, *, max_depth: int = 3, group_id: str | None = None
+    ) -> dict:
         """Resolve a bounded quoted-message chain through NapCat ``get_msg``."""
         current = str(message_id or "")
         texts: list[str] = []
@@ -444,6 +450,10 @@ class OneBotGateway:
                 break
             seen.add(current)
             data = await self.call("get_msg", {"message_id": int(current)})
+            if group_id is not None and str(data.get("group_id") or "") != str(
+                group_id
+            ):
+                raise OneBotError("Quoted message is outside the requested group")
             parts = data.get("message") or []
             if not isinstance(parts, list):
                 raw = str(data.get("raw_message") or "").strip()
@@ -453,7 +463,8 @@ class OneBotGateway:
             next_id = ""
             chunk = "".join(
                 str(part.get("data", {}).get("text", ""))
-                for part in parts if part.get("type") == "text"
+                for part in parts
+                if part.get("type") == "text"
             ).strip()
             if chunk:
                 texts.append(chunk[:1200])
@@ -475,7 +486,9 @@ class OneBotGateway:
         try:
             target = int(message_id)
         except (TypeError, ValueError) as error:
-            raise OneBotError(f"non-numeric OneBot message id: {message_id!r}") from error
+            raise OneBotError(
+                f"non-numeric OneBot message id: {message_id!r}"
+            ) from error
         if not str(emoji_id).isdigit():
             raise OneBotError(f"non-numeric QQ reaction id: {emoji_id!r}")
         params = {"message_id": target, "emoji_id": str(emoji_id)}
@@ -489,7 +502,9 @@ class OneBotGateway:
         try:
             group, user = int(group_id), int(user_id)
         except (TypeError, ValueError) as error:
-            raise OneBotError("group_poke requires numeric group and user ids") from error
+            raise OneBotError(
+                "group_poke requires numeric group and user ids"
+            ) from error
         return await self.call("group_poke", {"group_id": group, "user_id": user})
 
     async def send_native(self, group_id: str, kind: str) -> dict:

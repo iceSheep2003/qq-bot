@@ -56,7 +56,7 @@ class ConversationFrame:
     ambient: tuple[MessageView, ...]
     room_tone: ToneSignal
 
-    def prompt_payload(self) -> dict:
+    def prompt_payload(self, *, include_recent_scene: bool = True) -> dict:
         def message(item: MessageView) -> dict:
             return {
                 "id": item.platform_message_id or item.event_id,
@@ -67,7 +67,7 @@ class ConversationFrame:
                 "origin": item.origin,
             }
 
-        return {
+        payload = {
             "frame_id": self.frame_id,
             "reading_rule": (
                 "recent_scene 是本轮回复的第一依据，按真实到达顺序阅读；"
@@ -80,7 +80,6 @@ class ConversationFrame:
                 "confidence": round(self.target.confidence, 3),
                 "reasons": self.target.reasons,
             },
-            "recent_scene": [message(m) for m in self.recent_window],
             "topic_hint": {
                 "id": self.topic.topic_id,
                 "title_hint": self.topic.title_hint,
@@ -95,3 +94,12 @@ class ConversationFrame:
                 "hostile": self.room_tone.hostile,
             },
         }
+        if include_recent_scene:
+            payload["recent_scene"] = [message(m) for m in self.recent_window]
+        else:
+            # Agent.build_messages already carries the same ordered ledger
+            # rows as actual user/assistant messages.  Keeping only this
+            # metadata prevents the scene from being serialized twice.
+            payload["recent_scene_source"] = "conversation_ledger_messages"
+            payload["recent_scene_count"] = len(self.recent_window)
+        return payload

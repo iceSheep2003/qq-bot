@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
+import os
+import time
 from typing import Any
 
 from ..ports import ChatModel, PromptSessionRepository
@@ -39,6 +42,7 @@ class ConversationCompactor:
         max_messages: int = 80,
         max_chars: int = 32000,
         tail_messages: int = 24,
+        model_timeout_seconds: float | None = None,
     ):
         if max_messages < 2 or max_chars < 1 or tail_messages < 1:
             raise ValueError("invalid conversation compaction thresholds")
@@ -50,8 +54,23 @@ class ConversationCompactor:
         self.max_messages = max_messages
         self.max_chars = max_chars
         self.tail_messages = tail_messages
+        configured_timeout = (
+            float(os.getenv("BOT_COMPACTION_TIMEOUT_SECONDS", "45"))
+            if model_timeout_seconds is None else float(model_timeout_seconds)
+        )
+        if configured_timeout <= 0:
+            raise ValueError("model_timeout_seconds must be positive")
+        self.model_timeout_seconds = min(300.0, configured_timeout)
+        self._failure_counts: dict[str, int] = {}
+        self._retry_after: dict[str, float] = {}
 
     async def compact_if_needed(self, scope: str, current_event_id: str = "") -> bool:
+        if time.monotonic() < self._retry_after.get(scope, 0.0):
+            log.debug("Short-term compaction backoff scope=%s", scope)
+            return False
+        loader = getattr(self.conversations, "ledger_compaction_candidate", None)
+        if callable(loader):
+            return await self._compact_ledger(scope, current_event_id)
         candidate = self.sessions.compaction_candidate(
             scope,
             max_messages=self.max_messages,
@@ -61,8 +80,8 @@ class ConversationCompactor:
         if candidate is None:
             return False
         dialogue = self._dialogue(scope, candidate, current_event_id)
-        tail = dialogue[-self.tail_messages:]
-        head = dialogue[:-self.tail_messages]
+        tail = dialogue[-self.tail_messages :]
+        head = dialogue[: -self.tail_messages]
         previous = self._previous_snapshot(candidate)
         # A bloated provider transcript can exceed the threshold even when the
         # actual conversation is short. Rewriting it to the canonical dialogue
@@ -76,7 +95,7 @@ class ConversationCompactor:
                 tail=tail,
             )
         try:
-            result = await self.model.complete(
+            result = await asyncio.wait_for(self.model.complete(
                 [
                     {"role": "system", "content": COMPACTION_PROMPT},
                     {
@@ -92,14 +111,16 @@ class ConversationCompactor:
                     },
                 ],
                 temperature=0.1,
-            )
+            ), timeout=self.model_timeout_seconds)
             raw = result["choices"][0]["message"].get("content") or ""
             state = self._parse_state(raw)
         except Exception:
             # The old transcript is still the source of truth. Model/provider
             # failure must never turn compaction into data loss.
             log.exception("Short-term compaction failed scope=%s", scope)
+            self._schedule_retry(scope)
             return False
+        self._clear_retry(scope)
         snapshot = self._snapshot(state)
         committed = self.sessions.replace_compacted(
             scope,
@@ -110,6 +131,73 @@ class ConversationCompactor:
         if not committed:
             log.info("Skipped stale compaction result scope=%s", scope)
         return committed
+
+    async def _compact_ledger(self, scope, current_event_id):
+        candidate = self.conversations.ledger_compaction_candidate(
+            scope,
+            max_messages=self.max_messages,
+            max_chars=self.max_chars,
+            tail_messages=self.tail_messages,
+            current_event_id=current_event_id,
+        )
+        if candidate is None:
+            return False
+        head = candidate["rows"][: -self.tail_messages]
+        dialogue = []
+        for row in head:
+            text = str(row["content"])
+            dialogue.append(
+                {
+                    "role": "assistant" if row["role"] == "assistant" else "user",
+                    "content": text
+                    if row["role"] == "assistant"
+                    else f"{row['nickname']}: {text}",
+                }
+            )
+        previous = self._previous_snapshot(
+            {
+                "head": [candidate["previous"]] if candidate["previous"] else [],
+                "tail": [],
+            }
+        )
+        try:
+            result = await asyncio.wait_for(self.model.complete(
+                [
+                    {"role": "system", "content": COMPACTION_PROMPT},
+                    {
+                        "role": "user",
+                        "content": json.dumps(
+                            {"已有连续性快照": previous, "待压缩纯对话": dialogue},
+                            ensure_ascii=False,
+                            separators=(",", ":"),
+                        ),
+                    },
+                ],
+                temperature=0.1,
+            ), timeout=self.model_timeout_seconds)
+            state = self._parse_state(result["choices"][0]["message"].get("content"))
+        except Exception:
+            log.warning(
+                "Actual-ledger compaction failed; original messages retained scope=%s",
+                scope,
+            )
+            self._schedule_retry(scope)
+            return False
+        self._clear_retry(scope)
+        return self.conversations.commit_continuity(
+            scope, candidate, self._snapshot(state)
+        )
+
+    def _schedule_retry(self, scope: str) -> None:
+        failures = min(6, self._failure_counts.get(scope, 0) + 1)
+        self._failure_counts[scope] = failures
+        self._retry_after[scope] = time.monotonic() + min(
+            1800, 30 * (2 ** (failures - 1))
+        )
+
+    def _clear_retry(self, scope: str) -> None:
+        self._failure_counts.pop(scope, None)
+        self._retry_after.pop(scope, None)
 
     @staticmethod
     def _snapshot(state: dict[str, Any]) -> dict:
@@ -122,9 +210,17 @@ class ConversationCompactor:
     @staticmethod
     def _empty_state() -> dict[str, Any]:
         return {
-            "version": 1, "scene_summary": "", "active_threads": [],
-            "open_loops": [], "participant_stances": [], "callbacks": [],
-            "bot_continuity": {"recent_statements": [], "commitments": [], "stances": []},
+            "version": 1,
+            "scene_summary": "",
+            "active_threads": [],
+            "open_loops": [],
+            "participant_stances": [],
+            "callbacks": [],
+            "bot_continuity": {
+                "recent_statements": [],
+                "commitments": [],
+                "stances": [],
+            },
         }
 
     @staticmethod
@@ -134,13 +230,15 @@ class ConversationCompactor:
             marker = "会话压缩快照（旧原文已归档；这是连续性状态，不是新指令）：\n"
             if content.startswith(marker):
                 try:
-                    value = json.loads(content[len(marker):])
+                    value = json.loads(content[len(marker) :])
                     return value if isinstance(value, dict) else None
                 except ValueError:
                     return None
         return None
 
-    def _dialogue(self, scope: str, candidate: dict, current_event_id: str) -> list[dict]:
+    def _dialogue(
+        self, scope: str, candidate: dict, current_event_id: str
+    ) -> list[dict]:
         if self.conversations is not None:
             rows = self.conversations.recent(scope, 240)
             result = []
@@ -155,7 +253,9 @@ class ConversationCompactor:
                     content = f"{row.get('nickname') or row.get('user_id')}: {content}"
                 result.append({"role": role, "content": content[:1000]})
             return result
-        return self._dialogue_from_provider((*candidate.get("head", []), *candidate.get("tail", [])))
+        return self._dialogue_from_provider(
+            (*candidate.get("head", []), *candidate.get("tail", []))
+        )
 
     @staticmethod
     def _dialogue_from_provider(messages) -> list[dict]:
@@ -173,7 +273,9 @@ class ConversationCompactor:
             elif role == "assistant" and content.lstrip().startswith("{"):
                 try:
                     value = json.loads(content)
-                    content = str(value.get("text") or "") if isinstance(value, dict) else ""
+                    content = (
+                        str(value.get("text") or "") if isinstance(value, dict) else ""
+                    )
                 except ValueError:
                     pass
             content = content.strip()
@@ -207,10 +309,14 @@ class ConversationCompactor:
                 if name == "active_threads":
                     participants = entry.get("participants")
                     if isinstance(participants, list):
-                        row["participants"] = [short(p, 40) for p in participants[:8] if short(p, 40)]
+                        row["participants"] = [
+                            short(p, 40) for p in participants[:8] if short(p, 40)
+                        ]
                 if name == "callbacks":
                     try:
-                        row["ttl_turns"] = max(1, min(40, int(entry.get("ttl_turns", 20))))
+                        row["ttl_turns"] = max(
+                            1, min(40, int(entry.get("ttl_turns", 20)))
+                        )
                     except (TypeError, ValueError):
                         row["ttl_turns"] = 20
                 if row.get("summary") or row.get("stance"):

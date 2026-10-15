@@ -12,9 +12,17 @@ from qunbot.runtime.tools import Tool, ToolRegistry
 
 def event(*, user="7", message="100", reply="") -> MessageEvent:
     return MessageEvent(
-        event_id="e1", scope="group:42", group_id="42", user_id=user,
-        nickname="测试员", text="管理请求", image_urls=(), at_bot=True,
-        at_users=(), timestamp=1, platform_message_id=message,
+        event_id="e1",
+        scope="group:42",
+        group_id="42",
+        user_id=user,
+        nickname="测试员",
+        text="管理请求",
+        image_urls=(),
+        at_bot=True,
+        at_users=(),
+        timestamp=1,
+        platform_message_id=message,
         reply_to_message_id=reply,
     )
 
@@ -34,7 +42,9 @@ class Gateway:
                 "folders": [{"folder_name": "资料", "folder_id": "f1"}],
             }
         if action == "get_group_files_by_folder":
-            return {"files": [{"file_name": "讲义.zip", "file_id": "b", "file_size": 9}]}
+            return {
+                "files": [{"file_name": "讲义.zip", "file_id": "b", "file_size": 9}]
+            }
         return {}
 
     async def send(self, *, group_id, user_id, text, **kwargs):
@@ -47,22 +57,32 @@ class Agent:
         raise RuntimeError("model unavailable")
 
 
+class WordingAgent:
+    async def reply(self, _event, proactive=False):
+        return SimpleNamespace(text="同意头衔、拒绝头衔、赞成头衔。", draft=None)
+
+
 class QQAdminTests(unittest.IsolatedAsyncioTestCase):
     def service(self, **overrides):
         fields = dict(
-            operator_ids=frozenset({"7"}), max_mute_seconds=600,
-            join_review_enabled=True, join_approve_keywords=("答案42",),
-            join_reject_keywords=("广告",), join_default_approve=False,
+            operator_ids=frozenset({"7"}),
+            max_mute_seconds=600,
+            join_review_enabled=True,
+            join_approve_keywords=("答案42",),
+            join_reject_keywords=("广告",),
+            join_default_approve=False,
             welcome_enabled=True,
         )
         fields.update(overrides)
         service = QQAdminService(QQAdminConfig(**fields))
         gateway = Gateway()
-        service.bind(SimpleNamespace(
-            sender=gateway,
-            policy=SimpleNamespace(allowed_groups=frozenset({"42"})),
-            agent=Agent(),
-        ))
+        service.bind(
+            SimpleNamespace(
+                sender=gateway,
+                policy=SimpleNamespace(allowed_groups=frozenset({"42"})),
+                agent=Agent(),
+            )
+        )
         return service, gateway
 
     async def test_async_tool_registry_awaits_handlers(self):
@@ -71,10 +91,14 @@ class QQAdminTests(unittest.IsolatedAsyncioTestCase):
         async def handler(args, _event):
             return "ok:" + args["value"]
 
-        registry.register(Tool(
-            name="async", description="", parameters={"type": "object"},
-            handler=handler,
-        ))
+        registry.register(
+            Tool(
+                name="async",
+                description="",
+                parameters={"type": "object"},
+                handler=handler,
+            )
+        )
         self.assertEqual(await registry.acall("async", {"value": "1"}, event()), "ok:1")
 
     async def test_only_local_operator_can_mute(self):
@@ -87,15 +111,23 @@ class QQAdminTests(unittest.IsolatedAsyncioTestCase):
         service, gateway = self.service()
         answer = await service.mute_member({"user_id": "8", "duration": 60}, event())
         self.assertEqual(answer, "已禁言 60 秒")
-        self.assertEqual([name for name, _ in gateway.calls], [
-            "get_group_member_info", "set_group_ban",
-        ])
+        self.assertEqual(
+            [name for name, _ in gateway.calls],
+            [
+                "get_group_member_info",
+                "set_group_ban",
+            ],
+        )
 
     async def test_essence_is_limited_to_current_or_quoted_message(self):
         service, gateway = self.service()
         with self.assertRaisesRegex(ValueError, "current or explicitly replied"):
-            await service.set_essence({"message_id": "999", "enable": True}, event(reply="88"))
-        await service.set_essence({"message_id": "88", "enable": True}, event(reply="88"))
+            await service.set_essence(
+                {"message_id": "999", "enable": True}, event(reply="88")
+            )
+        await service.set_essence(
+            {"message_id": "88", "enable": True}, event(reply="88")
+        )
         self.assertEqual(gateway.calls[-1], ("set_essence_msg", {"message_id": 88}))
 
     async def test_group_file_search_is_bounded_and_includes_folders(self):
@@ -103,14 +135,24 @@ class QQAdminTests(unittest.IsolatedAsyncioTestCase):
         rows = json.loads(await service.list_group_files({}, event(user="99")))
         self.assertEqual([row["name"] for row in rows], ["群规.pdf", "讲义.zip"])
         self.assertEqual(rows[1]["folder"], "资料")
-        self.assertEqual([name for name, _ in gateway.calls], [
-            "get_group_root_files", "get_group_files_by_folder",
-        ])
+        self.assertEqual(
+            [name for name, _ in gateway.calls],
+            [
+                "get_group_root_files",
+                "get_group_files_by_folder",
+            ],
+        )
 
     async def test_join_review_is_rules_first_and_unknown_stays_pending(self):
         service, gateway = self.service()
-        base = {"post_type": "request", "request_type": "group", "group_id": 42,
-                "user_id": 8, "flag": "x", "sub_type": "add"}
+        base = {
+            "post_type": "request",
+            "request_type": "group",
+            "group_id": 42,
+            "user_id": 8,
+            "flag": "x",
+            "sub_type": "add",
+        }
         await service.handle_raw({**base, "comment": "答案42"})
         self.assertEqual(gateway.calls[-1][1]["approve"], True)
         count = len(gateway.calls)
@@ -121,20 +163,29 @@ class QQAdminTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_welcome_stays_silent_without_model(self):
         service, gateway = self.service()
-        raw = {"post_type": "notice", "notice_type": "group_increase",
-               "group_id": 42, "user_id": 8, "self_id": 1}
+        raw = {
+            "post_type": "notice",
+            "notice_type": "group_increase",
+            "group_id": 42,
+            "user_id": 8,
+            "self_id": 1,
+        }
         self.assertTrue(await service.handle_raw(raw))
         self.assertEqual(gateway.sent, [])
 
     async def test_title_target_can_consent_to_exact_proposal_reply(self):
         service, gateway = self.service()
+        service.runtime.agent = WordingAgent()
         answer = await service.propose_title(
             {"user_id": "8", "title": "资料侠", "reason": "经常分享资料"}, event()
         )
         self.assertIn("等待本人同意", answer)
         raw = {
-            "post_type": "message", "message_type": "group", "group_id": 42,
-            "user_id": 8, "self_id": 1,
+            "post_type": "message",
+            "message_type": "group",
+            "group_id": 42,
+            "user_id": 8,
+            "self_id": 1,
             "message": [
                 {"type": "reply", "data": {"id": "proposal-1"}},
                 {"type": "text", "data": {"text": "同意头衔"}},
@@ -142,23 +193,33 @@ class QQAdminTests(unittest.IsolatedAsyncioTestCase):
         }
         self.assertTrue(await service.handle_raw(raw))
         self.assertIn("set_group_special_title", [name for name, _ in gateway.calls])
-        params = next(params for name, params in gateway.calls if name == "set_group_special_title")
+        params = next(
+            params
+            for name, params in gateway.calls
+            if name == "set_group_special_title"
+        )
         self.assertEqual(params["special_title"], "资料侠")
 
     async def test_title_votes_are_unique_and_must_reply_to_proposal(self):
         service, gateway = self.service(title_vote_threshold=2)
+        service.runtime.agent = WordingAgent()
         await service.propose_title(
             {"user_id": "8", "title": "气氛组", "reason": "经常活跃气氛"}, event()
         )
+
         def vote(user, reply="proposal-1"):
             return {
-                "post_type": "message", "message_type": "group", "group_id": 42,
-                "user_id": user, "self_id": 1,
+                "post_type": "message",
+                "message_type": "group",
+                "group_id": 42,
+                "user_id": user,
+                "self_id": 1,
                 "message": [
                     {"type": "reply", "data": {"id": reply}},
                     {"type": "text", "data": {"text": "赞成头衔"}},
                 ],
             }
+
         self.assertFalse(await service.handle_raw(vote(9, "other-message")))
         self.assertTrue(await service.handle_raw(vote(9)))
         self.assertTrue(await service.handle_raw(vote(9)))
@@ -168,12 +229,16 @@ class QQAdminTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_title_target_can_veto(self):
         service, gateway = self.service()
+        service.runtime.agent = WordingAgent()
         await service.propose_title(
             {"user_id": "8", "title": "早起王", "reason": "每天早起"}, event()
         )
         raw = {
-            "post_type": "message", "message_type": "group", "group_id": 42,
-            "user_id": 8, "self_id": 1,
+            "post_type": "message",
+            "message_type": "group",
+            "group_id": 42,
+            "user_id": 8,
+            "self_id": 1,
             "message": [
                 {"type": "reply", "data": {"id": "proposal-1"}},
                 {"type": "text", "data": {"text": "拒绝头衔"}},

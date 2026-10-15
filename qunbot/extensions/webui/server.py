@@ -54,7 +54,9 @@ class WebUIServer:
         if self.schedule_management is not None:
             self.schedule_management.bind_loop(asyncio.get_running_loop())
         handler = self._handler()
-        self._server = ThreadingHTTPServer((self.config.host, self.config.port), handler)
+        self._server = ThreadingHTTPServer(
+            (self.config.host, self.config.port), handler
+        )
         self._server.daemon_threads = True
         log.info("WebUI listening on http://%s:%s", self.config.host, self.config.port)
         try:
@@ -113,7 +115,9 @@ class WebUIServer:
             def _authorized(self) -> bool:
                 header = self.headers.get("Authorization", "")
                 supplied = header[7:] if header.startswith("Bearer ") else ""
-                return bool(supplied) and hmac.compare_digest(supplied, owner.config.token)
+                return bool(supplied) and hmac.compare_digest(
+                    supplied, owner.config.token
+                )
 
             def _body(self) -> dict[str, Any]:
                 try:
@@ -190,14 +194,21 @@ class WebUIServer:
                     self._json(HTTPStatus.UNAUTHORIZED, {"error": "登录密钥无效"})
                     return
                 if path == "/api/config":
-                    self._json(HTTPStatus.OK, {
-                        "sections": [
-                            {"id": section, "label": label, "description": description}
-                            for section, label, description in SECTIONS
-                        ],
-                        "settings": [setting.public() for setting in SETTINGS],
-                        "values": owner.store.read(),
-                    })
+                    self._json(
+                        HTTPStatus.OK,
+                        {
+                            "sections": [
+                                {
+                                    "id": section,
+                                    "label": label,
+                                    "description": description,
+                                }
+                                for section, label, description in SECTIONS
+                            ],
+                            "settings": [setting.public() for setting in SETTINGS],
+                            "values": owner.store.read(),
+                        },
+                    )
                 elif path == "/api/guide":
                     source = owner._guide.read_text(encoding="utf-8")
                     self._text(
@@ -213,69 +224,113 @@ class WebUIServer:
                 elif path == "/api/status":
                     values = owner.store.read()
                     extensions = str(values["BOT_EXTENSIONS"]["value"] or "")
-                    self._json(HTTPStatus.OK, {
-                        "online": True,
-                        "uptime_seconds": int(time.time() - owner.started_at),
-                        "restart_required": owner.restart_required,
-                        "extension_count": len([x for x in extensions.split(",") if x.strip()]),
-                        "env_path": str(owner.config.env_path),
-                    })
+                    self._json(
+                        HTTPStatus.OK,
+                        {
+                            "online": True,
+                            "uptime_seconds": int(time.time() - owner.started_at),
+                            "restart_required": owner.restart_required,
+                            "extension_count": len(
+                                [x for x in extensions.split(",") if x.strip()]
+                            ),
+                            "env_path": str(owner.config.env_path),
+                        },
+                    )
                 elif path.startswith("/api/memory/"):
                     if owner.memory_query is None:
-                        self._json(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "记忆服务尚未就绪"})
+                        self._json(
+                            HTTPStatus.SERVICE_UNAVAILABLE,
+                            {"error": "记忆服务尚未就绪"},
+                        )
                         return
                     scope = str(query.get("scope", [""])[0]).strip() or None
                     limit_raw = str(query.get("limit", ["100"])[0])
                     try:
                         limit = max(1, min(200, int(limit_raw)))
                     except ValueError:
-                        self._json(HTTPStatus.BAD_REQUEST, {"error": "limit 必须是整数"})
+                        self._json(
+                            HTTPStatus.BAD_REQUEST, {"error": "limit 必须是整数"}
+                        )
                         return
                     dashboard = owner.memory_query
+                    after = str(query.get("after", [""])[0])
+                    if after:
+                        try:
+                            cursor = json.loads(after)
+                            if (
+                                not isinstance(cursor, list)
+                                or len(cursor) != 2
+                                or not all(isinstance(value, str) for value in cursor)
+                                or len(after) > 500
+                            ):
+                                raise ValueError("cursor")
+                        except ValueError:
+                            self._json(
+                                HTTPStatus.BAD_REQUEST, {"error": "分页游标无效"}
+                            )
+                            return
                     if path == "/api/memory/overview":
                         data = dashboard.overview(scope)
                     elif path == "/api/memory/items":
                         data = dashboard.memories(
                             scope,
                             status=str(query.get("status", [""])[0]) or None,
-                            query=str(query.get("q", [""])[0]), limit=limit,
+                            query=str(query.get("q", [""])[0]),
+                            limit=limit,
+                            after=after,
                         )
                     elif path.startswith("/api/memory/items/"):
                         try:
                             item_id = int(path.rsplit("/", 1)[1])
                         except ValueError:
-                            self._json(HTTPStatus.BAD_REQUEST, {"error": "记忆 ID 无效"})
+                            self._json(
+                                HTTPStatus.BAD_REQUEST, {"error": "记忆 ID 无效"}
+                            )
                             return
                         data = dashboard.memory_detail(item_id)
                         if data is None:
                             self._json(HTTPStatus.NOT_FOUND, {"error": "记忆不存在"})
                             return
                     elif path == "/api/memory/topics":
-                        data = dashboard.topics(scope, limit)
+                        data = dashboard.topics(scope, limit, after=after)
                     elif path.startswith("/api/memory/topics/"):
                         try:
                             topic_id = int(path.rsplit("/", 1)[1])
                         except ValueError:
-                            self._json(HTTPStatus.BAD_REQUEST, {"error": "Topic ID 无效"})
+                            self._json(
+                                HTTPStatus.BAD_REQUEST, {"error": "Topic ID 无效"}
+                            )
                             return
                         data = dashboard.topic_detail(topic_id)
                         if data is None:
                             self._json(HTTPStatus.NOT_FOUND, {"error": "Topic 不存在"})
                             return
                     elif path == "/api/memory/people":
-                        data = dashboard.people_list(scope)
+                        data = dashboard.people_list(scope, limit, after=after)
                     elif path.startswith("/api/memory/people/"):
                         parts = path.split("/")
                         if len(parts) != 6:
-                            self._json(HTTPStatus.BAD_REQUEST, {"error": "人物路径无效"})
+                            self._json(
+                                HTTPStatus.BAD_REQUEST, {"error": "人物路径无效"}
+                            )
                             return
                         data = dashboard.person_detail(parts[4], parts[5])
                     elif path == "/api/memory/slang":
-                        data = dashboard.slang(scope, limit)
+                        data = dashboard.slang(scope, limit, after=after)
                     elif path == "/api/memory/extractions":
                         data = dashboard.extractions(scope, limit)
                     elif path == "/api/memory/graph":
                         data = dashboard.graph(scope, limit)
+                    elif path == "/api/memory/ontology-detail":
+                        data = dashboard.ontology_detail(
+                            scope, str(query.get("id", [""])[0])
+                        )
+                        if data is None:
+                            self._json(
+                                HTTPStatus.NOT_FOUND,
+                                {"error": "当前群中没有这个图谱对象"},
+                            )
+                            return
                     else:
                         self._json(HTTPStatus.NOT_FOUND, {"error": "not found"})
                         return
@@ -290,7 +345,9 @@ class WebUIServer:
                     try:
                         limit = max(1, min(200, int(query.get("limit", ["100"])[0])))
                     except ValueError:
-                        self._json(HTTPStatus.BAD_REQUEST, {"error": "limit 必须是整数"})
+                        self._json(
+                            HTTPStatus.BAD_REQUEST, {"error": "limit 必须是整数"}
+                        )
                         return
                     data = owner.persona_queue.proposals(
                         str(query.get("scope", [""])[0]).strip() or None, limit
@@ -310,7 +367,10 @@ class WebUIServer:
                 elif path.startswith("/api/schedules/"):
                     manager = owner.schedule_management
                     if manager is None:
-                        self._json(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "任务服务尚未就绪"})
+                        self._json(
+                            HTTPStatus.SERVICE_UNAVAILABLE,
+                            {"error": "任务服务尚未就绪"},
+                        )
                         return
                     try:
                         if path == "/api/schedules/overview":
@@ -319,7 +379,10 @@ class WebUIServer:
                             data = manager.jobs()
                         elif path == "/api/schedules/runs":
                             job_raw = str(query.get("job_id", [""])[0]).strip()
-                            data = manager.runs(int(job_raw) if job_raw else None, int(query.get("limit", ["100"])[0]))
+                            data = manager.runs(
+                                int(job_raw) if job_raw else None,
+                                int(query.get("limit", ["100"])[0]),
+                            )
                         elif path == "/api/schedules/suggestions":
                             data = manager.suggestions_list()
                         elif path == "/api/schedules/preview":
@@ -378,7 +441,10 @@ class WebUIServer:
                         self._json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
                         return
                     except OSError as error:
-                        self._json(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": f"写入人格示例失败：{error}"})
+                        self._json(
+                            HTTPStatus.INTERNAL_SERVER_ERROR,
+                            {"error": f"写入人格示例失败：{error}"},
+                        )
                         return
                     if row is None:
                         self._json(HTTPStatus.NOT_FOUND, {"error": "提议不存在"})
@@ -406,14 +472,19 @@ class WebUIServer:
                     return
                 if path == "/api/review/forget":
                     self._review_write(
-                        lambda term, scope, body: owner.review.forget(term, scope=scope),
+                        lambda term, scope, body: owner.review.forget(
+                            term, scope=scope
+                        ),
                         body,
                     )
                     return
                 manager = owner.schedule_management
                 if path == "/api/schedules/jobs":
                     if manager is None:
-                        self._json(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "任务服务尚未就绪"})
+                        self._json(
+                            HTTPStatus.SERVICE_UNAVAILABLE,
+                            {"error": "任务服务尚未就绪"},
+                        )
                         return
                     try:
                         item = manager.create(body)
@@ -424,7 +495,10 @@ class WebUIServer:
                     return
                 if path.startswith("/api/schedules/jobs/") and path.endswith("/run"):
                     if manager is None:
-                        self._json(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "任务服务尚未就绪"})
+                        self._json(
+                            HTTPStatus.SERVICE_UNAVAILABLE,
+                            {"error": "任务服务尚未就绪"},
+                        )
                         return
                     try:
                         job_id = int(path.split("/")[-2])
@@ -450,7 +524,10 @@ class WebUIServer:
                         return
                     manager = owner.schedule_management
                     if manager is None:
-                        self._json(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "任务服务尚未就绪"})
+                        self._json(
+                            HTTPStatus.SERVICE_UNAVAILABLE,
+                            {"error": "任务服务尚未就绪"},
+                        )
                         return
                     key = unquote(path.rsplit("/", 1)[1])
                     try:
@@ -480,11 +557,14 @@ class WebUIServer:
                     self._json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
                     return
                 owner.restart_required = owner.restart_required or bool(updated)
-                self._json(HTTPStatus.OK, {
-                    "ok": True,
-                    "updated": updated,
-                    "restart_required": owner.restart_required,
-                })
+                self._json(
+                    HTTPStatus.OK,
+                    {
+                        "ok": True,
+                        "updated": updated,
+                        "restart_required": owner.restart_required,
+                    },
+                )
 
             def do_DELETE(self) -> None:
                 path = urlsplit(self.path).path
@@ -496,7 +576,9 @@ class WebUIServer:
                     return
                 manager = owner.schedule_management
                 if manager is None:
-                    self._json(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "任务服务尚未就绪"})
+                    self._json(
+                        HTTPStatus.SERVICE_UNAVAILABLE, {"error": "任务服务尚未就绪"}
+                    )
                     return
                 key = unquote(path.rsplit("/", 1)[1])
                 try:

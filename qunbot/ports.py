@@ -37,7 +37,11 @@ class ReplyPlanner(Protocol):
 
 class ReplyDelivery(Protocol):
     async def dispatch(
-        self, plan: Any, *, group_id: str | None, user_id: str | None,
+        self,
+        plan: Any,
+        *,
+        group_id: str | None,
+        user_id: str | None,
         allowed_at: frozenset[str] = frozenset(),
     ) -> Any: ...
 
@@ -69,6 +73,10 @@ class AgentRunner(Protocol):
         self, event: MessageEvent, *, proactive: bool = False
     ) -> ReplyResult: ...
     async def extract_memory(self, scope: str) -> None: ...
+
+
+class InboundMediaPort(Protocol):
+    async def prepare(self, event: MessageEvent) -> MessageEvent: ...
 
 
 class AffectionObserver(Protocol):
@@ -183,6 +191,8 @@ class MemoryIndex(Protocol):
 class MemoryCoordinator(Protocol):
     def related(self, scope: str, query: str, limit: int = 4) -> list[str]: ...
     def related_context(self, scope: str, query: str, limit: int = 4) -> dict: ...
+    def context_for_turn(self, event: MessageEvent, query: str, limit: int = 4) -> dict: ...
+    def context_for_group_turn(self, scope: str, query: str, limit: int = 4) -> dict: ...
     async def extract(self, scope: str) -> None: ...
     def overview(self, scope: str | None = None) -> dict[str, Any]: ...
     def memory_detail(self, memory_id: int) -> dict[str, Any] | None: ...
@@ -286,7 +296,10 @@ class OutboundParts(Protocol):
 class MediaProcessor(Protocol):
     async def compose(self, text: str) -> tuple[str, str | None, str | None]: ...
     async def compose_message(
-        self, text: str, *, allowed_at: frozenset[str] | None = None,
+        self,
+        text: str,
+        *,
+        allowed_at: frozenset[str] | None = None,
         voice_style: str = "neutral",
     ) -> OutboundParts: ...
 
@@ -314,12 +327,20 @@ class PromptSessionRepository(Protocol):
     def append(self, scope: str, messages: list[dict]) -> None: ...
     def clear(self, scope: str) -> int: ...
     def compaction_candidate(
-        self, scope: str, *, max_messages: int = 80,
-        max_chars: int = 32000, tail_messages: int = 24,
+        self,
+        scope: str,
+        *,
+        max_messages: int = 80,
+        max_chars: int = 32000,
+        tail_messages: int = 24,
     ) -> dict[str, Any] | None: ...
     def replace_compacted(
-        self, scope: str, *, expected_sequence: int,
-        snapshot: dict, tail: list[dict],
+        self,
+        scope: str,
+        *,
+        expected_sequence: int,
+        snapshot: dict,
+        tail: list[dict],
     ) -> bool: ...
 
 
@@ -356,3 +377,15 @@ class ContextProvider(Protocol):
     ) -> tuple[dict[str, Any], dict[str, TrustLabel]]: ...
     def collect(self, event: MessageEvent) -> dict[str, Any]: ...
     def trust_map(self, event: MessageEvent) -> dict[str, TrustLabel]: ...
+
+
+class BehaviorExperiencePort(Protocol):
+    """Read-only, bounded behavior guidance for one prompt turn.
+
+    The runtime depends on this small port rather than on JSONL, a graph
+    implementation or a particular retrieval library.  An absent provider is
+    a valid deployment: the agent simply replies from the normal scene,
+    memory and skills context.
+    """
+
+    def context_for(self, query: str) -> str: ...
