@@ -64,3 +64,13 @@ def test_private_scope_cannot_fall_back_to_a_group_page():
 
     assert result["entries"] == []
     assert result["pages"] == []
+
+
+def test_replacing_published_pages_clears_old_context_cache():
+    reader = WikiReader(pages())
+    reader.read("group:g1", "u1", "学习")
+    assert reader.cache.size == 1
+
+    reader.replace(())
+
+    assert reader.cache.size == 0

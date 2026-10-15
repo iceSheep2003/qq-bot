@@ -61,6 +61,7 @@ class WikiReader:
 
     def replace(self, pages: Iterable[WikiPage]) -> None:
         self._pages = {page.page_id: page for page in pages}
+        self.cache.clear()
 
     def read(
         self,
