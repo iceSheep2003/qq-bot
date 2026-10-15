@@ -25,6 +25,7 @@ from qqbot.contracts.ports import (
     ToolProvider,
 )
 from qqbot.actions.replies import REPLY_PROTOCOL, ReplyDraft, parse_reply_draft
+from qqbot.agent.memory.wiki.reader import read_mode_for_query
 
 log = logging.getLogger(__name__)
 
@@ -284,7 +285,11 @@ class Agent:
         if self.wiki_reader is not None and recall_eligible:
             try:
                 wiki_context = self.wiki_reader.read(
-                    event.scope, event.user_id, memory_query[:1200], limit=4
+                    event.scope,
+                    event.user_id,
+                    memory_query[:1200],
+                    mode=read_mode_for_query(memory_query),
+                    limit=4,
                 )
             except Exception:
                 log.exception(

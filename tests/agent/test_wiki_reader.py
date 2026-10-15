@@ -1,7 +1,13 @@
 from __future__ import annotations
 
 from qqbot.agent.memory.wiki.page import WikiEntry, WikiPage, WikiSlang, WikiTopic
-from qqbot.agent.memory.wiki.reader import WikiReader
+from qqbot.agent.memory.wiki.reader import WikiReader, read_mode_for_query
+
+
+def test_full_read_requires_an_explicit_memory_review_request():
+    assert read_mode_for_query("我最近在聊操作系统") == "selected"
+    assert read_mode_for_query("你记得关于我的什么") == "full"
+    assert read_mode_for_query("把这个群的完整资料介绍一下") == "full"
 
 
 def pages() -> tuple[WikiPage, ...]:

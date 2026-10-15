@@ -10,6 +10,21 @@ from .page import WikiEntry, WikiPage
 from .update_policy import published_version
 
 ReadMode = Literal["preview", "selected", "full"]
+_FULL_READ_CUES = (
+    "完整资料",
+    "完整信息",
+    "全部信息",
+    "你记得关于我的",
+    "你记得我的什么",
+    "回顾一下我们",
+    "把这个群的资料",
+)
+
+
+def read_mode_for_query(query: str) -> ReadMode:
+    """Escalate only explicit memory-review requests to a full page read."""
+    text = str(query or "").strip().casefold()
+    return "full" if any(cue.casefold() in text for cue in _FULL_READ_CUES) else "selected"
 
 
 def _entry_dict(entry: WikiEntry) -> dict:
