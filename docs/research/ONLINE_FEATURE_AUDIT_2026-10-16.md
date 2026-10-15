@@ -89,7 +89,7 @@ Wiki 候选可以即时落盘，但发布版按批次更新：默认 8 条候选
 
 ## 当前质量门禁状态
 
-当前工作树仍有 `EMBEDDING-RETIREMENT-012` 和 `CORE-IO-POLICY-011-R2` 的未完成改动，不能把它们当成已完成重构。后续每项修改必须遵循：
+`EMBEDDING-RETIREMENT-012` 和 `CORE-IO-POLICY-011-R2` 已在当前分支完成并通过最终回归；线上仍未部署这些本地重构。后续每项修改必须遵循：
 
 1. 先建立 CQG 任务和失败测试；
 2. 保留真实 red 证据；
@@ -105,8 +105,8 @@ Wiki 候选可以即时落盘，但发布版按批次更新：默认 8 条候选
 - `LegacyWikiProjector` 已完成：旧 `memories`、`memory_topics`、`slang_candidates` 行只读投影为群/人物/私聊 Wiki；候选记忆、无释义黑话和拒绝黑话不会进入发布页。
 - `MarkdownWikiStore` 已完成：迁移生成的 Markdown 可以在重启后恢复为 Wiki 实体；SQLite 读取仍位于 infrastructure 层，Agent 不依赖具体存储。
 - 可选 Wiki runtime 已完成：`BOT_WIKI_ENABLED=false` 时不读取、不创建缓存、不改变 Agent；线上当前没有该开关，保持关闭。
-- Reader/Writer 尚未接入线上旧版 `qunbot` 的启动组合；线上仍保持原有长期记忆和黑话路径。
-- 下一步是只读投影旧 `memories`、`memory_topics` 和黑话记录，生成可回滚的 Wiki 快照，再决定是否替换 Agent 读取路径。
+- Reader/Writer 已接入本地可选 runtime；线上旧版 `qunbot` 仍保持原有长期记忆和黑话路径。
+- 旧数据投影、Markdown 快照恢复和运行中刷新已经完成；是否替换线上读取路径仍需单独授权和真实环境验证。
 
 本地迁移命令：
 
