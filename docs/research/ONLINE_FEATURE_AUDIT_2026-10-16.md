@@ -103,6 +103,7 @@ Wiki 候选可以即时落盘，但发布版按批次更新：默认 8 条候选
 - `WikiReader` 已完成：按群/人物/私聊隔离，默认只读取相关条目，按观察时间倒序选取；`full` 必须显式请求。
 - `WikiWriter` 已完成：把已发布的 `WikiPage` 原子写成普通 Markdown，不依赖 Obsidian，不读取或写入线上数据库。
 - `LegacyWikiProjector` 已完成：旧 `memories`、`memory_topics`、`slang_candidates` 行只读投影为群/人物/私聊 Wiki；候选记忆、无释义黑话和拒绝黑话不会进入发布页。
+- `MarkdownWikiStore` 已完成：迁移生成的 Markdown 可以在重启后恢复为 Wiki 实体；SQLite 读取仍位于 infrastructure 层，Agent 不依赖具体存储。
 - Reader/Writer 尚未接入线上旧版 `qunbot` 的启动组合；线上仍保持原有长期记忆和黑话路径。
 - 下一步是只读投影旧 `memories`、`memory_topics` 和黑话记录，生成可回滚的 Wiki 快照，再决定是否替换 Agent 读取路径。
 

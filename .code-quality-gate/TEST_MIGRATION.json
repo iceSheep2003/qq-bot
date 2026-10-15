@@ -1511,5 +1511,11 @@
       "test_write_is_repeatable_and_reports_written_pages"
     ],
     "assertions": 8
+  },
+  "tests/agent/test_wiki_files.py": {
+    "tests": [
+      "test_markdown_snapshot_round_trips_to_page"
+    ],
+    "assertions": 7
   }
 }

@@ -80,6 +80,14 @@ class WikiWriter:
             )
         if not links:
             lines.append("- 暂无")
+        lines.extend(["", "## 关系", ""])
+        for relation in sorted(page.relations, key=lambda item: (-item.observed_at, item.relation_id)):
+            lines.append(
+                f"- {relation.source_entity_id} → {relation.target_entity_id}"
+                f"（{relation.kind}，分数 {relation.score:.2f}，时间 {relation.observed_at}）"
+            )
+        if not page.relations:
+            lines.append("- 暂无")
         lines.append("")
         return "\n".join(lines)
 
