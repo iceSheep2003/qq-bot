@@ -1,28 +1,56 @@
 from __future__ import annotations
 
 from qqbot.agent.memory.wiki.cache import WikiContextCache
-from qqbot.agent.memory.wiki.entity import WikiEntity, WikiFact
+from qqbot.agent.memory.wiki.page import WikiEntry, WikiPage, WikiRelation
 
 
-def test_entity_is_small_and_can_select_facts_like_slang_records():
-    entity = WikiEntity(
+def test_wiki_page_keeps_online_memory_fields_and_reads_latest_entries_first():
+    page = WikiPage(
+        page_id="groups/g1/members/u1",
         scope="group_member",
         entity_id="u1",
-        name="小明",
+        title="小明",
         summary="喜欢讨论操作系统。",
-        facts=(
-            WikiFact(
-                fact_id="e1",
-                text="正在准备操作系统课程",
+        entries=(
+            WikiEntry(
+                entry_id="old",
+                claim="以前准备数学课程",
                 topic="学习",
-                source_ids=("evt-1",),
+                fact_type="fact",
+                persona_hint="可以自然关心进度",
+                mention_policy="soft_echo",
+                source_event_id="evt-0",
+                observed_at=100,
+                confidence=0.99,
+            ),
+            WikiEntry(
+                entry_id="new",
+                claim="正在准备操作系统课程",
+                topic="学习",
+                fact_type="preference",
+                persona_hint="可以自然接住相关话题",
+                mention_policy="tone_only",
+                source_event_id="evt-1",
+                observed_at=200,
                 confidence=0.9,
+            ),
+        ),
+        relations=(
+            WikiRelation(
+                relation_id="r1",
+                source_entity_id="bot",
+                target_entity_id="u1",
+                kind="affection",
+                score=0.75,
+                observed_at=200,
+                source_event_id="evt-1",
             ),
         ),
         version="v1",
     )
-    assert entity.preview() == {"scope": "group_member", "entity_id": "u1", "name": "小明", "summary": "喜欢讨论操作系统。", "version": "v1"}
-    assert entity.select("操作系统")[0].text == "正在准备操作系统课程"
+    assert page.preview()["title"] == "小明"
+    assert page.select("学习", limit=1)[0].entry_id == "new"
+    assert page.relations[0].score == 0.75
 
 
 def test_cache_reuses_query_scoped_wiki_context_until_ttl():
