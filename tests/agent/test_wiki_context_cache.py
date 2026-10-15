@@ -115,6 +115,14 @@ def test_cache_reuses_query_scoped_wiki_context_until_ttl():
     now[0] = 130.1
     cache.get_or_load("group:1", "u1", "黑话", "v1", load)
     assert len(calls) == 2
+    assert cache.report() == {
+        "entries": 1,
+        "hits": 1,
+        "misses": 2,
+        "loads": 2,
+        "hit_ratio": 0.3333,
+        "last_version": "v1",
+    }
 
 
 def test_cache_key_isolated_by_scope_subject_query_and_wiki_version():
