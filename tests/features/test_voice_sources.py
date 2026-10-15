@@ -2,7 +2,7 @@
 
 import unittest
 
-from qunbot.features.voice.sources import CosyVoiceSpeechSource, QwenAudioSpeechSource
+from qqbot.features.voice.sources import CosyVoiceSpeechSource, QwenAudioSpeechSource
 
 
 class CosyVoiceSourceTests(unittest.TestCase):

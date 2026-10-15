@@ -22,7 +22,7 @@ NapCat 负责 QQ 登录和消息收发，Bot 负责对话、记忆和行为规�
 
 ## 代码与目录
 
-源码统一放在 `src/qunbot/`，按七种职责组织：
+源码统一放在 `src/qqbot/`，按七种职责组织：
 
 | 目录 | 负责什么 |
 | --- | --- |
@@ -125,8 +125,8 @@ BOT_WEBUI_TOKEN=your-separate-long-random-webui-token
 set -a
 source .env
 set +a
-.venv/bin/qunbot --check
-.venv/bin/qunbot
+.venv/bin/qqbot --check
+.venv/bin/qqbot
 ```
 
 程序不会自动加载 `.env`。`--check` 检查本地配置，不会验证模型服务是否在线。
@@ -140,7 +140,7 @@ WebUI 默认地址：**http://127.0.0.1:6200/**。使用 `BOT_WEBUI_TOKEN` 登�
 | 你想做什么 | 文档或文件 |
 | --- | --- |
 | 安装、接入 QQ、启用语音与定时任务 | [完整启动指南](docs/guides/QUICKSTART.md) |
-| 调整回复频率、查看记忆、管理任务 | [WebUI 操作手册](src/qunbot/interfaces/webui/docs/GUIDE.md) |
+| 调整回复频率、查看记忆、管理任务 | [WebUI 操作手册](src/qqbot/interfaces/webui/docs/GUIDE.md) |
 | 修改角色、人设和说话风格 | [人格文件](config/persona.md) |
 | 查配置项、实现方式和功能限制 | [功能说明](docs/guides/FEATURES.md) |
 | 了解短期上下文与话题选择 | [对话理解设计](docs/design/CONVERSATION_INTELLIGENCE_DESIGN.md) |
@@ -152,7 +152,7 @@ WebUI 默认地址：**http://127.0.0.1:6200/**。使用 `BOT_WEBUI_TOKEN` 登�
 Skill 描述已有能力如何使用，任务定义选择已有动作与执行时间。它们不能
 注册代码、增加工具权限、修改图谱 schema 或数据库结构。
 
-`src/qunbot/features/` 中的可选功能由开发者维护，经固定清单装配；
+`src/qqbot/features/` 中的可选功能由开发者维护，经固定清单装配；
 `BOT_EXTENSIONS` 选择已经内置的功能。新增实际工具、动作或存储能力需要修改
 受测试和质量门禁约束的版本代码。AstrBot 插件需要移植适配。
 

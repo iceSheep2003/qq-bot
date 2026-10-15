@@ -10,8 +10,8 @@ from dataclasses import replace
 from pathlib import Path
 from unittest import mock
 
-from qunbot.contracts.models import MessageEvent
-from qunbot.agent.identity.emotion import (
+from qqbot.contracts.models import MessageEvent
+from qqbot.agent.identity.emotion import (
     DIMENSIONS,
     EmotionConfig,
     EmotionPolicy,
@@ -19,13 +19,13 @@ from qunbot.agent.identity.emotion import (
     build_emotion,
     loop_gain,
 )
-from qunbot.agent.identity.emotion.evaluator import dedupe_key, parse_verdict
-from qunbot.agent.identity.emotion.store import EmotionStore
-from qunbot.features.mood.register import register as register_mood
-from qunbot.features.mood.register import validate as validate_mood
-from qunbot.features.proactive_chat.runner import ProactiveChat, ProactiveConfig
-from qunbot.agent.memory.service import MemoryService
-from qunbot.agent.context import ContextRegistry, Trust
+from qqbot.agent.identity.emotion.evaluator import dedupe_key, parse_verdict
+from qqbot.agent.identity.emotion.store import EmotionStore
+from qqbot.features.mood.register import register as register_mood
+from qqbot.features.mood.register import validate as validate_mood
+from qqbot.features.proactive_chat.runner import ProactiveChat, ProactiveConfig
+from qqbot.agent.memory.service import MemoryService
+from qqbot.agent.context import ContextRegistry, Trust
 from tests.support import Store
 
 
@@ -275,10 +275,10 @@ class ProactiveGateTests(unittest.TestCase):
         self.temp.cleanup()
 
     def service(self, emotions, sender):
-        from qunbot.agent.orchestrator import Agent
-        from qunbot.agent.service import BotPolicy, ConversationService
-        from qunbot.agent.skills.catalog import SkillCatalog
-        from qunbot.actions.tools.registry import built_in_tools
+        from qqbot.agent.orchestrator import Agent
+        from qqbot.agent.service import BotPolicy, ConversationService
+        from qqbot.agent.skills.catalog import SkillCatalog
+        from qqbot.actions.tools.registry import built_in_tools
 
         agent = Agent(
             StubModel(),
@@ -364,10 +364,10 @@ class PromptContextTests(unittest.TestCase):
         self.temp.cleanup()
 
     def test_mood_reaches_the_prompt_but_not_the_stable_prefix(self):
-        from qunbot.agent.orchestrator import Agent
-        from qunbot.agent.context import ContextRegistry
-        from qunbot.agent.skills.catalog import SkillCatalog
-        from qunbot.actions.tools.registry import built_in_tools
+        from qqbot.agent.orchestrator import Agent
+        from qqbot.agent.context import ContextRegistry
+        from qqbot.agent.skills.catalog import SkillCatalog
+        from qqbot.actions.tools.registry import built_in_tools
 
         config = EmotionConfig(
             enabled=True,
@@ -794,7 +794,7 @@ class BoundaryTests(Harness):
     """Mood owns the bot's state and nothing else. Enforced, not intended."""
 
     def test_the_package_imports_nothing_that_owns_people_or_persona(self):
-        root = Path(__file__).resolve().parents[2] / "src" / "qunbot" / "agent" / "identity" / "emotion"
+        root = Path(__file__).resolve().parents[2] / "src" / "qqbot" / "agent" / "identity" / "emotion"
         forbidden = ("relationships", "persona", "storage", "features", "affection")
         sources = sorted(root.glob("*.py"))
         self.assertTrue(sources)

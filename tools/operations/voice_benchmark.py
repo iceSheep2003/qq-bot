@@ -8,7 +8,7 @@ import base64
 import json
 from pathlib import Path
 
-from qunbot.features.voice.sources import CosyVoiceSpeechSource, QwenAudioSpeechSource
+from qqbot.features.voice.sources import CosyVoiceSpeechSource, QwenAudioSpeechSource
 
 
 async def main() -> None:

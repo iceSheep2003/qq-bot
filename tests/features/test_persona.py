@@ -10,9 +10,9 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
-from qunbot.contracts.models import MessageEvent
-from qunbot.features import persona
-from qunbot.features.persona import (
+from qqbot.contracts.models import MessageEvent
+from qqbot.features import persona
+from qqbot.features.persona import (
     CONTEXT_NAME,
     CONTEXT_PRIORITY,
     MAX_RENDERED_CHARS,
@@ -21,8 +21,8 @@ from qunbot.features.persona import (
     StyleStrategy,
     parse_strategy,
 )
-from qunbot.features.persona.config import PersonaConfig as _PersonaConfig
-from qunbot.agent.context import Trust
+from qqbot.features.persona.config import PersonaConfig as _PersonaConfig
+from qqbot.agent.context import Trust
 from tests.support import Store
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -237,7 +237,7 @@ class DirectorTests(unittest.TestCase):
         director = PersonaDirector(
             config(), self.model, state_view=broken, clock=self._clock
         )
-        with self.assertLogs("qunbot.features.persona.director", level="ERROR"):
+        with self.assertLogs("qqbot.features.persona.director", level="ERROR"):
             asyncio.run(director.observe(event(1), "收到。"))
         self.assertNotEqual(director.contribution(event(1)), "")
 
@@ -247,7 +247,7 @@ class DirectorTests(unittest.TestCase):
                 raise RuntimeError("model is down")
 
         director = PersonaDirector(config(), Exploding(), clock=self._clock)
-        with self.assertLogs("qunbot.features.persona.director", level="ERROR"):
+        with self.assertLogs("qqbot.features.persona.director", level="ERROR"):
             asyncio.run(director.observe(event(1), "收到。"))
         self.assertEqual(director.contribution(event(1)), "")
 
@@ -276,7 +276,7 @@ class RegistrationTests(unittest.TestCase):
     """What ``register`` wires into the host, and what it refuses to."""
 
     def host(self):
-        from qunbot.agent.context import ContextRegistry
+        from qqbot.agent.context import ContextRegistry
 
         return SimpleNamespace(
             context=ContextRegistry(), observers=[], closers=[], proactive_gate=None
@@ -313,7 +313,7 @@ class RegistrationTests(unittest.TestCase):
         behaviour rather than the constant: with room for only one line, the
         mood (the state that produced the phrasing) is what the model keeps.
         """
-        from qunbot.agent.context import ContextRegistry
+        from qqbot.agent.context import ContextRegistry
 
         context = ContextRegistry(budget_chars=100)
         context.register("mood", lambda e: "心" * 60, priority=60, max_chars=200)
@@ -328,7 +328,7 @@ class RegistrationTests(unittest.TestCase):
         If someone later "simplifies" the constant downwards, the ordering
         silently flips back. This states what that would produce.
         """
-        from qunbot.agent.context import ContextRegistry
+        from qqbot.agent.context import ContextRegistry
 
         context = ContextRegistry(budget_chars=100)
         context.register("mood", lambda e: "心" * 60, priority=60, max_chars=200)
@@ -336,9 +336,9 @@ class RegistrationTests(unittest.TestCase):
         self.assertEqual(list(context.collect(event(1))), ["persona"])
 
     def test_the_extension_reads_no_mood_state_of_its_own(self):
-        # The boundary with ``src/qunbot/agent/identity/emotion/`` is enforced, not just intended:
+        # The boundary with ``src/qqbot/agent/identity/emotion/`` is enforced, not just intended:
         # this package may borrow the mood's narration, never import its store.
-        for path in (ROOT / "src" / "qunbot" / "features" / "persona").glob("*.py"):
+        for path in (ROOT / "src" / "qqbot" / "features" / "persona").glob("*.py"):
             with self.subTest(path=path.name):
                 tree = ast.parse(path.read_text(encoding="utf-8"))
                 imported = [
@@ -364,10 +364,10 @@ class PromptContextTests(unittest.TestCase):
         self.temp.cleanup()
 
     def agent(self, context):
-        from qunbot.agent.memory.service import MemoryService
-        from qunbot.agent.orchestrator import Agent
-        from qunbot.agent.skills.catalog import SkillCatalog
-        from qunbot.actions.tools.registry import built_in_tools
+        from qqbot.agent.memory.service import MemoryService
+        from qqbot.agent.orchestrator import Agent
+        from qqbot.agent.skills.catalog import SkillCatalog
+        from qqbot.actions.tools.registry import built_in_tools
 
         return Agent(
             CountingModel(),
@@ -393,7 +393,7 @@ class PromptContextTests(unittest.TestCase):
         return host
 
     def test_prefix_is_byte_identical_with_and_without_the_feature(self):
-        from qunbot.agent.context import ContextRegistry
+        from qqbot.agent.context import ContextRegistry
 
         context = ContextRegistry()
         agent = self.agent(context)
@@ -419,7 +419,7 @@ class PromptContextTests(unittest.TestCase):
         self.assertEqual(self.persona.read_text(encoding="utf-8"), "固定人格")
 
     def test_the_guidance_stays_inside_its_declared_budget(self):
-        from qunbot.agent.context import ContextRegistry
+        from qqbot.agent.context import ContextRegistry
 
         context = ContextRegistry()
         agent = self.agent(context)

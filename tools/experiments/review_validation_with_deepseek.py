@@ -11,8 +11,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from qunbot.infrastructure.adapters.model import ModelClient
-from qunbot.infrastructure.adapters.structured import InstructorOutput
+from qqbot.infrastructure.adapters.model import ModelClient
+from qqbot.infrastructure.adapters.structured import InstructorOutput
 
 
 STRATEGIES = Literal[

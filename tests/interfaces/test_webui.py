@@ -8,10 +8,10 @@ from pathlib import Path
 
 import pytest
 
-from qunbot.interfaces.webui.config import WebUIConfig
-from qunbot.interfaces.webui.envfile import EnvConfigStore
-from qunbot.interfaces.webui.schema import BY_KEY, validate_value
-from qunbot.interfaces.webui.server import WebUIServer
+from qqbot.interfaces.webui.config import WebUIConfig
+from qqbot.interfaces.webui.envfile import EnvConfigStore
+from qqbot.interfaces.webui.schema import BY_KEY, validate_value
+from qqbot.interfaces.webui.server import WebUIServer
 
 
 def test_env_store_masks_secrets_and_preserves_unrelated_lines(tmp_path: Path) -> None:
@@ -69,7 +69,7 @@ def test_style_allowlist_label_says_what_it_actually_controls() -> None:
 
 
 def test_markdown_guide_is_task_oriented_and_covers_every_module() -> None:
-    guide = (Path(__file__).parents[2] / "src/qunbot/interfaces/webui/docs/GUIDE.md").read_text(
+    guide = (Path(__file__).parents[2] / "src/qqbot/interfaces/webui/docs/GUIDE.md").read_text(
         encoding="utf-8"
     )
     assert guide.startswith("# Kinna bot 操作手册")
@@ -92,7 +92,7 @@ def test_markdown_guide_is_task_oriented_and_covers_every_module() -> None:
 def test_markdown_guide_renders_navigation_and_real_sections() -> None:
     import markdown
 
-    guide = (Path(__file__).parents[2] / "src/qunbot/interfaces/webui/docs/GUIDE.md").read_text(
+    guide = (Path(__file__).parents[2] / "src/qqbot/interfaces/webui/docs/GUIDE.md").read_text(
         encoding="utf-8"
     )
     rendered = markdown.markdown(
@@ -102,7 +102,7 @@ def test_markdown_guide_renders_navigation_and_real_sections() -> None:
     )
     assert '<div class="toc">' in rendered
     assert "控制 Bot 什么时候回复" in rendered
-    assert "src/qunbot/agent/service.py" in rendered
+    assert "src/qqbot/agent/service.py" in rendered
 
 
 def _request(url: str, token: str = "", method: str = "GET", body=None):
@@ -187,7 +187,7 @@ def test_the_review_queue_is_owner_only_and_writes_the_file_the_feature_reads(
     Whatever the console writes has to be something the learning feature would
     accept, so the assertion that matters is the round-trip through its parser.
     """
-    from qunbot.features.slang.review import load_review
+    from qqbot.features.slang.review import load_review
 
     env = tmp_path / ".env"
     env.write_text("", encoding="utf-8")
@@ -262,9 +262,9 @@ def test_the_slang_projection_carries_the_meaning_the_console_edits(
     would break the browser silently. This pins the browser's field list."""
     from types import SimpleNamespace
 
-    from qunbot.interfaces.webui.memory_query import MemoryConsoleQuery
-    from qunbot.infrastructure.storage.database import SqliteDatabase
-    from qunbot.infrastructure.storage.slang import SlangStore
+    from qqbot.interfaces.webui.memory_query import MemoryConsoleQuery
+    from qqbot.infrastructure.storage.database import SqliteDatabase
+    from qqbot.infrastructure.storage.slang import SlangStore
 
     database = SqliteDatabase(tmp_path / "bot.sqlite3")
     try:
@@ -297,9 +297,9 @@ def test_the_persona_queue_is_owner_only_and_records_decisions(tmp_path: Path) -
     """Approving changes no running behaviour — it records what a deployer
     decided, so that adopting a suggestion into the persona file stays their
     own deliberate act."""
-    from qunbot.interfaces.webui.persona_review import PersonaQueueQuery
-    from qunbot.infrastructure.storage.database import SqliteDatabase
-    from qunbot.infrastructure.storage.persona_review import ProposalStore
+    from qqbot.interfaces.webui.persona_review import PersonaQueueQuery
+    from qqbot.infrastructure.storage.database import SqliteDatabase
+    from qqbot.infrastructure.storage.persona_review import ProposalStore
 
     env = tmp_path / ".env"
     env.write_text("", encoding="utf-8")

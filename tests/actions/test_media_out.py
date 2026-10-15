@@ -12,10 +12,10 @@ import json
 import unittest
 from unittest import mock
 
-from qunbot.infrastructure.adapters.onebot import OneBotGateway
-from qunbot.contracts.models import MessageEvent
-from qunbot.actions.replies.media import ReplyMediaProcessor
-from qunbot.actions.replies.media_parts import (
+from qqbot.infrastructure.adapters.onebot import OneBotGateway
+from qqbot.contracts.models import MessageEvent
+from qqbot.actions.replies.media import ReplyMediaProcessor
+from qqbot.actions.replies.media_parts import (
     At,
     Image,
     MediaUrlPolicy,

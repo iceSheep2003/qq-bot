@@ -16,16 +16,16 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from qunbot.infrastructure.adapters.events import parse_message
-from qunbot.infrastructure.adapters.onebot import (
+from qqbot.infrastructure.adapters.events import parse_message
+from qqbot.infrastructure.adapters.onebot import (
     DEFAULT_INBOUND_BACKLOG,
     DEFAULT_MAX_LANES,
     DEFAULT_REQUEST_TIMEOUT,
     OneBotGateway,
 )
-from qunbot.bootstrap.config import Config
-from qunbot.contracts.models import MessageEvent
-from qunbot.actions.tools.registry import built_in_tools
+from qqbot.bootstrap.config import Config
+from qqbot.contracts.models import MessageEvent
+from qqbot.actions.tools.registry import built_in_tools
 
 from tests.support import Store
 
@@ -261,7 +261,7 @@ class AssemblyTests(unittest.TestCase):
         self.temp.cleanup()
 
     def app(self):
-        from qunbot.bootstrap.app import BotApp
+        from qqbot.bootstrap.app import BotApp
 
         return BotApp(Config.from_env())
 
@@ -319,7 +319,7 @@ class AssemblyTests(unittest.TestCase):
         self.assertIsNone(app.service.reply_policy)
 
     def test_feature_binders_ran_against_the_live_service(self):
-        from qunbot.features import slang
+        from qqbot.features import slang
 
         app = self.app()
         self.assertIs(slang._SERVICE, app.service)
@@ -341,8 +341,8 @@ class AssemblyTests(unittest.TestCase):
 
         code = (
             "import sys\n"
-            "from qunbot.bootstrap.config import Config\n"
-            "from qunbot.bootstrap.app import BotApp\n"
+            "from qqbot.bootstrap.config import Config\n"
+            "from qqbot.bootstrap.app import BotApp\n"
             "BotApp(Config.from_env())\n"
             "loaded = [m for m in sys.modules if 'features' in m]\n"
             "bad = [m for m in loaded if 'persona' in m or 'slang' in m "
@@ -376,7 +376,7 @@ class ForgetUserTests(unittest.TestCase):
         self.temp.cleanup()
 
     def test_forget_user_reaches_tables_it_was_never_told_about(self):
-        from qunbot.infrastructure.storage.privacy import forget_user
+        from qqbot.infrastructure.storage.privacy import forget_user
 
         self.store.conversations.add_message("e1", "group:42", "7", "小明", "user", "hi")
         self.store.people.observe_user("7", "小明")
@@ -394,7 +394,7 @@ class ForgetUserTests(unittest.TestCase):
                 self.assertEqual(count, 0)
 
     def test_forget_user_leaves_other_people_alone(self):
-        from qunbot.infrastructure.storage.privacy import forget_user
+        from qqbot.infrastructure.storage.privacy import forget_user
 
         self.store.conversations.add_message("e1", "group:42", "7", "小明", "user", "hi")
         self.store.conversations.add_message("e2", "group:42", "9", "小红", "user", "hi")
@@ -418,7 +418,7 @@ class DocumentedSettingsTests(unittest.TestCase):
 
     def _code_names(self) -> set[str]:
         names: set[str] = set()
-        for path in (self.ROOT / "src" / "qunbot").rglob("*.py"):
+        for path in (self.ROOT / "src" / "qqbot").rglob("*.py"):
             names |= set(
                 re.findall(r'"(BOT_[A-Z0-9_]+)"', path.read_text(encoding="utf-8"))
             )

@@ -11,23 +11,23 @@ from zoneinfo import ZoneInfo
 
 import httpx
 
-from qunbot.agent.orchestrator import Agent
-from qunbot.infrastructure.adapters.model import prefix_fingerprint
-from qunbot.contracts.models import JobSkipped, MessageEvent
-from qunbot.infrastructure.adapters.events import parse_message
-from qunbot.actions.replies.media import ReplyMediaProcessor
-from qunbot.features.memes.catalog import LocalMemeCatalog
-from qunbot.features.voice.sources import DashScopeSpeechSource
-from qunbot.agent.memory.service import MemoryService
-from qunbot.features.exam_poster.job import PosterJobHandler
-from qunbot.features.exam_poster.renderer import ExamCountdownPoster
-from qunbot.features.scheduled_chat.job import ChatJobHandler
-from qunbot.actions.scheduling import JobHandlerRegistry, Scheduler, next_occurrence
-from qunbot.actions.scheduling.runner import JobRunner
-from qunbot.agent.service import BotPolicy, ConversationService
-from qunbot.agent.skills.catalog import SkillCatalog
+from qqbot.agent.orchestrator import Agent
+from qqbot.infrastructure.adapters.model import prefix_fingerprint
+from qqbot.contracts.models import JobSkipped, MessageEvent
+from qqbot.infrastructure.adapters.events import parse_message
+from qqbot.actions.replies.media import ReplyMediaProcessor
+from qqbot.features.memes.catalog import LocalMemeCatalog
+from qqbot.features.voice.sources import DashScopeSpeechSource
+from qqbot.agent.memory.service import MemoryService
+from qqbot.features.exam_poster.job import PosterJobHandler
+from qqbot.features.exam_poster.renderer import ExamCountdownPoster
+from qqbot.features.scheduled_chat.job import ChatJobHandler
+from qqbot.actions.scheduling import JobHandlerRegistry, Scheduler, next_occurrence
+from qqbot.actions.scheduling.runner import JobRunner
+from qqbot.agent.service import BotPolicy, ConversationService
+from qqbot.agent.skills.catalog import SkillCatalog
 from tests.support import Store
-from qunbot.actions.tools.registry import built_in_tools
+from qqbot.actions.tools.registry import built_in_tools
 
 
 class FakeModel:
@@ -569,7 +569,7 @@ class ScheduleTests(unittest.TestCase):
 
     def test_a_new_task_type_is_one_class_and_one_decorator(self):
         """A handler takes effect only after explicit registration."""
-        from qunbot.actions.scheduling import JobHandlerRegistry, suggestion
+        from qqbot.actions.scheduling import JobHandlerRegistry, suggestion
 
         class RollCallJob:
             action = "rollcall"
@@ -625,7 +625,7 @@ class ScheduleTests(unittest.TestCase):
         self.assertEqual(self.store.list_jobs("42")[0]["action"], "rollcall")
 
     def test_registry_rejects_duplicate_and_skips_unknown_actions(self):
-        from qunbot.actions.scheduling import JobHandlerRegistry
+        from qqbot.actions.scheduling import JobHandlerRegistry
 
         registry = JobHandlerRegistry()
         registry.register(ChatJobHandler())
@@ -643,7 +643,7 @@ class ScheduleTests(unittest.TestCase):
 
     def test_handler_cannot_escape_the_group_guard(self):
         """Guards live in one place, so no handler can bypass them."""
-        from qunbot.actions.scheduling import JobHandlerRegistry
+        from qqbot.actions.scheduling import JobHandlerRegistry
 
         calls = []
 

@@ -4,8 +4,8 @@ import json
 
 import pytest
 
-from qunbot.agent.skills.catalog import SkillCatalog
-from qunbot.agent.skills.host import OwnerSkills
+from qqbot.agent.skills.catalog import SkillCatalog
+from qqbot.agent.skills.host import OwnerSkills
 from tests.agent.test_scene_refactor import skill
 
 

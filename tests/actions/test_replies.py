@@ -8,10 +8,10 @@ import json
 import tempfile
 import unittest
 
-from qunbot.contracts.models import MessageEvent
-from qunbot.actions.replies.media import ReplyMediaProcessor
-from qunbot.features.memes.catalog import LocalMemeCatalog
-from qunbot.actions.replies import (
+from qqbot.contracts.models import MessageEvent
+from qqbot.actions.replies.media import ReplyMediaProcessor
+from qqbot.features.memes.catalog import LocalMemeCatalog
+from qqbot.actions.replies import (
     DefaultReplyPlanner,
     ReplyCapabilities,
     ReplyDispatcher,
@@ -21,9 +21,9 @@ from qunbot.actions.replies import (
     TextSegmenter,
     parse_reply_draft,
 )
-from qunbot.actions.replies.quotes import QuotePolicy
-from qunbot.actions.replies.media_policy import CasualMediaPolicy
-from qunbot.actions.replies.repetition import repeats_recent
+from qqbot.actions.replies.quotes import QuotePolicy
+from qqbot.actions.replies.media_policy import CasualMediaPolicy
+from qqbot.actions.replies.repetition import repeats_recent
 
 
 class RepetitionGuardTests(unittest.TestCase):

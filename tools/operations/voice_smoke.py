@@ -18,7 +18,7 @@ import uuid
 import httpx
 
 
-from qunbot.features.voice.sources import (  # noqa: E402
+from qqbot.features.voice.sources import (  # noqa: E402
     CosyVoiceSpeechSource, DashScopeSpeechSource, HttpSpeechSource,
     QwenAudioSpeechSource,
 )

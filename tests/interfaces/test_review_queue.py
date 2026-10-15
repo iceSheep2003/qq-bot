@@ -12,7 +12,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from qunbot.interfaces.webui.review_queue import ReviewFileEditor, ReviewFormatError
+from qqbot.interfaces.webui.review_queue import ReviewFileEditor, ReviewFormatError
 
 
 class ReviewEditorTestCase(unittest.TestCase):
@@ -185,7 +185,7 @@ class SafetyTests(ReviewEditorTestCase):
         matters: whatever the console writes has to be a document the feature
         would accept.
         """
-        from qunbot.features.slang.review import load_review
+        from qqbot.features.slang.review import load_review
 
         self.editor.set_decision("上大分", "approve")
         self.editor.set_meaning("上大分", "赢了、拿到好处")

@@ -14,8 +14,8 @@ import unittest
 
 import httpx
 
-from qunbot.contracts.models import ConfigError
-from qunbot.infrastructure.adapters.model import (
+from qqbot.contracts.models import ConfigError
+from qqbot.infrastructure.adapters.model import (
     UNKNOWN,
     BudgetPolicy,
     CircuitPolicy,
@@ -664,7 +664,7 @@ class SecretHygieneTests(unittest.TestCase):
         provider = FakeProvider(error_response(500))
         client, _ = make_client(provider, retry=RetryPolicy(max_attempts=1))
         try:
-            with self.assertLogs("qunbot.infrastructure.adapters.model", level="INFO") as captured:
+            with self.assertLogs("qqbot.infrastructure.adapters.model", level="INFO") as captured:
                 with self.assertRaises(ModelTransientError):
                     run(client.complete(messages(prefix=PROMPT_MARKER)))
         finally:

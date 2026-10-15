@@ -14,17 +14,17 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from qunbot.features.persona.config import PersonaConfig
-from qunbot.features.persona.proposals import (
+from qqbot.features.persona.config import PersonaConfig
+from qqbot.features.persona.proposals import (
     PersonaProposer,
     ProposalError,
     parse_suggestions,
 )
-from qunbot.features.persona.queue import PersonaProposalQueue, example_candidates
-from qunbot.features.persona.examples import PersonaExampleManager, START, END
-from qunbot.features.persona.selection import ExampleSelector
-from qunbot.infrastructure.storage.database import SqliteDatabase, migration_modules
-from qunbot.infrastructure.storage.persona_review import ProposalStore, persona_digest
+from qqbot.features.persona.queue import PersonaProposalQueue, example_candidates
+from qqbot.features.persona.examples import PersonaExampleManager, START, END
+from qqbot.features.persona.selection import ExampleSelector
+from qqbot.infrastructure.storage.database import SqliteDatabase, migration_modules
+from qqbot.infrastructure.storage.persona_review import ProposalStore, persona_digest
 
 SCOPE = "group:42"
 OTHER = "group:43"
@@ -256,21 +256,21 @@ class QueueTests(unittest.TestCase):
                 raise RuntimeError("endpoint down")
 
         queue = self.queue(Broken())
-        with self.assertLogs("qunbot.features.persona.queue", level="ERROR"):
+        with self.assertLogs("qqbot.features.persona.queue", level="ERROR"):
             asyncio.run(queue.propose_for(SCOPE, now=10**6))
         # The run clock moved, so the next tick is refused by the interval.
         self.assertEqual(self.store.last_scan(SCOPE)[1], 10**6)
 
     def test_an_unusable_reply_queues_nothing_and_does_not_raise(self):
         queue = self.queue(ScriptedModel(["我觉得这个人设挺好的。"]))
-        with self.assertLogs("qunbot.features.persona.queue", level="WARNING"):
+        with self.assertLogs("qqbot.features.persona.queue", level="WARNING"):
             self.assertEqual(asyncio.run(queue.propose_for(SCOPE, now=10**6)), 0)
 
     def test_an_unreadable_persona_costs_no_call(self):
         model = ScriptedModel([suggestion("甲")])
         queue = self.queue(model)
         queue.persona_source = lambda: (_ for _ in ()).throw(OSError("gone"))
-        with self.assertLogs("qunbot.features.persona.queue", level="WARNING"):
+        with self.assertLogs("qqbot.features.persona.queue", level="WARNING"):
             self.assertEqual(asyncio.run(queue.propose_for(SCOPE, now=10**6)), 0)
         self.assertEqual(model.calls, 0)
 

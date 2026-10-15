@@ -8,25 +8,25 @@ from unittest.mock import AsyncMock, patch
 
 import httpx
 
-from qunbot.infrastructure.adapters.events import parse_message
-from qunbot.infrastructure.adapters.inbound_media import (
+from qqbot.infrastructure.adapters.events import parse_message
+from qqbot.infrastructure.adapters.inbound_media import (
     MAX_BYTES,
     NapCatMediaSource,
     _MediaRequestFilter,
 )
-from qunbot.infrastructure.adapters.onebot import OneBotGateway, OneBotError
-from qunbot.infrastructure.adapters.perception import configured_perception
-from qunbot.contracts.schema import ContractError
-from qunbot.agent.conversation.projection import ConversationProjector
-from qunbot.contracts.models import InboundPart
-from qunbot.contracts.ontology.objects import stable_id
-from qunbot.agent.perception.inbound import InboundMedia
-from qunbot.agent.orchestrator import Agent
-from qunbot.agent.service import BotPolicy, ConversationService
-from qunbot.infrastructure.storage.assets import AssetStore
-from qunbot.infrastructure.storage.conversation import ConversationStore
-from qunbot.infrastructure.storage.database import SqliteDatabase
-from qunbot.infrastructure.storage.ontology import GraphStore
+from qqbot.infrastructure.adapters.onebot import OneBotGateway, OneBotError
+from qqbot.infrastructure.adapters.perception import configured_perception
+from qqbot.contracts.schema import ContractError
+from qqbot.agent.conversation.projection import ConversationProjector
+from qqbot.contracts.models import InboundPart
+from qqbot.contracts.ontology.objects import stable_id
+from qqbot.agent.perception.inbound import InboundMedia
+from qqbot.agent.orchestrator import Agent
+from qqbot.agent.service import BotPolicy, ConversationService
+from qqbot.infrastructure.storage.assets import AssetStore
+from qqbot.infrastructure.storage.conversation import ConversationStore
+from qqbot.infrastructure.storage.database import SqliteDatabase
+from qqbot.infrastructure.storage.ontology import GraphStore
 
 
 class InboundMediaTests(unittest.IsolatedAsyncioTestCase):
@@ -281,7 +281,7 @@ class InboundMediaTests(unittest.IsolatedAsyncioTestCase):
                     "BOT_ASR_MODEL": "",
                 },
             ),
-            patch("qunbot.infrastructure.adapters.perception.ModelClient") as client,
+            patch("qqbot.infrastructure.adapters.perception.ModelClient") as client,
         ):
             with self.assertRaises(ValueError):
                 configured_perception()

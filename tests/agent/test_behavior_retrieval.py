@@ -5,9 +5,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from qunbot.agent.cognition.experience.retrieval import BehaviorRetriever
-from qunbot.agent.cognition.experience.graph_retrieval import BehaviorGraphRetriever
-from qunbot.agent.cognition.experience.runtime import CompiledBehaviorExperience
+from qqbot.agent.cognition.experience.retrieval import BehaviorRetriever
+from qqbot.agent.cognition.experience.graph_retrieval import BehaviorGraphRetriever
+from qqbot.agent.cognition.experience.runtime import CompiledBehaviorExperience
 
 
 def write_jsonl(path: Path, rows: list[dict]) -> None:

@@ -7,16 +7,16 @@ import tempfile
 from dataclasses import replace
 from pathlib import Path
 
-from qunbot.infrastructure.adapters.events import parse_message
-from qunbot.agent.conversation.intelligence import ConversationIntelligence
-from qunbot.agent.conversation.compaction import ConversationCompactor
-from qunbot.contracts.models import MessageEvent
-from qunbot.agent.orchestrator import Agent
-from qunbot.agent.skills.catalog import SkillCatalog
-from qunbot.actions.tools.registry import ToolRegistry
-from qunbot.infrastructure.storage.database import SqliteDatabase
-from qunbot.infrastructure.storage.prompt_sessions import PromptSessionStore
-from qunbot.infrastructure.storage.topic_observations import TopicObservationStore
+from qqbot.infrastructure.adapters.events import parse_message
+from qqbot.agent.conversation.intelligence import ConversationIntelligence
+from qqbot.agent.conversation.compaction import ConversationCompactor
+from qqbot.contracts.models import MessageEvent
+from qqbot.agent.orchestrator import Agent
+from qqbot.agent.skills.catalog import SkillCatalog
+from qqbot.actions.tools.registry import ToolRegistry
+from qqbot.infrastructure.storage.database import SqliteDatabase
+from qqbot.infrastructure.storage.prompt_sessions import PromptSessionStore
+from qqbot.infrastructure.storage.topic_observations import TopicObservationStore
 
 
 class _Rows:
@@ -261,7 +261,7 @@ class ConversationIntelligenceTests(unittest.TestCase):
             db = SqliteDatabase(root / "bot.sqlite3")
             sessions = PromptSessionStore(db)
             model = _RecordingModel()
-            from qunbot.infrastructure.storage.conversation import ConversationStore
+            from qqbot.infrastructure.storage.conversation import ConversationStore
 
             ledger = ConversationStore(db)
             agent = Agent(
@@ -330,7 +330,7 @@ class ConversationIntelligenceTests(unittest.TestCase):
                     {"role": "assistant", "content": "我刚才理解错了"},
                 ],
             )
-            from qunbot.infrastructure.storage.conversation import ConversationStore
+            from qqbot.infrastructure.storage.conversation import ConversationStore
 
             ledger = ConversationStore(db)
             ledger.add_message(

@@ -1,10 +1,10 @@
 {
   "version": 1,
-  "status": "draft-contract-baseline",
+  "status": "qqbot-namespace-v1-reviewed",
   "fingerprints": {
-    "ontology": "140bb89b49289e267efd605a4ed9b5c5fb32980dc707eeed57bc27d09978a8c1",
-    "tools": "17f72e0682605671c2b2d0d9a1ce7cc414531051db0777ad4eadd1136c67e867",
+    "ontology": "bb524c7c128aade75087b6da2a5620a3e188b58af2a105fc411007e5c9c82a94",
+    "tools": "976ca3aea05b22981a667b5e9b160633ae990b1dded860ad51350f1742787b95",
     "lifecycles": "7880e1b27e60d43393ed777d1542807f0331992a765ba3b32c32ab69415ad20a",
-    "extensions": "1a919400aa1fc2e964117285db5ec0ea8f5154e86b92f50469b1dcc52dea0520"
+    "extensions": "650f78b4cafab6abc7fe441931ad825a37b3e6a66fabdddd10d071cda6b25dbd"
   }
 }

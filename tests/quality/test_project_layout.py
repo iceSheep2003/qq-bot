@@ -14,20 +14,20 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-SOURCE = ROOT / "src" / "qunbot"
+SOURCE = ROOT / "src" / "qqbot"
 SECTIONS = {
     "agent", "actions", "features", "infrastructure", "interfaces", "bootstrap", "contracts",
 }
 
 
 def source_root():
-    assert SOURCE.is_dir(), "Production Python code belongs in src/qunbot"
+    assert SOURCE.is_dir(), "Production Python code belongs in src/qqbot"
     return SOURCE
 
 
 def test_production_source_has_one_canonical_location():
     assert (source_root() / "__init__.py").is_file()
-    assert not (ROOT / "qunbot").exists(), "A second import tree hides stale implementations"
+    assert not (ROOT / "qqbot").exists(), "A second import tree hides stale implementations"
     actual = {p.name for p in SOURCE.iterdir() if p.is_dir() and p.name != "__pycache__"}
     assert actual == SECTIONS
 
@@ -67,9 +67,9 @@ def test_stable_decision_boundaries_do_not_import_concrete_infrastructure(relati
     assert target.exists(), relative
     paths = sorted(target.rglob("*.py")) if target.is_dir() else [target]
     assert paths
-    forbidden = ("qunbot.infrastructure", "qunbot.features", "qunbot.interfaces", "qunbot.bootstrap")
+    forbidden = ("qqbot.infrastructure", "qqbot.features", "qqbot.interfaces", "qqbot.bootstrap")
     if relative == "contracts":
-        forbidden += ("qunbot.agent", "qunbot.actions")
+        forbidden += ("qqbot.agent", "qqbot.actions")
     for path in paths:
         imports = list(module_imports(path))
         assert not [name for name in imports if any(name == p or name.startswith(p + ".") for p in forbidden)], path
@@ -78,7 +78,7 @@ def test_stable_decision_boundaries_do_not_import_concrete_infrastructure(relati
 def test_all_python_sources_parse_and_use_real_new_imports():
     paths = list(source_root().rglob("*.py"))
     assert len(paths) >= 200
-    old = ("qunbot.runtime", "qunbot.extensions", "qunbot.harness", "qunbot.storage", "qunbot.adapters", "qunbot.domain", "qunbot.ports", "qunbot.app", "qunbot.config")
+    old = ("qqbot.runtime", "qqbot.extensions", "qqbot.harness", "qqbot.storage", "qqbot.adapters", "qqbot.domain", "qqbot.ports", "qqbot.app", "qqbot.config")
     for path in paths:
         for imported in module_imports(path):
             assert not any(imported == p or imported.startswith(p + ".") for p in old), (path, imported)
@@ -90,14 +90,14 @@ def test_import_linter_enforces_the_public_contract_boundary():
     config.read(ROOT / ".importlinter")
     contracts = [dict(config[section]) for section in config.sections() if section.startswith("importlinter:contract:")]
     assert len(contracts) >= 6
-    assert any(c["source_modules"].strip() == "qunbot.contracts" and "qunbot.infrastructure" in c["forbidden_modules"] for c in contracts)
+    assert any(c["source_modules"].strip() == "qqbot.contracts" and "qqbot.infrastructure" in c["forbidden_modules"] for c in contracts)
 
 
 def test_packaging_and_both_cli_names_use_the_new_composition_root():
     project = tomllib.loads((ROOT / "pyproject.toml").read_text())
     assert project["tool"]["setuptools"]["packages"]["find"]["where"] == ["src"]
-    assert project["project"]["scripts"]["qunbot"] == "qunbot.bootstrap.app:main"
-    assert project["project"]["scripts"]["kinna-bot"] == "qunbot.bootstrap.app:main"
+    assert project["project"]["scripts"]["qqbot"] == "qqbot.bootstrap.app:main"
+    assert project["project"]["scripts"]["kinna-bot"] == "qqbot.bootstrap.app:main"
     assert project["build-system"]["build-backend"] == "setuptools.build_meta"
 
 
@@ -124,7 +124,7 @@ def test_research_tools_do_not_modify_the_import_search_path():
 
 
 def test_previous_regression_cases_and_assertion_counts_survive_relocation():
-    inventory = json.loads((ROOT / ".veritygate/TEST_MIGRATION.json").read_text())
+    inventory = json.loads((ROOT / ".code-quality-gate/TEST_MIGRATION.json").read_text())
     assert len(inventory) >= 50
     for relative, before in inventory.items():
         tree = ast.parse((ROOT / relative).read_text())
@@ -136,10 +136,10 @@ def test_previous_regression_cases_and_assertion_counts_survive_relocation():
 
 def test_console_report_discovery_works_after_source_relocation(tmp_path, monkeypatch):
     source_root()
-    from qunbot.interfaces.webui import experiments
+    from qqbot.interfaces.webui import experiments
 
     checkout = tmp_path / "checkout"
-    fake_source = checkout / "src/qunbot/interfaces/webui/experiments.py"
+    fake_source = checkout / "src/qqbot/interfaces/webui/experiments.py"
     fake_source.parent.mkdir(parents=True)
     (checkout / "pyproject.toml").write_text("[project]\nname='fixture'\n")
     report = checkout / "experiments/behavior-retrieval.json"
@@ -166,7 +166,7 @@ def test_built_wheel_imports_every_module_and_contains_runtime_assets(tmp_path):
     assert len(wheels) == 1
     with zipfile.ZipFile(wheels[0]) as archive:
         files = archive.namelist()
-        assert not any(name.startswith(("tests/", "tools/", "data/", ".env")) for name in files)
+        assert not any(name.startswith(("tests/", "tools/", "data/", ".env", "qunbot/")) for name in files)
     target = tmp_path / "installed"
     install = subprocess.run([
         sys.executable, "-m", "pip", "install", "--no-deps", "--no-index",
@@ -179,16 +179,16 @@ def test_built_wheel_imports_every_module_and_contains_runtime_assets(tmp_path):
     probe = '''import importlib, json, pkgutil
 from importlib.resources import files
 from pathlib import Path
-import qunbot
-assert Path(qunbot.__file__).is_relative_to(Path.cwd() / "installed")
-names = [m.name for m in pkgutil.walk_packages(qunbot.__path__, "qunbot.")]
+import qqbot
+assert Path(qqbot.__file__).is_relative_to(Path.cwd() / "installed")
+names = [m.name for m in pkgutil.walk_packages(qqbot.__path__, "qqbot.")]
 for name in names:
     importlib.import_module(name)
 assets = {
-    "qunbot.interfaces.webui": ["static/index.html", "static/app.js", "static/app.css", "static/kinna.png", "static/kinna-avatar.png", "docs/GUIDE.md"],
-    "qunbot.agent.identity.guard": ["rules.json"],
-    "qunbot.features.slang": ["data/common_words.txt", "data/slang_review.example.json"],
-    "qunbot.features.scheduled_chat": ["data/proactive_groups.example.json"],
+    "qqbot.interfaces.webui": ["static/index.html", "static/app.js", "static/app.css", "static/kinna.png", "static/kinna-avatar.png", "docs/GUIDE.md"],
+    "qqbot.agent.identity.guard": ["rules.json"],
+    "qqbot.features.slang": ["data/common_words.txt", "data/slang_review.example.json"],
+    "qqbot.features.scheduled_chat": ["data/proactive_groups.example.json"],
 }
 for package, paths in assets.items():
     for relative in paths:
@@ -198,7 +198,7 @@ print(json.dumps({"modules": len(names)}))
     result = subprocess.run([sys.executable, "-c", probe], cwd=tmp_path, env=env, capture_output=True, text=True, timeout=30)
     assert result.returncode == 0, result.stderr
     assert json.loads(result.stdout)["modules"] >= 200
-    for command in ("qunbot", "kinna-bot"):
+    for command in ("qqbot", "kinna-bot"):
         result = subprocess.run([sys.executable, str(target / "bin" / command), "--help"], cwd=tmp_path, env=env, capture_output=True, text=True, timeout=30)
         assert result.returncode == 0, result.stderr
         assert "Kinna bot" in result.stdout

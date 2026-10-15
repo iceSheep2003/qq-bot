@@ -4,10 +4,10 @@ import json
 import unittest
 from types import SimpleNamespace
 
-from qunbot.contracts.models import MessageEvent
-from qunbot.features.qq_admin.config import QQAdminConfig
-from qunbot.features.qq_admin.service import QQAdminService
-from qunbot.actions.tools.registry import Tool, ToolRegistry
+from qqbot.contracts.models import MessageEvent
+from qqbot.features.qq_admin.config import QQAdminConfig
+from qqbot.features.qq_admin.service import QQAdminService
+from qqbot.actions.tools.registry import Tool, ToolRegistry
 
 
 def event(*, user="7", message="100", reply="") -> MessageEvent:

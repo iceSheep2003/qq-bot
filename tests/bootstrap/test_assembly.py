@@ -21,22 +21,22 @@ from contextlib import redirect_stdout
 from pathlib import Path
 from unittest import mock
 
-from qunbot.bootstrap.app import _aclose_all, _close_sync
-from qunbot.bootstrap.config import CONFIG_VERSION, Config
-from qunbot.contracts.models import (
+from qqbot.bootstrap.app import _aclose_all, _close_sync
+from qqbot.bootstrap.config import CONFIG_VERSION, Config
+from qqbot.contracts.models import (
     BotPolicy,
     ConfigError,
     ContextFragment,
     ConversationPolicy,
     SchedulePolicy,
 )
-from qunbot.agent.context import ContextRegistry
+from qqbot.agent.context import ContextRegistry
 
 ROOT = Path(__file__).resolve().parents[2]
 
 
 def event(user_id: str = "7"):
-    from qunbot.contracts.models import MessageEvent
+    from qqbot.contracts.models import MessageEvent
 
     return MessageEvent(
         f"e{user_id}", "group:42", "42", user_id, "小明", "你好", (), True, (), 0
@@ -90,7 +90,7 @@ class AssemblyBase(unittest.TestCase):
 
     def _instrumented(self):
         """Patch the two resources whose teardown we assert on."""
-        import qunbot.bootstrap.app as app_module
+        import qqbot.bootstrap.app as app_module
 
         events = self.events
         real_database, real_model = app_module.SqliteDatabase, app_module.ModelClient
@@ -111,7 +111,7 @@ class AssemblyBase(unittest.TestCase):
         )
 
     def build(self, **overrides):
-        from qunbot.bootstrap.app import BotApp
+        from qqbot.bootstrap.app import BotApp
 
         with mock.patch.dict(os.environ, self.base_env(**overrides), clear=True):
             return BotApp(Config.from_env())
@@ -127,7 +127,7 @@ class StartupRefusalTests(AssemblyBase):
             clear=True,
         ):
             config = Config.from_env()
-        from qunbot.bootstrap.app import BotApp
+        from qqbot.bootstrap.app import BotApp
 
         with self.assertRaises(ConfigError) as caught:
             BotApp(config)
@@ -146,7 +146,7 @@ class StartupRefusalTests(AssemblyBase):
         self.assertIn("BOT_TTS_", str(caught.exception))
 
     def test_duplicate_action_is_refused(self):
-        from qunbot.actions.scheduling import JobHandlerRegistry
+        from qqbot.actions.scheduling import JobHandlerRegistry
 
         registry = JobHandlerRegistry()
 
@@ -219,7 +219,7 @@ class TeardownHelperTests(unittest.TestCase):
         def sync_close():
             events.append("sync")
 
-        with self.assertLogs("qunbot.bootstrap.app", level="ERROR"):
+        with self.assertLogs("qqbot.bootstrap.app", level="ERROR"):
             asyncio.run(_aclose_all([sync_close, bad, async_close]))
         self.assertEqual(events, ["async", "sync"])
 
@@ -229,7 +229,7 @@ class TeardownHelperTests(unittest.TestCase):
         def bad():
             raise RuntimeError("boom")
 
-        with self.assertLogs("qunbot.bootstrap.app", level="ERROR"):
+        with self.assertLogs("qqbot.bootstrap.app", level="ERROR"):
             _close_sync([lambda: events.append("first"), bad, lambda: events.append("last")])
         self.assertEqual(events, ["last", "first"])
 
@@ -296,7 +296,7 @@ class PolicySplitTests(unittest.TestCase):
             policy.conversation = None  # type: ignore[misc]
 
     def test_conversation_service_accepts_the_composite(self):
-        from qunbot.agent.service import ConversationService
+        from qqbot.agent.service import ConversationService
 
         service = ConversationService(
             None,
@@ -320,7 +320,7 @@ class ContextFragmentTests(unittest.TestCase):
         registry.register("broken", lambda ev: 1 / 0)
 
         # The broken contributor is expected to log; keep the run quiet.
-        with self.assertLogs("qunbot.agent.context", level="ERROR"):
+        with self.assertLogs("qqbot.agent.context", level="ERROR"):
             fragments = registry.contributions(event())
         self.assertEqual([f.name for f in fragments], ["greeting", "broken"])
         for fragment in fragments:
@@ -344,13 +344,13 @@ class CheckOutputTests(AssemblyBase):
     """``--check`` is JSON consumed by tooling; its keys are a contract."""
 
     def check(self) -> dict:
-        from qunbot.bootstrap.app import main
+        from qqbot.bootstrap.app import main
 
         buffer = io.StringIO()
         env = self.base_env(BOT_SKILLS_PATH=str(ROOT / "skills"))
         env.pop("BOT_MODEL_API_KEY")  # --check must not need the key
         with mock.patch.dict(os.environ, env, clear=True), mock.patch.object(
-            sys, "argv", ["qunbot", "--check"]
+            sys, "argv", ["qqbot", "--check"]
         ), redirect_stdout(buffer):
             main()
         return json.loads(buffer.getvalue())

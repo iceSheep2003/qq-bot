@@ -1,4 +1,4 @@
-# QunBot 功能文档
+# Kinna bot 功能文档
 
 一个接入 QQ 群的对话 Bot。默认只被 @ 时回复，能记住群里发生的事、认识每个群友、
 有自己的心情和表达习惯，可以由部署者按需开启若干拟人化能力。
@@ -187,14 +187,14 @@
    决策会拉长下一次尝试的间隔（上限即新鲜度窗口）。
 
 两块状态落在主库的 `continuation_state` / `continuation_decisions` 两张表里
-（`src/qunbot/infrastructure/storage/continuation.py`），所以**重启之后窗口、尝试记录和沉默次数都还在**。
+（`src/qqbot/infrastructure/storage/continuation.py`），所以**重启之后窗口、尝试记录和沉默次数都还在**。
 每条决策都带原因留痕，`--check` 与调度器的 `job_runs.detail` 里都能看到"为什么这次
 没说话"。
 
 **每群细粒度策略**在本地文件里（默认 `./config/proactive_groups.json`，缺失就全用
 环境变量默认值），可以给单个群设置免打扰时段、静默门槛、冷却、概率、日额度，或者
 直接 `"enabled": false` 静音。模板见
-`src/qunbot/features/scheduled_chat/data/proactive_groups.example.json`。
+`src/qqbot/features/scheduled_chat/data/proactive_groups.example.json`。
 **这个文件只能由部署者改**，群成员既不能让 Bot 闭嘴，也不能让它多说话。
 
 | 变量 | 默认 | 说明 |
@@ -383,7 +383,7 @@ ASCII 词带词边界（`abc` 不会匹配 `xabcx`）。
 | `BOT_SLANG_REVIEW_PATH` | `./config/slang_review.json` |
 | `BOT_SLANG_WORDLIST_PATH` | 空（挂真实词典用） |
 
-模板见 `src/qunbot/features/slang/data/slang_review.example.json`。
+模板见 `src/qqbot/features/slang/data/slang_review.example.json`。
 
 ### `world_context` — 时间 / 天气 / 记忆回放
 
@@ -449,7 +449,7 @@ ASCII 词带词边界（`abc` 不会匹配 `xabcx`）。
 
 ### 扩展机制：manifest 是唯一事实来源
 
-`src/qunbot/features/manifest.py` 是一张声明式表，每个扩展登记名称、版本、最低契约
+`src/qqbot/features/manifest.py` 是一张声明式表，每个扩展登记名称、版本、最低契约
 版本、依赖、以及**它贡献什么**（job action / context provider / observer / tool /
 worker / closer / media / reply policy …）。
 
@@ -457,7 +457,7 @@ worker / closer / media / reply policy …）。
   都在**导入任何一个扩展模块之前**报错，且指出是哪个扩展缺什么。
 - **贡献守卫**：注册期间监视 host 的每个面，碰了 manifest 没声明的面就是启动错误。
   一个包的爆炸半径因此可以**从表上读出来**，而不是靠约定。
-- **不经允许的代码不会运行**：没有 manifest 行的目录，即使放在 `src/qunbot/features/`
+- **不经允许的代码不会运行**：没有 manifest 行的目录，即使放在 `src/qqbot/features/`
   下也永远不会被导入——有测试写了一个真实可导入的包来证明这一点。
 - **统一关闭**：逆序执行所有清理，单个失败不拖累其余。
 
@@ -552,7 +552,7 @@ worker / closer / media / reply policy …）。
 - **调度没有重试**：`job_runs.attempt` 字段留好了，但没有退避、没有最大尝试次数。
 - **工具权限是硬拒绝而非默认拒绝**：`NETWORK`/`FILESYSTEM`/`MODIFY_*` 无法被任何
   开关授予，比 roadmap 的最低要求更严——但没有留出「部署者显式授权」的口子。
-- **扩展 manifest 是集中的一张表**（`src/qunbot/features/manifest.py`），不是每个包各
+- **扩展 manifest 是集中的一张表**（`src/qqbot/features/manifest.py`），不是每个包各
   自声明——集中便于一眼看全，代价是新增扩展要改两处。
 
 ---
@@ -562,10 +562,10 @@ worker / closer / media / reply policy …）。
 ```bash
 # 1. 最小可跑：纯聊天，零扩展
 BOT_ONEBOT_TOKEN=... BOT_GROUP_ALLOWLIST=你的群号 BOT_MODEL_API_KEY=... \
-BOT_EXTENSIONS= .venv/bin/qunbot
+BOT_EXTENSIONS= .venv/bin/qqbot
 
 # 2. 看当前配置解析成了什么（不连 NapCat）
-.venv/bin/qunbot --check
+.venv/bin/qqbot --check
 
 # 3. 逐一开启，每次 --check 确认
 BOT_EXTENSIONS=scheduled_chat,exam_poster,memes,mood,persona,reply_policy,slang,style_echo,world_context

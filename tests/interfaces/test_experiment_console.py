@@ -24,9 +24,9 @@ from pathlib import Path
 
 import pytest
 
-from qunbot.interfaces.webui.config import WebUIConfig
-from qunbot.interfaces.webui.experiments import ExperimentConsoleQuery
-from qunbot.interfaces.webui.server import WebUIServer
+from qqbot.interfaces.webui.config import WebUIConfig
+from qqbot.interfaces.webui.experiments import ExperimentConsoleQuery
+from qqbot.interfaces.webui.server import WebUIServer
 
 from tools.experiments.bench_behavior_retrieval import fold_of, run_holdout_strategy
 from tests.agent.test_behavior_experience_runtime import write_graph
@@ -539,7 +539,7 @@ def bench_fixture(tmp_path: Path):
             "context_ids": [message_id],
         }
 
-    from qunbot.agent.cognition.experience.graph_retrieval import BehaviorGraphRetriever
+    from qqbot.agent.cognition.experience.graph_retrieval import BehaviorGraphRetriever
 
     return BehaviorGraphRetriever(root), messages, corpus_cases
 

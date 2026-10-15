@@ -8,22 +8,22 @@ import time
 import unittest
 from pathlib import Path
 
-from qunbot.contracts.models import MessageEvent
-from qunbot.agent.memory.service import MemoryService
-from qunbot.agent.memory.relationships import (
+from qqbot.contracts.models import MessageEvent
+from qqbot.agent.memory.service import MemoryService
+from qqbot.agent.memory.relationships import (
     AffectionEvaluator,
     AffectionProposal,
     RelationshipPolicy,
     Stage,
     parse_proposal,
 )
-from qunbot.agent.memory.relationships.evaluator import DECAY_INTERVAL_SECONDS
-from qunbot.agent.orchestrator import Agent
-from qunbot.agent.service import BotPolicy, ConversationService
-from qunbot.agent.skills.catalog import SkillCatalog
-from qunbot.actions.tools.registry import built_in_tools
-from qunbot.infrastructure.storage.database import SqliteDatabase
-from qunbot.infrastructure.storage.relationships import RelationshipsStore
+from qqbot.agent.memory.relationships.evaluator import DECAY_INTERVAL_SECONDS
+from qqbot.agent.orchestrator import Agent
+from qqbot.agent.service import BotPolicy, ConversationService
+from qqbot.agent.skills.catalog import SkillCatalog
+from qqbot.actions.tools.registry import built_in_tools
+from qqbot.infrastructure.storage.database import SqliteDatabase
+from qqbot.infrastructure.storage.relationships import RelationshipsStore
 from tests.support import Store
 
 
@@ -299,7 +299,7 @@ class DecaySweepTests(unittest.TestCase):
                 raise RuntimeError("database went away")
 
         evaluator = self._evaluator(Broken(), half_life=2592000)
-        with self.assertLogs("qunbot.agent.memory.relationships.evaluator", level="ERROR"):
+        with self.assertLogs("qqbot.agent.memory.relationships.evaluator", level="ERROR"):
             self.assertEqual(evaluator.decay_dormant(now=self.BASE), [])
 
     def test_a_port_without_a_sweep_is_not_an_error(self):

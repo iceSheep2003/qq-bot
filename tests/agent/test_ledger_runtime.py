@@ -3,17 +3,17 @@ import time
 import unittest
 from pathlib import Path
 
-from qunbot.agent.conversation.projection import ConversationProjector
-from qunbot.agent.conversation.compaction.service import ConversationCompactor
-from qunbot.contracts.models import MessageEvent
-from qunbot.actions.replies.dispatcher import ReplyDispatcher
-from qunbot.actions.replies.models import ReplyPlan
-from qunbot.actions.replies.segmentation import TextSegmenter
-from qunbot.infrastructure.storage.conversation import ConversationStore
-from qunbot.infrastructure.storage.database import SqliteDatabase
-from qunbot.infrastructure.storage.observations import ObservationOutbox
-from qunbot.infrastructure.storage.ontology import GraphStore
-from qunbot.infrastructure.storage.prompt_sessions import PromptSessionStore
+from qqbot.agent.conversation.projection import ConversationProjector
+from qqbot.agent.conversation.compaction.service import ConversationCompactor
+from qqbot.contracts.models import MessageEvent
+from qqbot.actions.replies.dispatcher import ReplyDispatcher
+from qqbot.actions.replies.models import ReplyPlan
+from qqbot.actions.replies.segmentation import TextSegmenter
+from qqbot.infrastructure.storage.conversation import ConversationStore
+from qqbot.infrastructure.storage.database import SqliteDatabase
+from qqbot.infrastructure.storage.observations import ObservationOutbox
+from qqbot.infrastructure.storage.ontology import GraphStore
+from qqbot.infrastructure.storage.prompt_sessions import PromptSessionStore
 
 
 class LedgerTests(unittest.IsolatedAsyncioTestCase):

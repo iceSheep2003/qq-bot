@@ -12,7 +12,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from qunbot.agent.memory.graph import (
+from qqbot.agent.memory.graph import (
     GraphError,
     GraphExtractor,
     GraphSettings,
@@ -22,11 +22,11 @@ from qunbot.agent.memory.graph import (
     parse_triples,
     settings_from_env,
 )
-from qunbot.agent.memory.service import MemoryService
-from qunbot.infrastructure.storage.conversation import ConversationStore
-from qunbot.infrastructure.storage.database import SqliteDatabase, migration_modules
-from qunbot.infrastructure.storage.knowledge import KnowledgeStore
-from qunbot.infrastructure.storage.memory import MemoryStore
+from qqbot.agent.memory.service import MemoryService
+from qqbot.infrastructure.storage.conversation import ConversationStore
+from qqbot.infrastructure.storage.database import SqliteDatabase, migration_modules
+from qqbot.infrastructure.storage.knowledge import KnowledgeStore
+from qqbot.infrastructure.storage.memory import MemoryStore
 
 SCOPE = "group:42"
 OTHER = "group:43"
@@ -370,7 +370,7 @@ class GraphPassTests(unittest.TestCase):
                 raise RuntimeError("endpoint down")
 
         self.speak("小明在做一个项目")
-        with self.assertLogs("qunbot.agent.memory.service", level="ERROR"):
+        with self.assertLogs("qqbot.agent.memory.service", level="ERROR"):
             self.assertEqual(
                 asyncio.run(self.service(Broken(), SETTINGS).extract_relations(SCOPE)),
                 {},

@@ -1,71 +1,71 @@
 [importlinter]
-root_package = qunbot
+root_package = qqbot
 
 [importlinter:contract:scene]
 name = Scene policy has no infrastructure dependencies
 type = forbidden
-source_modules = qunbot.agent.conversation.channels
+source_modules = qqbot.agent.conversation.channels
 forbidden_modules =
-    qunbot.infrastructure
-    qunbot.features
-    qunbot.interfaces
-    qunbot.bootstrap
-    qunbot.agent.service
+    qqbot.infrastructure
+    qqbot.features
+    qqbot.interfaces
+    qqbot.bootstrap
+    qqbot.agent.service
 
 [importlinter:contract:audience]
 name = Skill audience policy is independent of runtime orchestration
 type = forbidden
-source_modules = qunbot.agent.skills.audience
+source_modules = qqbot.agent.skills.audience
 forbidden_modules =
-    qunbot.infrastructure
-    qunbot.features
-    qunbot.interfaces
-    qunbot.bootstrap
-    qunbot.agent.orchestrator
-    qunbot.agent.service
+    qqbot.infrastructure
+    qqbot.features
+    qqbot.interfaces
+    qqbot.bootstrap
+    qqbot.agent.orchestrator
+    qqbot.agent.service
 
 [importlinter:contract:cognition]
 name = Cognitive decisions do not depend on concrete adapters
 type = forbidden
-source_modules = qunbot.agent.cognition
+source_modules = qqbot.agent.cognition
 forbidden_modules =
-    qunbot.infrastructure
-    qunbot.features
-    qunbot.interfaces
-    qunbot.bootstrap
-    qunbot.agent.orchestrator
-    qunbot.agent.service
+    qqbot.infrastructure
+    qqbot.features
+    qqbot.interfaces
+    qqbot.bootstrap
+    qqbot.agent.orchestrator
+    qqbot.agent.service
 
 [importlinter:contract:contracts]
 name = Shared contracts are below all runtime packages
 type = forbidden
-source_modules = qunbot.contracts
+source_modules = qqbot.contracts
 forbidden_modules =
-    qunbot.agent
-    qunbot.actions
-    qunbot.infrastructure
-    qunbot.features
-    qunbot.interfaces
-    qunbot.bootstrap
+    qqbot.agent
+    qqbot.actions
+    qqbot.infrastructure
+    qqbot.features
+    qqbot.interfaces
+    qqbot.bootstrap
 
 [importlinter:contract:orchestration]
 name = The Agent loop depends on ports rather than concrete implementations
 type = forbidden
 source_modules =
-    qunbot.agent.orchestrator
-    qunbot.agent.service
+    qqbot.agent.orchestrator
+    qqbot.agent.service
 forbidden_modules =
-    qunbot.infrastructure
-    qunbot.features
-    qunbot.interfaces
-    qunbot.bootstrap
+    qqbot.infrastructure
+    qqbot.features
+    qqbot.interfaces
+    qqbot.bootstrap
 
 [importlinter:contract:skills]
 name = Skill definitions cannot register concrete platform capabilities
 type = forbidden
-source_modules = qunbot.agent.skills
+source_modules = qqbot.agent.skills
 forbidden_modules =
-    qunbot.infrastructure
-    qunbot.features
-    qunbot.interfaces
-    qunbot.bootstrap
+    qqbot.infrastructure
+    qqbot.features
+    qqbot.interfaces
+    qqbot.bootstrap

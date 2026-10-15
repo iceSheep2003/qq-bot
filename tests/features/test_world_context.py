@@ -21,16 +21,16 @@ from pathlib import Path
 
 import httpx
 
-from qunbot.infrastructure.adapters.model import prefix_fingerprint
-from qunbot.contracts.models import MessageEvent
-from qunbot.agent.orchestrator import Agent
-from qunbot.agent.context import ContextRegistry, Trust
+from qqbot.infrastructure.adapters.model import prefix_fingerprint
+from qqbot.contracts.models import MessageEvent
+from qqbot.agent.orchestrator import Agent
+from qqbot.agent.context import ContextRegistry, Trust
 
-from qunbot.features import world_context
-from qunbot.features.world_context.config import WorldContextConfig
-from qunbot.features.world_context.replay import MemoryReplayProvider
-from qunbot.features.world_context.time_provider import TimeProvider
-from qunbot.features.world_context.weather import (
+from qqbot.features import world_context
+from qqbot.features.world_context.config import WorldContextConfig
+from qqbot.features.world_context.replay import MemoryReplayProvider
+from qqbot.features.world_context.time_provider import TimeProvider
+from qqbot.features.world_context.weather import (
     WeatherProvider,
     WeatherService,
     reading_from_payload,
@@ -247,9 +247,9 @@ class RegistrationTests(unittest.TestCase):
             "for key in list(os.environ):\n"
             "    if key.startswith('BOT_WORLD_'):\n"
             "        del os.environ[key]\n"
-            "import qunbot.features.world_context  # noqa: F401\n"
-            "assert 'qunbot.features.world_context.weather' not in sys.modules, 'weather imported'\n"
-            "assert 'qunbot.features.world_context.replay' not in sys.modules, 'replay imported'\n"
+            "import qqbot.features.world_context  # noqa: F401\n"
+            "assert 'qqbot.features.world_context.weather' not in sys.modules, 'weather imported'\n"
+            "assert 'qqbot.features.world_context.replay' not in sys.modules, 'replay imported'\n"
             "print('clean')\n"
         )
         result = subprocess.run(
@@ -301,7 +301,7 @@ class TrustAndPriorityTests(unittest.TestCase):
 
     def test_weather_is_labelled_low_once_it_has_a_reading(self):
         """A third-party HTTP body is the least authoritative thing here."""
-        from qunbot.features.world_context.weather import WeatherProvider
+        from qqbot.features.world_context.weather import WeatherProvider
 
         endpoint = FakeWeatherEndpoint(weather_ok())
         service = make_service(endpoint)

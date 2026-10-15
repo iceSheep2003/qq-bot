@@ -26,28 +26,28 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
-from qunbot.features.scheduled_chat.engine import (
+from qqbot.features.scheduled_chat.engine import (
     Decision,
     ProactiveChat,
     local_hour,
     mood_gate,
 )
-from qunbot.features.scheduled_chat.policy import (
+from qqbot.features.scheduled_chat.policy import (
     GroupPolicy,
     GroupPolicySet,
     ProactiveConfig,
     in_quiet_hours,
 )
-from qunbot.features.proactive_chat.runner import build_worker
-from qunbot.features.scheduled_chat.job import (
+from qqbot.features.proactive_chat.runner import build_worker
+from qqbot.features.scheduled_chat.job import (
     ChatJobHandler,
     ContinuationJobHandler,
     register_jobs,
 )
-from qunbot.actions.scheduling import JobHandlerRegistry
-from qunbot.actions.scheduling.runner import JobRunner
-from qunbot.actions.scheduling.scheduler import Scheduler
-from qunbot.infrastructure.storage.continuation import DECISION_HISTORY, ContinuationStore
+from qqbot.actions.scheduling import JobHandlerRegistry
+from qqbot.actions.scheduling.runner import JobRunner
+from qqbot.actions.scheduling.scheduler import Scheduler
+from qqbot.infrastructure.storage.continuation import DECISION_HISTORY, ContinuationStore
 from tests.support import Store
 
 GROUP = "42"
@@ -919,11 +919,11 @@ class ImportBoundaryTests(unittest.TestCase):
     def test_scheduled_chat_alone_does_not_import_the_tick_extension(self):
         import sys
 
-        from qunbot.features.loader import build_registry
+        from qqbot.features.loader import build_registry
 
-        sys.modules.pop("qunbot.features.proactive_chat.runner", None)
+        sys.modules.pop("qqbot.features.proactive_chat.runner", None)
         build_registry(SimpleNamespace(extensions=frozenset({"scheduled_chat"})))
-        self.assertNotIn("qunbot.features.proactive_chat.runner", sys.modules)
+        self.assertNotIn("qqbot.features.proactive_chat.runner", sys.modules)
 
 
 # --------------------------------------------------------------------------

@@ -8,13 +8,13 @@
 从项目根目录执行：
 
 ```sh
-sh .veritygate/ci-setup.sh
+sh .code-quality-gate/ci-setup.sh
 .venv/bin/python -m pytest tests -q
 ```
 
-脚本安装锁定的 Python 依赖、可编辑源码与本地 VerityGate 工具链。
+脚本安装锁定的 Python 依赖、可编辑源码与本地 Code Quality Gate 工具链。
 修改安装配置后重新执行 `.venv/bin/python -m pip install --no-deps -e .`。
-生产命令 `qunbot` 与 `kinna-bot` 指向同一个启动入口。
+正式命令 `qqbot` 与 `kinna-bot` 指向同一个启动入口，旧包与命令别名已经移除。
 
 自动化回归使用临时数据库和替身模型，不连接真实 QQ 或收费模型。
 手动联调工具在 `tools/operations/`，离线实验在 `tools/experiments/`，
@@ -24,18 +24,18 @@ sh .veritygate/ci-setup.sh
 
 | 改动 | 归属 |
 | --- | --- |
-| 回合生命周期、上下文组装和模型编排 | `src/qunbot/agent/service.py`、`agent/orchestrator.py` |
-| 场景准入、对话窗口与压缩 | `src/qunbot/agent/conversation/` |
-| 记忆提炼、召回、证据和关系 | `src/qunbot/agent/memory/` |
-| 可选认知通道与行为经验计算 | `src/qunbot/agent/cognition/` |
-| 身份规则与 Bot 自身情绪 | `src/qunbot/agent/identity/` |
-| Skill 目录、选择、加载和群私聊可见性 | `src/qunbot/agent/skills/` |
-| 工具、发送计划、原生互动与任务执行 | `src/qunbot/actions/` 对应包 |
-| QQ、模型、数据库等具体技术实现 | `src/qunbot/infrastructure/` |
-| 管理界面或管理查询 | `src/qunbot/interfaces/` |
-| 内置可选功能及其装配清单 | `src/qunbot/features/` |
-| 核心配置和依赖装配 | `src/qunbot/bootstrap/` |
-| 共享数据结构、端口、协议与 schema | `src/qunbot/contracts/` |
+| 回合生命周期、上下文组装和模型编排 | `src/qqbot/agent/service.py`、`agent/orchestrator.py` |
+| 场景准入、对话窗口与压缩 | `src/qqbot/agent/conversation/` |
+| 记忆提炼、召回、证据和关系 | `src/qqbot/agent/memory/` |
+| 可选认知通道与行为经验计算 | `src/qqbot/agent/cognition/` |
+| 身份规则与 Bot 自身情绪 | `src/qqbot/agent/identity/` |
+| Skill 目录、选择、加载和群私聊可见性 | `src/qqbot/agent/skills/` |
+| 工具、发送计划、原生互动与任务执行 | `src/qqbot/actions/` 对应包 |
+| QQ、模型、数据库等具体技术实现 | `src/qqbot/infrastructure/` |
+| 管理界面或管理查询 | `src/qqbot/interfaces/` |
+| 内置可选功能及其装配清单 | `src/qqbot/features/` |
+| 核心配置和依赖装配 | `src/qqbot/bootstrap/` |
+| 共享数据结构、端口、协议与 schema | `src/qqbot/contracts/` |
 
 测试按职责放入 `tests/` 的对应目录，跨多个模块的场景回归放在 `tests/agent/`。
 不要新增含义不明的 `common`、`utils`、`manager` 大包，也不要在仓库根部复制源码。
@@ -52,20 +52,21 @@ sh .veritygate/ci-setup.sh
 ## 每次修改的质量流程
 
 1. 写清需求、模块责任、输入输出、边界与验收条件。涉及目录迁移时列出旧新路径。
-2. 先写验收测试，创建 `.veritygate/tasks/<任务编号>.json`，列明测试、实现和受保护文件。
+2. 先写验收测试，创建 `.code-quality-gate/tasks/<任务编号>.json`，列明测试、实现和受保护文件。
 3. 执行真实红阶段，确认是预期断言失败。导入错误、跳过和工具失败不能代替红阶段。
 4. 冻结测试与质量标准，再实现代码。保持完整回归、架构约束和已有覆盖率门槛。
 5. 运行绿阶段，修复实际问题；通过后再执行最终门禁。
 6. 提交实现、任务与证据。只有最终门禁通过后才允许合并；发布和推送按用户授权执行。
 
 ```sh
-node .veritygate/toolchain/node_modules/veritygate/src/cli.mjs workflow --change .veritygate/tasks/<任务编号>.json --phase red
-node .veritygate/toolchain/node_modules/veritygate/src/cli.mjs workflow --change .veritygate/tasks/<任务编号>.json --phase green
-node .veritygate/toolchain/node_modules/veritygate/src/cli.mjs gate
+node .code-quality-gate/toolchain/node_modules/code-quality-gate/src/cli.mjs workflow --change .code-quality-gate/tasks/<任务编号>.json --phase red
+node .code-quality-gate/toolchain/node_modules/code-quality-gate/src/cli.mjs workflow --change .code-quality-gate/tasks/<任务编号>.json --phase green --note "说明本轮实现改动"
+node .code-quality-gate/toolchain/node_modules/code-quality-gate/src/cli.mjs gate
 ```
 
-详细规则见 [.agents/skills/veritygate/SKILL.md](.agents/skills/veritygate/SKILL.md)。
-最终报告在 `.quality/veritygate/`。旧任务证据属于各自的 Git 快照，不应为目录迁移重写。
+详细规则见 [.agents/skills/code-quality-gate/SKILL.md](.agents/skills/code-quality-gate/SKILL.md)。
+最终报告与逐轮实测历史在 `.quality/code-quality-gate/`。旧版本工具、输入和失败证据归档在
+`.code-quality-gate/history/`。旧任务证据属于各自的 Git 快照，不应为目录迁移重写。
 确需修订已冻结的测试输入时，保留原输入与证据、说明原因并重新记录红绿过程。
 
 ## 依赖、记忆与发送

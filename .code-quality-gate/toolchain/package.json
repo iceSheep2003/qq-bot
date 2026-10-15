@@ -1,0 +1,8 @@
+{
+  "name": "kinna-bot-quality-toolchain",
+  "private": true,
+  "version": "1.0.0",
+  "dependencies": {
+    "code-quality-gate": "file:vendor/code-quality-gate-0.6.0.tgz"
+  }
+}

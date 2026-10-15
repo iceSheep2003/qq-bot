@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 def test_cli_help_identifies_kinna_bot_without_requiring_configuration():
     result = subprocess.run(
-        [sys.executable, "-c", "from qunbot.bootstrap.app import main; main()", "--help"],
+        [sys.executable, "-c", "from qqbot.bootstrap.app import main; main()", "--help"],
         cwd=ROOT, capture_output=True, text=True, check=False,
     )
     assert result.returncode == 0
@@ -18,7 +18,7 @@ def test_cli_help_identifies_kinna_bot_without_requiring_configuration():
 
 
 def test_console_uses_kinna_bot_in_visible_branding():
-    html = (ROOT / "src/qunbot/interfaces/webui/static/index.html").read_text()
+    html = (ROOT / "src/qqbot/interfaces/webui/static/index.html").read_text()
     assert "<title>Kinna bot 控制台</title>" in html
     assert "<b>Kinna bot</b>" in html
     assert "QunBot" not in html
@@ -28,5 +28,5 @@ def test_console_uses_kinna_bot_in_visible_branding():
 def test_project_description_and_readme_identify_kinna_bot():
     project = tomllib.loads((ROOT / "pyproject.toml").read_text())["project"]
     assert "Kinna bot" in project["description"]
-    assert project["scripts"]["qunbot"] == "qunbot.bootstrap.app:main"
+    assert project["scripts"]["qqbot"] == "qqbot.bootstrap.app:main"
     assert (ROOT / "README.md").read_text().startswith("# Kinna bot\n")

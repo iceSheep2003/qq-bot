@@ -10,8 +10,8 @@ import asyncio
 import json
 import unittest
 
-from qunbot.infrastructure.adapters.events import parse_message
-from qunbot.infrastructure.adapters.onebot import (
+from qqbot.infrastructure.adapters.events import parse_message
+from qqbot.infrastructure.adapters.onebot import (
     OneBotActionError,
     OneBotDisconnected,
     OneBotGateway,
@@ -391,7 +391,7 @@ class OneBotTests(unittest.TestCase):
             await task
             return accepted, dropped
 
-        with self.assertLogs("qunbot.infrastructure.adapters.onebot", level="WARNING"):
+        with self.assertLogs("qqbot.infrastructure.adapters.onebot", level="WARNING"):
             accepted, dropped = asyncio.run(run())
         self.assertEqual(accepted + dropped, 10)
         self.assertLessEqual(accepted, 2, "one running + one queued at most")
@@ -547,7 +547,7 @@ class SerialDispatcherTests(unittest.TestCase):
             await dispatcher.aclose()
             return accepted
 
-        with self.assertLogs("qunbot.infrastructure.adapters.onebot", level="WARNING"):
+        with self.assertLogs("qqbot.infrastructure.adapters.onebot", level="WARNING"):
             accepted = asyncio.run(run())
         self.assertEqual(accepted.count(True), 2)
         self.assertEqual(dispatcher.stats.dropped, 4)
@@ -567,7 +567,7 @@ class SerialDispatcherTests(unittest.TestCase):
                 dispatcher.submit("group:42", item)
             await dispatcher.aclose()
 
-        with self.assertLogs("qunbot.infrastructure.adapters.onebot", level="ERROR"):
+        with self.assertLogs("qqbot.infrastructure.adapters.onebot", level="ERROR"):
             asyncio.run(run())
         self.assertEqual(seen, [1])
         self.assertEqual(dispatcher.stats.failed, 1)

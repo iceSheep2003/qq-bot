@@ -27,11 +27,11 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from qunbot.contracts.models import MessageEvent
-from qunbot.features import reply_policy as package
-from qunbot.features.features import FeatureHost
-from qunbot.features.loader import build_features
-from qunbot.features.reply_policy import (
+from qqbot.contracts.models import MessageEvent
+from qqbot.features import reply_policy as package
+from qqbot.features.features import FeatureHost
+from qqbot.features.loader import build_features
+from qqbot.features.reply_policy import (
     AdaptiveReplyPolicy,
     Decision,
     MentionOnlyPolicy,
@@ -39,16 +39,16 @@ from qunbot.features.reply_policy import (
     RoomReadingPolicy,
     build_policy,
 )
-from qunbot.features.reply_policy.corpus import CORPUS
-from qunbot.features.reply_policy.policy import _history
-from qunbot.features.reply_policy.replay import (
+from qqbot.features.reply_policy.corpus import CORPUS
+from qqbot.features.reply_policy.policy import _history
+from qqbot.features.reply_policy.replay import (
     BASE_TIME,
     ReplayReport,
     compare,
     replay_case,
     run_replay,
 )
-from qunbot.agent.service import BotPolicy, ConversationService
+from qqbot.agent.service import BotPolicy, ConversationService
 from tests.support import Store
 
 PACKAGE_ROOT = Path(package.__file__).resolve().parent
@@ -591,7 +591,7 @@ class ReplyPolicyServiceTests(unittest.TestCase):
                 await service_.handle_message(addressed)
                 await service_.handle_message(plain)
 
-            with self.assertLogs("qunbot.agent.service", level="ERROR"):
+            with self.assertLogs("qqbot.agent.service", level="ERROR"):
                 asyncio.run(run_both())
             self.assertEqual(agent.calls, [])
             try:
@@ -652,8 +652,8 @@ class ReplyPolicyContainmentTests(unittest.TestCase):
             policy.config.enabled = True  # type: ignore[misc]
 
     def test_stable_prefix_is_byte_identical_with_the_policy_installed(self):
-        from qunbot.agent.orchestrator import Agent
-        from qunbot.agent.skills.catalog import SkillCatalog
+        from qqbot.agent.orchestrator import Agent
+        from qqbot.agent.skills.catalog import SkillCatalog
 
         repo_root = Path(__file__).resolve().parents[2]
         with tempfile.TemporaryDirectory() as tmp:
@@ -699,14 +699,14 @@ class ReplyPolicyContainmentTests(unittest.TestCase):
 class ReplyPolicyBoundaryTests(unittest.TestCase):
     def test_disabled_extension_is_not_imported(self):
         """Off means the module is never even loaded, not merely inert."""
-        sys.modules.pop("qunbot.features.reply_policy", None)
+        sys.modules.pop("qqbot.features.reply_policy", None)
         build_features(SimpleNamespace(extensions=frozenset({"scheduled_chat"})), object())
-        self.assertNotIn("qunbot.features.reply_policy", sys.modules)
+        self.assertNotIn("qqbot.features.reply_policy", sys.modules)
 
     def test_package_pulls_in_no_platform_or_other_layer(self):
         forbidden = (
             "PIL", "napcat", "NapCat", "onebot", "OneBot", "httpx", "websockets",
-            "qunbot.infrastructure.adapters", "qunbot.infrastructure.storage", "qunbot.bootstrap.app", "qunbot.bootstrap.config",
+            "qqbot.infrastructure.adapters", "qqbot.infrastructure.storage", "qqbot.bootstrap.app", "qqbot.bootstrap.config",
         )
         files = sorted(PACKAGE_ROOT.glob("*.py"))
         self.assertTrue(files)

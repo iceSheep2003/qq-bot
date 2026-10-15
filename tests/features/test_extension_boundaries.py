@@ -6,21 +6,21 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace
 
-from qunbot.contracts.models import MessageEvent
-from qunbot.features.loader import build_features, build_registry
-from qunbot.actions.tools.registry import (
+from qqbot.contracts.models import MessageEvent
+from qqbot.features.loader import build_features, build_registry
+from qqbot.actions.tools.registry import (
     DEFAULT_TOOL_QUOTA_PER_MINUTE,
     Tool,
     ToolPermission,
     ToolRegistry,
     built_in_tools,
 )
-from qunbot.actions.scheduling import JobHandlerRegistry
-from qunbot.infrastructure.storage.conversation import ConversationStore
-from qunbot.infrastructure.storage.database import SqliteDatabase
-from qunbot.infrastructure.storage.jobs import JobsStore
-from qunbot.infrastructure.storage.memory import MemoryStore
-from qunbot.infrastructure.storage.relationships import RelationshipsStore
+from qqbot.actions.scheduling import JobHandlerRegistry
+from qqbot.infrastructure.storage.conversation import ConversationStore
+from qqbot.infrastructure.storage.database import SqliteDatabase
+from qqbot.infrastructure.storage.jobs import JobsStore
+from qqbot.infrastructure.storage.memory import MemoryStore
+from qqbot.infrastructure.storage.relationships import RelationshipsStore
 
 
 def message(text: str = "你好", *, user_id: str = "7", scope: str = "group:42"):
@@ -45,16 +45,16 @@ class ExtensionBoundaryTests(unittest.TestCase):
         self.assertEqual(build_registry(self.config()).actions(), set())
 
     def test_poster_does_not_load_for_chat_only(self):
-        sys.modules.pop("qunbot.features.exam_poster.renderer", None)
+        sys.modules.pop("qqbot.features.exam_poster.renderer", None)
         build_registry(self.config("scheduled_chat"))
-        self.assertNotIn("qunbot.features.exam_poster.renderer", sys.modules)
+        self.assertNotIn("qqbot.features.exam_poster.renderer", sys.modules)
 
     def test_unknown_extension_fails_at_startup(self):
         with self.assertRaisesRegex(ValueError, "unknown extensions"):
             build_registry(self.config("unreviewed_package"))
 
     def test_registry_rejects_duplicate_actions(self):
-        from qunbot.features.scheduled_chat.job import ChatJobHandler
+        from qqbot.features.scheduled_chat.job import ChatJobHandler
 
         registry = JobHandlerRegistry()
         registry.register(ChatJobHandler())
@@ -62,7 +62,7 @@ class ExtensionBoundaryTests(unittest.TestCase):
             registry.register(ChatJobHandler())
 
     def test_core_does_not_import_optional_features(self):
-        root = Path(__file__).resolve().parents[2] / "src" / "qunbot"
+        root = Path(__file__).resolve().parents[2] / "src" / "qqbot"
         for relative in ("agent/orchestrator.py", "agent/service.py", "bootstrap/config.py", "contracts/ports.py", "agent/memory/service.py", "actions/scheduling/scheduler.py"):
             with self.subTest(relative=relative):
                 tree = ast.parse((root / relative).read_text(encoding="utf-8"))
@@ -209,7 +209,7 @@ class ToolQuotaTests(unittest.TestCase):
     def test_exceeding_the_quota_is_a_refusal_the_model_can_read(self):
         self.registry.call("echo", {"text": "a"}, message())
         self.registry.call("echo", {"text": "b"}, message())
-        with self.assertLogs("qunbot.actions.tools.registry", level="WARNING"):
+        with self.assertLogs("qqbot.actions.tools.registry", level="WARNING"):
             third = self.registry.call("echo", {"text": "c"}, message())
         self.assertIn("quota exceeded", third)
         self.assertIn("2/min", third)
@@ -234,7 +234,7 @@ class ToolQuotaTests(unittest.TestCase):
     def test_a_quota_refusal_is_a_string_not_an_exception(self):
         self.registry.call("echo", {"text": "a"}, message())
         self.registry.call("echo", {"text": "b"}, message())
-        with self.assertLogs("qunbot.actions.tools.registry", level="WARNING"):
+        with self.assertLogs("qqbot.actions.tools.registry", level="WARNING"):
             refused = self.registry.call("echo", {"text": "c"}, message())
         self.assertIsInstance(refused, str)
 
@@ -300,7 +300,7 @@ class ToolAuditTests(unittest.TestCase):
 
     def test_a_refused_call_is_recorded_too(self):
         self.registry.call("echo", {"text": "a"}, message())
-        with self.assertLogs("qunbot.actions.tools.registry", level="WARNING"):
+        with self.assertLogs("qqbot.actions.tools.registry", level="WARNING"):
             self.registry.call("echo", {"text": "b"}, message())
         entry = self.registry.audit_log()[-1]
         self.assertFalse(entry.allowed)

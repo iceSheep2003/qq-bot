@@ -1,8 +1,8 @@
 import unittest
 
-from qunbot.infrastructure.adapters.structured import InstructorOutput
-from qunbot.contracts.schema import ContractError
-from qunbot.agent.memory.knowledge.extraction_models import ExtractionBatch
+from qqbot.infrastructure.adapters.structured import InstructorOutput
+from qqbot.contracts.schema import ContractError
+from qqbot.agent.memory.knowledge.extraction_models import ExtractionBatch
 
 
 class Model:

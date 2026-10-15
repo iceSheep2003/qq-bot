@@ -28,8 +28,8 @@ import sys
 from pathlib import Path
 
 
-from qunbot.interfaces.webui.config import WebUIConfig
-from qunbot.interfaces.webui.server import WebUIServer
+from qqbot.interfaces.webui.config import WebUIConfig
+from qqbot.interfaces.webui.server import WebUIServer
 
 
 def main() -> int:

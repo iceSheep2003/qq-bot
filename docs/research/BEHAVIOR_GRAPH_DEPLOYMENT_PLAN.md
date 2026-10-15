@@ -12,7 +12,7 @@
 | 问题 | 结论 |
 | --- | --- |
 | 资源够不够？ | **够**。图谱常驻实测 **88.5 MB**，线上 available **701 MB** |
-| 改动大不大？ | **不大，但是一次"特性移植"**，不是加个开关。线上代码缺整个 `src/qunbot/agent/cognition/experience/` 模块 |
+| 改动大不大？ | **不大，但是一次"特性移植"**，不是加个开关。线上代码缺整个 `src/qqbot/agent/cognition/experience/` 模块 |
 | 能不能只加图谱、不动其他代码？ | **能**。运行时依赖只有 `pydantic`（已装），**不需要 `instructor`** |
 | 推荐做法 | **特性移植（7 个文件 + 4 处小补丁）**，而不是全量替换代码库 |
 | 两条路由 | `BOT_BEHAVIOR_MODE=off / hint / graph`，默认 `off`（纯大模型），改配置即可切换 |
@@ -24,17 +24,17 @@
 
 - 部署目录 `/opt/qq-companion-bot`，**不是 git 仓库**（从 Mac 拷贝，含 `._*` AppleDouble 文件）
 - 代码快照停在 **2026-09-30**，**早于** `6f3fd13 固化分层架构重构`
-- **`src/qunbot/agent/cognition/experience/` 目录不存在**；全代码搜 `behavior_experience` / `行为经验` → 0 命中
+- **`src/qqbot/agent/cognition/experience/` 目录不存在**；全代码搜 `behavior_experience` / `行为经验` → 0 命中
 - `.env` 中 `BOT_BEHAVIOR_*` 配置 **0 条** → 图谱当前完全未启用
 - 运行方式：systemd `qq-companion-bot.service`（root）
   ```
-  ExecStart=/bin/bash -lc 'set -a; source /opt/qq-companion-bot/.env; set +a; exec /opt/qq-companion-bot/.venv/bin/qunbot'
+  ExecStart=/bin/bash -lc 'set -a; source /opt/qq-companion-bot/.env; set +a; exec /opt/qq-companion-bot/.venv/bin/qqbot'
   ```
 - 模型 `deepseek-flash`；主群 `group:330707267`（1725 条消息，bot 回复 339 次）
 
 ### 线上缺失的新模块
 
-本地 `qunbot/` 比线上多出：`contracts / conversation / harness / knowledge / mcp / ontology /
+本地 `qqbot/` 比线上多出：`contracts / conversation / harness / knowledge / mcp / ontology /
 perception / skills / social / console / bootstrap / experience`。
 这是分层架构重构的产物——**所以"全量替换代码"会顺带上线整个重构**，爆炸半径远大于图谱本身。
 
@@ -54,9 +54,9 @@ perception / skills / social / console / bootstrap / experience`。
 | 规模 | nodes 6930 · 路径 2007 · 词项 62109 |
 
 对照线上：`available 701 MB`（`free` 只有 258M 是假象）、`swap` 1024M 已用 206M、
-qunbot 自身 RSS 仅 34 MB。
+qqbot 自身 RSS 仅 34 MB。
 
-**预算**：加载后 qunbot ≈ 34 + 88.5 ≈ **123 MB**，available 从 701 → **≈ 610 MB**。
+**预算**：加载后 qqbot ≈ 34 + 88.5 ≈ **123 MB**，available 从 701 → **≈ 610 MB**。
 **结论：内存可行**，但服务器上同时跑着 NapCat(287M)、一个 python(265M)、宝塔面板(93M)，
 余量不算宽裕，上线后需要监控 RSS 与 swap。
 
@@ -64,7 +64,7 @@ qunbot 自身 RSS 仅 34 MB。
 
 ## 4. 依赖分析：为什么可以"只移植图谱"
 
-`src/qunbot/agent/cognition/experience/` 运行时只需要 **6 个文件**：
+`src/qqbot/agent/cognition/experience/` 运行时只需要 **6 个文件**：
 
 | 文件 | 行数 | 外部依赖 |
 | --- | --- | --- |
@@ -124,7 +124,7 @@ workbench upload ... --local data/private/derived/behavior-validation-final-2026
 **第 2 步：移植运行时 7 文件**（**不要拷 `extractor.py`**）
 
 ```bash
-# 目标：/opt/qq-companion-bot/src/qunbot/agent/cognition/experience/
+# 目标：/opt/qq-companion-bot/src/qqbot/agent/cognition/experience/
 # 来源：__init__.py models.py retrieval.py compiler.py graph_retrieval.py
 #       runtime.py decision.py
 ```
@@ -136,7 +136,7 @@ workbench upload ... --local data/private/derived/behavior-validation-final-2026
 
 线上 `agent.py` 的接入点已核对过，行号如下（9/30 快照）：
 
-1. `src/qunbot/agent/orchestrator.py`
+1. `src/qqbot/agent/orchestrator.py`
    - `__init__`（@55）的关键字参数区加 `behavior_decision: BehaviorDecisionPort | None = None`，
      并存为 `self.behavior_decision`
    - `build_messages`（@158）里，在 `dynamic = {…}`（@242，含 `上下文信任级别` @263）
@@ -156,16 +156,16 @@ workbench upload ... --local data/private/derived/behavior-validation-final-2026
                  "authority": decision.authority, "source": decision.source, **decision.block,
              }
      ```
-2. `src/qunbot/contracts/ports.py`（**可选**）新增 `BehaviorDecisionPort` Protocol；线上没有也不影响，
+2. `src/qqbot/contracts/ports.py`（**可选**）新增 `BehaviorDecisionPort` Protocol；线上没有也不影响，
    Python 是鸭子类型，直接传对象即可
-3. `src/qunbot/bootstrap/app.py`（@160 的 `Agent(...)`）加一行：
+3. `src/qqbot/bootstrap/app.py`（@160 的 `Agent(...)`）加一行：
    ```python
    behavior_decision=configured_behavior_decision(),
    ```
-4. 新增两个模块：`src/qunbot/agent/cognition/experience/decision.py`、`src/qunbot/agent/cognition/experience/runtime.py`
+4. 新增两个模块：`src/qqbot/agent/cognition/experience/decision.py`、`src/qqbot/agent/cognition/experience/runtime.py`
    （`decision.py` 依赖 `runtime.py`；`runtime.py` 依赖 `compiler.py` + `graph_retrieval.py`）
 
-> 线上没有 `src/qunbot/contracts/ports.py` 的 `BehaviorDecisionPort` 时，`agent.py` 的类型注解可以先用
+> 线上没有 `src/qqbot/contracts/ports.py` 的 `BehaviorDecisionPort` 时，`agent.py` 的类型注解可以先用
 > `Any` 或直接省略——运行时不检查注解。
 
 **第 4 步：配置 `.env`**
@@ -186,7 +186,7 @@ BOT_BEHAVIOR_PRIOR_WEIGHT=off      # 默认关闭先验校准（见实验结论�
 **第 5 步：启动前校验**
 ```bash
 set -a; source /opt/qq-companion-bot/.env; set +a
-/opt/qq-companion-bot/.venv/bin/qunbot --check
+/opt/qq-companion-bot/.venv/bin/qqbot --check
 ```
 
 **第 6 步：启动并观察**
@@ -194,7 +194,7 @@ set -a; source /opt/qq-companion-bot/.env; set +a
 systemctl start qq-companion-bot
 journalctl -u qq-companion-bot -f | grep -E "Behavior route|行为经验|本轮行为决策|model call"
 # 期望：Behavior route: hint (snapshot /opt/...)
-# 内存：ps -o rss= -p $(pgrep -f bin/qunbot)
+# 内存：ps -o rss= -p $(pgrep -f bin/qqbot)
 ```
 
 **第 7 步：验证提示块真的进了 prompt**
@@ -212,7 +212,7 @@ journalctl -u qq-companion-bot -f | grep -E "Behavior route|行为经验|本轮�
 
 ```bash
 systemctl stop qq-companion-bot
-rm -rf /opt/qq-companion-bot/src/qunbot/agent/cognition/experience          # 撤销第 2 步
+rm -rf /opt/qq-companion-bot/src/qqbot/agent/cognition/experience          # 撤销第 2 步
 # 还原第 3 步补丁（agent.py / ports.py / app.py）
 cp -a /opt/qq-companion-bot.env.bak /opt/qq-companion-bot/.env
 systemctl start qq-companion-bot

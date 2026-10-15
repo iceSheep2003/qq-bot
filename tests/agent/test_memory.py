@@ -15,18 +15,18 @@ import unittest
 from pathlib import Path
 
 from tests.support import Store
-from qunbot.contracts.models import MessageEvent
-from qunbot.agent.memory import dedupe, ranking, text
-from qunbot.agent.memory.embeddings import HashingEmbedder, embeddings_from_env
-from qunbot.agent.memory.models import MemoryEvidence, MemoryItem, RetrievalHit
-from qunbot.agent.memory.service import MemoryService
-from qunbot.agent.orchestrator import Agent
-from qunbot.agent.skills.catalog import SkillCatalog
-from qunbot.actions.tools.registry import built_in_tools
-from qunbot.infrastructure.storage.database import SqliteDatabase
-from qunbot.infrastructure.storage.memory import MemoryStore, dedupe_key, normalize_content
-from qunbot.infrastructure.storage.privacy import forget_user
-from qunbot.agent.memory.scope import ConversationScope, ScopeViolation
+from qqbot.contracts.models import MessageEvent
+from qqbot.agent.memory import dedupe, ranking, text
+from qqbot.agent.memory.embeddings import HashingEmbedder, embeddings_from_env
+from qqbot.agent.memory.models import MemoryEvidence, MemoryItem, RetrievalHit
+from qqbot.agent.memory.service import MemoryService
+from qqbot.agent.orchestrator import Agent
+from qqbot.agent.skills.catalog import SkillCatalog
+from qqbot.actions.tools.registry import built_in_tools
+from qqbot.infrastructure.storage.database import SqliteDatabase
+from qqbot.infrastructure.storage.memory import MemoryStore, dedupe_key, normalize_content
+from qqbot.infrastructure.storage.privacy import forget_user
+from qqbot.agent.memory.scope import ConversationScope, ScopeViolation
 
 SCOPE = "group:42"
 OTHER_SCOPE = "group:43"
@@ -311,7 +311,7 @@ class MemoryStoreTests(unittest.TestCase):
 
     def test_broken_embedder_degrades_to_lexical(self):
         store = self.store.attach_embedder(FailingEmbedder())
-        with self.assertLogs("qunbot.infrastructure.storage.memory", level="WARNING"):
+        with self.assertLogs("qqbot.infrastructure.storage.memory", level="WARNING"):
             outcome = store.observe(SCOPE, "7", "小明喜欢蓝莓蛋糕", source_event_id="m1")
             self.assertEqual(outcome["outcome"], "inserted")
             rows = store.candidates(SCOPE, "蓝莓蛋糕")
@@ -323,7 +323,7 @@ class MemoryStoreTests(unittest.TestCase):
     def test_embedding_provider_is_off_by_default(self):
         self.assertIsNone(embeddings_from_env({}))
         self.assertIsNone(embeddings_from_env({"BOT_MEMORY_EMBEDDING_PROVIDER": ""}))
-        with self.assertLogs("qunbot.agent.memory.embeddings", level="WARNING"):
+        with self.assertLogs("qqbot.agent.memory.embeddings", level="WARNING"):
             self.assertIsNone(
                 embeddings_from_env({"BOT_MEMORY_EMBEDDING_PROVIDER": "openai"})
             )
@@ -343,7 +343,7 @@ class MemoryStoreTests(unittest.TestCase):
             }
         )
         self.assertIsNotNone(offline)
-        with self.assertLogs("qunbot.agent.memory.embeddings", level="WARNING"):
+        with self.assertLogs("qqbot.agent.memory.embeddings", level="WARNING"):
             self.assertIsNone(offline.embed(["小明"]))  # unreachable -> no vectors
 
     # ------------------------------------------------------------- lifecycle
@@ -561,7 +561,7 @@ class MemoryServiceTests(unittest.TestCase):
 
     def test_related_never_raises(self):
         broken = MemoryService(FakeModel(), self.store, object(), embeddings=False)
-        with self.assertLogs("qunbot.agent.memory.service", level="ERROR"):
+        with self.assertLogs("qqbot.agent.memory.service", level="ERROR"):
             self.assertEqual(broken.related(SCOPE, "蓝莓蛋糕"), [])
 
     def test_other_scopes_are_never_injected(self):

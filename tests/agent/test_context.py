@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import unittest
 
-from qunbot.contracts.models import MessageEvent
-from qunbot.agent.context import (
+from qqbot.contracts.models import MessageEvent
+from qqbot.agent.context import (
     ContextContribution,
     ContextRegistry,
     Trust,

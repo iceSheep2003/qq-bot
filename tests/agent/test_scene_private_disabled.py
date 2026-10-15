@@ -4,7 +4,7 @@ import asyncio
 import inspect
 import json
 
-from qunbot.actions.tools.kernel import KernelTools
+from qqbot.actions.tools.kernel import KernelTools
 from tests.agent.test_scene_refactor import event
 
 

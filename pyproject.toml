@@ -3,7 +3,7 @@ requires = ["setuptools==80.9.0", "wheel==0.45.1"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "qunbot"
+name = "kinna-bot"
 version = "0.1.0"
 description = "Kinna bot: a skill-driven QQ companion for group and private chat over OneBot v11"
 requires-python = ">=3.11"
@@ -20,16 +20,16 @@ dependencies = [
 exam-poster = ["pillow>=10,<13"]
 
 [project.scripts]
-qunbot = "qunbot.bootstrap.app:main"
-kinna-bot = "qunbot.bootstrap.app:main"
+qqbot = "qqbot.bootstrap.app:main"
+kinna-bot = "qqbot.bootstrap.app:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
-include = ["qunbot*"]
+include = ["qqbot*"]
 namespaces = false
 
 [tool.setuptools.package-data]
-"qunbot.interfaces.webui" = ["static/*", "docs/*.md"]
-"qunbot.agent.identity.guard" = ["rules.json"]
-"qunbot.features.slang" = ["data/*.txt", "data/*.json"]
-"qunbot.features.scheduled_chat" = ["data/*.json"]
+"qqbot.interfaces.webui" = ["static/*", "docs/*.md"]
+"qqbot.agent.identity.guard" = ["rules.json"]
+"qqbot.features.slang" = ["data/*.txt", "data/*.json"]
+"qqbot.features.scheduled_chat" = ["data/*.json"]

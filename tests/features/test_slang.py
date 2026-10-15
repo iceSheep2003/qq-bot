@@ -19,9 +19,9 @@ from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 
-from qunbot.contracts.models import MessageEvent
-from qunbot.features import slang as slang_module
-from qunbot.features.slang import (
+from qqbot.contracts.models import MessageEvent
+from qqbot.features import slang as slang_module
+from qqbot.features.slang import (
     CONTEXT_MAX_CHARS,
     CONTEXT_PRIORITY,
     SlangConfig,
@@ -32,23 +32,23 @@ from qunbot.features.slang import (
     render_terms,
     validate,
 )
-from qunbot.features.slang import mining
-from qunbot.features.slang.gloss import GlossEngine, GlossError
-from qunbot.features.slang.review import (
+from qqbot.features.slang import mining
+from qqbot.features.slang.gloss import GlossEngine, GlossError
+from qqbot.features.slang.review import (
     Review,
     ReviewFile,
     load_review,
     parse_review,
 )
-from qunbot.agent.orchestrator import Agent
-from qunbot.agent.context import ContextRegistry, Trust
-from qunbot.agent.service import BotPolicy, ConversationService
-from qunbot.agent.skills.catalog import SkillCatalog
-from qunbot.actions.tools.registry import built_in_tools
-from qunbot.agent.memory.service import MemoryService
-from qunbot.infrastructure.storage.conversation import ConversationStore
-from qunbot.infrastructure.storage.database import SqliteDatabase, migration_modules
-from qunbot.infrastructure.storage.slang import SlangStore
+from qqbot.agent.orchestrator import Agent
+from qqbot.agent.context import ContextRegistry, Trust
+from qqbot.agent.service import BotPolicy, ConversationService
+from qqbot.agent.skills.catalog import SkillCatalog
+from qqbot.actions.tools.registry import built_in_tools
+from qqbot.agent.memory.service import MemoryService
+from qqbot.infrastructure.storage.conversation import ConversationStore
+from qqbot.infrastructure.storage.database import SqliteDatabase, migration_modules
+from qqbot.infrastructure.storage.slang import SlangStore
 from tests.support import Store
 
 GROUP = "group:42"
@@ -675,7 +675,7 @@ class GlossBudgetTests(SlangTestCase):
         model = ScriptedModel(["这不是 JSON"])
         self.learn()
         worker = self._worker(model, gloss_batch_size=5, gloss_max_per_scan=5)
-        with self.assertLogs("qunbot.features.slang.worker", level="ERROR"):
+        with self.assertLogs("qqbot.features.slang.worker", level="ERROR"):
             self.assertEqual(asyncio.run(worker.gloss_pass(GROUP)), 0)
         attempts = model.calls
         asyncio.run(worker.gloss_pass(GROUP))
@@ -898,7 +898,7 @@ class ReviewTests(SlangTestCase):
         review = ReviewFile(path)
         self.assertEqual(review.current().status_for(GROUP, BREAKOUT), "approved")
         path.write_text("{not json", encoding="utf-8")
-        with self.assertLogs("qunbot.features.slang.review", level="ERROR"):
+        with self.assertLogs("qqbot.features.slang.review", level="ERROR"):
             self.assertEqual(review.current().status_for(GROUP, BREAKOUT), "approved")
 
     def test_a_missing_file_reviews_nothing(self):
@@ -1143,7 +1143,7 @@ class WiringTests(SlangTestCase):
                 await worker.run(sleep=sleep)
 
         # A failure in one scope is logged and survived, never raised outward.
-        with self.assertLogs("qunbot.features.slang.worker", level="ERROR"):
+        with self.assertLogs("qqbot.features.slang.worker", level="ERROR"):
             asyncio.run(run())
         self.assertEqual(sleeper["count"], 2)
 
@@ -1165,8 +1165,8 @@ class BoundaryTests(SlangTestCase):
     """The package owns slang. Nothing else."""
 
     OWNED_ROOTS = (
-        Path("src/qunbot/features/slang"),
-        Path("src/qunbot/infrastructure/storage/slang.py"),
+        Path("src/qqbot/features/slang"),
+        Path("src/qqbot/infrastructure/storage/slang.py"),
     )
 
     def sources(self):

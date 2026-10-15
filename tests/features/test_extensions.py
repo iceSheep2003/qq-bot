@@ -9,7 +9,7 @@ Three things are pinned here, in the order the roadmap asks for them:
    job actions;
 3. an extension cannot touch a host surface its manifest did not declare, and
    a package that is not in the table never runs even when it sits in
-   ``src/qunbot/features/``.
+   ``src/qqbot/features/``.
 
 Everything here is a pure unit test. None of it is evidence about a real
 deployment: no NapCat, no model, no group.
@@ -31,10 +31,10 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
-from qunbot import features as extensions_package
-from qunbot.features import loader, manifest as manifest_module
-from qunbot.features.features import FeatureHost
-from qunbot.features.loader import (
+from qqbot import features as extensions_package
+from qqbot.features import loader, manifest as manifest_module
+from qqbot.features.features import FeatureHost
+from qqbot.features.loader import (
     ExtensionPlan,
     bind_features,
     build_features,
@@ -46,7 +46,7 @@ from qunbot.features.loader import (
     resolve_plan,
     validate_features,
 )
-from qunbot.features.manifest import (
+from qqbot.features.manifest import (
     CONTRACT_VERSION,
     Contribution,
     ExtensionError,
@@ -56,8 +56,8 @@ from qunbot.features.manifest import (
     ToolDeclaration,
     validate_manifests,
 )
-from qunbot.agent.context import Trust
-from qunbot.actions.tools.registry import (
+from qqbot.agent.context import Trust
+from qqbot.actions.tools.registry import (
     DEFAULT_TOOL_QUOTA_PER_MINUTE,
     Tool,
     ToolPermission,
@@ -172,10 +172,10 @@ class ManifestTableTests(unittest.TestCase):
 
 class ResolvePlanTests(FakeModuleMixin):
     def test_unknown_extension_fails_before_import(self):
-        sys.modules.pop("qunbot.features.memes", None)
+        sys.modules.pop("qqbot.features.memes", None)
         with self.assertRaisesRegex(ExtensionError, "unknown extensions"):
             resolve_plan(config("memes", "not_a_real_package"))
-        self.assertNotIn("qunbot.features.memes", sys.modules)
+        self.assertNotIn("qqbot.features.memes", sys.modules)
 
     def test_extension_error_is_a_value_error(self):
         # app.py and the pre-manifest tests catch ValueError; keep that usable.
@@ -511,7 +511,7 @@ class LifecycleTests(unittest.TestCase):
 
         host.closers.append(lambda: closed.append("survivor"))
         host.closers.append(boom)
-        with self.assertLogs("qunbot.features.features", level="ERROR"):
+        with self.assertLogs("qqbot.features.features", level="ERROR"):
             asyncio.run(close_features(host))
         self.assertEqual(closed, ["survivor"])
 
@@ -556,7 +556,7 @@ class WorkerSupervisionTests(unittest.TestCase):
 
         supervised = loader._supervise(worker, "fake")
         with mock.patch.object(loader, "WORKER_BACKOFF_SECONDS", 0.0):
-            with self.assertLogs("qunbot.features.loader", level="ERROR"):
+            with self.assertLogs("qqbot.features.loader", level="ERROR"):
                 asyncio.run(supervised())
         self.assertEqual(len(calls), loader.MAX_WORKER_RESTARTS + 1)
 
@@ -584,7 +584,7 @@ class WorkerSupervisionTests(unittest.TestCase):
             )
 
         with mock.patch.object(loader, "WORKER_BACKOFF_SECONDS", 0.0):
-            with self.assertLogs("qunbot.features.loader", level="ERROR"):
+            with self.assertLogs("qqbot.features.loader", level="ERROR"):
                 results = asyncio.run(main())
         # The sibling completed; the crashing one was absorbed, not propagated.
         self.assertEqual(results, [None, None])
@@ -839,7 +839,7 @@ class UnreviewedPackageTests(unittest.TestCase):
     def test_the_probe_really_is_importable(self):
         """Without this the next test could pass for the wrong reason."""
         self.assertIsNotNone(
-            importlib.util.find_spec("qunbot.features.unreviewed_probe")
+            importlib.util.find_spec("qqbot.features.unreviewed_probe")
         )
 
     def test_a_package_with_no_manifest_never_runs(self):
@@ -850,7 +850,7 @@ class UnreviewedPackageTests(unittest.TestCase):
         host = build_features(config("memes"), object())
         self.assertEqual(host.context.names(), ["available_meme_tags"])
         self.assertFalse(self.sentinel.exists(), "the probe package executed")
-        self.assertNotIn("qunbot.features.unreviewed_probe", sys.modules)
+        self.assertNotIn("qqbot.features.unreviewed_probe", sys.modules)
 
     def test_naming_it_explicitly_is_an_error_not_a_load(self):
         with self.assertRaisesRegex(ExtensionError, "unknown extensions"):
@@ -867,7 +867,7 @@ class SkillTriggerTests(unittest.TestCase):
     def setUp(self):
         self.root = Path(tempfile.mkdtemp())
         self.addCleanup(shutil.rmtree, self.root, ignore_errors=True)
-        from qunbot.agent.skills.catalog import SkillCatalog
+        from qqbot.agent.skills.catalog import SkillCatalog
 
         self.catalog_class = SkillCatalog
 
@@ -951,7 +951,7 @@ class SkillTriggerTests(unittest.TestCase):
             "no frontmatter here", encoding="utf-8"
         )
         self.skill("good", "name: good\ndescription: d\ntriggers: 你好")
-        with self.assertLogs("qunbot.agent.skills.catalog", level="WARNING"):
+        with self.assertLogs("qqbot.agent.skills.catalog", level="WARNING"):
             catalog = self.catalog()
         self.assertEqual([s.name for s in catalog.skills], ["good"])
 
@@ -986,7 +986,7 @@ class SkillTriggerTests(unittest.TestCase):
             '{"sections":[],"triggers":["你好"],"body_file":"../secret.md"}',
             encoding="utf-8",
         )
-        with self.assertLogs("qunbot.agent.skills.catalog", level="WARNING"):
+        with self.assertLogs("qqbot.agent.skills.catalog", level="WARNING"):
             catalog = self.catalog()
         self.assertIsNone(catalog.by_name("bad"))
 

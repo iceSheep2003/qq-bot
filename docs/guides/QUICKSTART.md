@@ -55,7 +55,7 @@ cp config/schedules.example.json config/schedules.json
 
 ### 容器或跨机器运行
 
-容器内的 `127.0.0.1` 只指向自身。两个容器在同一个网络时，使用 Bot 的容器服务名，例如 `ws://qunbot:6199/ws`；NapCat 在容器、Bot 在宿主机时，使用容器可访问的宿主机地址。
+容器内的 `127.0.0.1` 只指向自身。两个容器在同一个网络时，使用 Bot 的容器服务名，例如 `ws://qqbot:6199/ws`；NapCat 在容器、Bot 在宿主机时，使用容器可访问的宿主机地址。
 
 这种情况下 Bot 通常需要将 `BOT_ONEBOT_HOST` 设置为容器或服务器可接受连接的地址。若监听 `0.0.0.0`，必须同时用容器网络或防火墙限制来源，不要只依赖 Token。
 
@@ -69,8 +69,8 @@ WebUI 仍只监听回环地址。远程管理优先使用 SSH 隧道；不要为
 set -a
 source .env
 set +a
-.venv/bin/qunbot --check
-.venv/bin/qunbot
+.venv/bin/qqbot --check
+.venv/bin/qqbot
 ```
 
 `--check` 校验本地配置和扩展装配，不发送真实 QQ 消息，也不证明模型端点可用。
@@ -109,7 +109,7 @@ BOT_REPLY_POLICY_MODE=room
 先试听，不发到群里：
 
 ```bash
-.venv/bin/python -m tools.operations.voice_smoke --output /tmp/qunbot-voice-smoke.wav
+.venv/bin/python -m tools.operations.voice_smoke --output /tmp/qqbot-voice-smoke.wav
 ```
 
 脚本的群发送参数是显式的。需要实机测试时先看 `--help`，只选白名单测试群，发送结果不确定时先查看群历史，不要连续重试。
@@ -167,3 +167,16 @@ BOT_REPLY_POLICY_MODE=room
 | QQ 被强制下线 | 检查 NapCat 的登录状态；watchdog 不能绕过扫码或设备验证 |
 
 升级前备份本地数据库、`.env`、任务和人格文件。不要提交运行日志、聊天数据库、试听数据或密钥；分享问题时只提供去标识化的复现步骤和必要日志。
+
+## 从此前版本升级
+
+Python 包已统一为 `qqbot`，安装包名为 `kinna-bot`。更新已有环境时先卸载此前
+安装的项目版本，再安装当前源码；正式命令为 `qqbot` 或 `kinna-bot`。
+自行维护的脚本需要改用当前导入路径，旧包和旧命令不再提供别名。
+
+新安装默认数据库为 `data/qqbot.sqlite3`。已有部署继续显式设置 `BOT_DB_PATH`
+指向原来的数据库，程序不会擅自改名或复制正在使用的数据库。若未明确配置且
+目录中已有其他数据库，启动和 `--check` 会停止并要求选择路径，避免误建空库。
+需要移动数据库时先停止 Bot，按 SQLite 的备份与完整性检查流程迁移后更新配置。
+
+控制台的会话存储标识已经统一，升级后重新登录即可。

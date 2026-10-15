@@ -4,7 +4,7 @@
 .venv/
 # Runtime state only. Anchored to the repo root on purpose: an unanchored
 # "data/" also swallows package data directories such as
-# src/qunbot/features/slang/data/, which is source, not state.
+# src/qqbot/features/slang/data/, which is source, not state.
 /data/
 *.sqlite3
 *.sqlite3-shm
@@ -22,7 +22,7 @@
 # Third-party media stays local; retain provenance without redistributing files.
 /memes/astrbot-official-01/*
 !/memes/astrbot-official-01/SOURCE.md
-/src/qunbot/features/exam_poster/campuses/
+/src/qqbot/features/exam_poster/campuses/
 .DS_Store
 .pytest_cache/
 # Scratch dir pytest is pointed at here; the sandbox forbids its default
@@ -37,8 +37,6 @@ __pycache__/
 # Parallel agent worktrees
 .claude/worktrees/
 .quality/
-.veritygate/run.lock/
-.veritygate/.gitkeep
 .mcp.json
 
 # Test-first quality toolchain and generated reports
@@ -49,3 +47,6 @@ node_modules/
 
 # Generated quality-tool caches
 .ruff_cache/
+.code-quality-gate/run.lock/
+.code-quality-gate/history.lock/
+.code-quality-gate/.gitkeep

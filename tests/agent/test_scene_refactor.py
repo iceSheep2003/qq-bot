@@ -9,16 +9,16 @@ from unittest.mock import patch
 
 import pytest
 
-from qunbot.infrastructure.tool_handlers import BuiltinHandlers
-from qunbot.agent.cognition.routes import SceneRoutes, configured_scene_routes
-from qunbot.bootstrap.config import Config
-from qunbot.contracts.schema import ContractError
-from qunbot.agent.conversation.channels import ChannelPolicy, channel_for
-from qunbot.contracts.models import MessageEvent
-from qunbot.agent.cognition.experience.decision import LlmDecision
-from qunbot.actions.tools.kernel import KernelTools
-from qunbot.agent.skills.catalog import SkillCatalog
-from qunbot.agent.skills.host import OwnerSkills
+from qqbot.infrastructure.tool_handlers import BuiltinHandlers
+from qqbot.agent.cognition.routes import SceneRoutes, configured_scene_routes
+from qqbot.bootstrap.config import Config
+from qqbot.contracts.schema import ContractError
+from qqbot.agent.conversation.channels import ChannelPolicy, channel_for
+from qqbot.contracts.models import MessageEvent
+from qqbot.agent.cognition.experience.decision import LlmDecision
+from qqbot.actions.tools.kernel import KernelTools
+from qqbot.agent.skills.catalog import SkillCatalog
+from qqbot.agent.skills.host import OwnerSkills
 import tests.agent.test_behavior_experience_runtime as behavior_helpers
 import tests.agent.test_service as lifecycle_helpers
 
@@ -208,7 +208,7 @@ def test_private_graph_requires_its_own_mode_and_snapshot(tmp_path):
 
 def test_explicit_group_off_overrides_global_graph_without_loading():
     with patch.dict("os.environ", {"BOT_BEHAVIOR_MODE": "graph", "BOT_GROUP_BEHAVIOR_MODE": "off"}, clear=True):
-        with patch("qunbot.agent.cognition.experience.runtime.BehaviorGraphRetriever") as loader:
+        with patch("qqbot.agent.cognition.experience.runtime.BehaviorGraphRetriever") as loader:
             routes = configured_scene_routes()
     assert routes.group.mode == routes.private.mode == "off"
     loader.assert_not_called()

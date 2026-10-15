@@ -11,5 +11,5 @@
 | `history/` | 已完成阶段的历史交付记录 |
 
 代码归属与提交规则见 [开发约定](../CONTRIBUTING.md)。
-WebUI 操作手册随程序分发，位于 [GUIDE.md](../src/qunbot/interfaces/webui/docs/GUIDE.md)。
+WebUI 操作手册随程序分发，位于 [GUIDE.md](../src/qqbot/interfaces/webui/docs/GUIDE.md)。
 讲解稿和课件保存在仓库外的本地交付目录。

@@ -20,8 +20,8 @@ from collections import defaultdict
 from pathlib import Path
 
 
-from qunbot.agent.cognition.experience.graph_retrieval import BehaviorGraphRetriever
-from qunbot.agent.cognition.experience.retrieval import BehaviorOption, _terms
+from qqbot.agent.cognition.experience.graph_retrieval import BehaviorGraphRetriever
+from qqbot.agent.cognition.experience.retrieval import BehaviorOption, _terms
 
 GRAPH = Path("data/private/derived/behavior-graph-compiled-final-20261014-v8")
 CORPUS = Path("data/private/derived/behavior-corpus-20261014")

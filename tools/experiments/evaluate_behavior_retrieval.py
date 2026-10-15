@@ -13,8 +13,8 @@ import json
 from collections import Counter
 from pathlib import Path
 
-from qunbot.agent.cognition.experience.graph_retrieval import BehaviorGraphRetriever
-from qunbot.agent.cognition.experience.retrieval import BehaviorRetriever, _terms
+from qqbot.agent.cognition.experience.graph_retrieval import BehaviorGraphRetriever
+from qqbot.agent.cognition.experience.retrieval import BehaviorRetriever, _terms
 from tools.experiments.compile_behavior_graph import situation_family
 
 

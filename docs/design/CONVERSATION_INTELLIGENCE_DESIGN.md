@@ -23,7 +23,7 @@ runtime service / app assembly
 建议目录：
 
 ```text
-src/qunbot/agent/conversation/intelligence/
+src/qqbot/agent/conversation/intelligence/
 ├── models.py          # MessageView、TopicState、ConversationFrame
 ├── normalizer.py      # 纯文本归一化、token、实体和语气信号
 ├── graph.py           # 引用、@、相邻消息和说话人关系边
@@ -33,7 +33,7 @@ src/qunbot/agent/conversation/intelligence/
 ├── service.py         # AnalyzeConversation 用例
 └── ports.py           # 仓储、可选 embedding、各领域只读视图
 
-src/qunbot/infrastructure/storage/
+src/qqbot/infrastructure/storage/
 ├── conversation_topics.py
 └── prompt_sessions.py
 ```

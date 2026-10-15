@@ -11,9 +11,9 @@ from pathlib import Path
 
 from jsonschema import Draft202012Validator
 
-from qunbot.contracts import extension_inputs, kernel_v1, lifecycle
-from qunbot.contracts.schema import ContractError, validate
-from qunbot.contracts.ontology import v1
+from qqbot.contracts import extension_inputs, kernel_v1, lifecycle
+from qqbot.contracts.schema import ContractError, validate
+from qqbot.contracts.ontology import v1
 
 SCOPE = "agent:test/account:qq/group:42"
 
@@ -293,7 +293,7 @@ class LifecycleContractTests(unittest.TestCase):
             lifecycle.next_state("proposal", "awaiting_consent", "authorize")
 
     def test_import_boundaries(self):
-        root = Path(__file__).resolve().parents[2] / "src" / "qunbot"
+        root = Path(__file__).resolve().parents[2] / "src" / "qqbot"
         for package in ("contracts", "contracts/ontology"):
             for path in (root / package).glob("*.py"):
                 for statement in ast.walk(ast.parse(path.read_text())):

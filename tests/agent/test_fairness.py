@@ -1,6 +1,6 @@
 import unittest
 
-from qunbot.agent.fairness import ScopeWorkBudget
+from qqbot.agent.fairness import ScopeWorkBudget
 
 
 class ScopeWorkBudgetTests(unittest.TestCase):

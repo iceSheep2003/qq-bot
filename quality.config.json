@@ -132,6 +132,68 @@
         ]
       },
       {
+        "id": "package-identity",
+        "title": "QQ Bot package identity and deployment compatibility",
+        "command": [
+          ".venv/bin/python",
+          "-m",
+          "pytest",
+          "tests/quality/test_package_identity.py",
+          "-q",
+          "--junitxml=.quality/package-identity.xml"
+        ],
+        "report": ".quality/package-identity.xml",
+        "format": "junit",
+        "metrics": [
+          {
+            "name": "Package identity cases",
+            "path": "tests",
+            "min": 5
+          },
+          {
+            "name": "Success rate",
+            "path": "successRate",
+            "equals": 100
+          },
+          {
+            "name": "Skipped",
+            "path": "skipped",
+            "equals": 0
+          }
+        ]
+      },
+      {
+        "id": "quality-integration",
+        "title": "Released CQG 0.6.0 provenance and one active integration",
+        "command": [
+          ".venv/bin/python",
+          "-m",
+          "pytest",
+          "tests/quality/test_quality_integration.py",
+          "-q",
+          "--junitxml=.quality/quality-integration.xml"
+        ],
+        "report": ".quality/quality-integration.xml",
+        "format": "junit",
+        "metrics": [
+          {
+            "name": "Integration cases",
+            "path": "tests",
+            "min": 4
+          },
+          {
+            "name": "Success rate",
+            "path": "successRate",
+            "equals": 100
+          },
+          {
+            "name": "Skipped",
+            "path": "skipped",
+            "equals": 0
+          }
+        ]
+      },
+      {
         "id": "regression",
         "title": "Complete legacy and new Python regression suite",
         "command": [

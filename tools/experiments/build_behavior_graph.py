@@ -17,10 +17,10 @@ import re
 import time
 from pathlib import Path
 
-from qunbot.infrastructure.adapters.model import ModelClient
-from qunbot.infrastructure.adapters.structured import InstructorOutput
-from qunbot.infrastructure.extraction.behavior import BehaviorExtractor
-from qunbot.agent.cognition.experience.models import BehaviorBatch
+from qqbot.infrastructure.adapters.model import ModelClient
+from qqbot.infrastructure.adapters.structured import InstructorOutput
+from qqbot.infrastructure.extraction.behavior import BehaviorExtractor
+from qqbot.agent.cognition.experience.models import BehaviorBatch
 
 
 PIPELINE_VERSION = "behavior-graph-build-v1"

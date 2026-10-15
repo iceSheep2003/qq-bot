@@ -9,12 +9,12 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
-from qunbot.contracts.models import MessageEvent
-from qunbot.features.features import FeatureHost
-from qunbot.features.style_echo import register, validate
-from qunbot.features.style_echo.config import StyleEchoConfig
-from qunbot.features.style_echo.group import GroupStyle
-from qunbot.features.style_echo.guidance import (
+from qqbot.contracts.models import MessageEvent
+from qqbot.features.features import FeatureHost
+from qqbot.features.style_echo import register, validate
+from qqbot.features.style_echo.config import StyleEchoConfig
+from qqbot.features.style_echo.group import GroupStyle
+from qqbot.features.style_echo.guidance import (
     FORBIDDEN_MARKERS,
     GUIDANCE_PREFIX,
     UnsafeGuidance,
@@ -22,10 +22,10 @@ from qunbot.features.style_echo.guidance import (
     assert_safe,
     render,
 )
-from qunbot.features.style_echo.runner import StyleEcho
-from qunbot.agent.context import Trust
-from qunbot.infrastructure.storage.database import SqliteDatabase
-from qunbot.infrastructure.storage.style import StyleStore
+from qqbot.features.style_echo.runner import StyleEcho
+from qqbot.agent.context import Trust
+from qqbot.infrastructure.storage.database import SqliteDatabase
+from qqbot.infrastructure.storage.style import StyleStore
 from tests.support import Store
 
 ALLOWED = "1001"
@@ -295,11 +295,11 @@ class PromptPlacementTests(unittest.TestCase):
         )
 
     def agent(self, echo: StyleEcho):
-        from qunbot.agent.memory.service import MemoryService
-        from qunbot.agent.orchestrator import Agent
-        from qunbot.agent.context import ContextRegistry
-        from qunbot.agent.skills.catalog import SkillCatalog
-        from qunbot.actions.tools.registry import built_in_tools
+        from qqbot.agent.memory.service import MemoryService
+        from qqbot.agent.orchestrator import Agent
+        from qqbot.agent.context import ContextRegistry
+        from qqbot.agent.skills.catalog import SkillCatalog
+        from qqbot.actions.tools.registry import built_in_tools
 
         context = ContextRegistry()
         context.register(
@@ -408,7 +408,7 @@ class RegisterTests(StoreTestCase):
 
     def test_registered_observer_reads_the_real_transcript(self):
         """End to end through the actual conversation table, not a stub reader."""
-        from qunbot.infrastructure.storage.conversation import ConversationStore
+        from qqbot.infrastructure.storage.conversation import ConversationStore
 
         database = SqliteDatabase(self.root / "bot.sqlite3")
         conversations = ConversationStore(database)
@@ -430,7 +430,7 @@ class RegisterTests(StoreTestCase):
 
     def test_service_reader_path_collects_from_a_conversation_store(self):
         """The contract ``runner.build_worker`` relies on, minus the loop."""
-        from qunbot.infrastructure.storage.conversation import ConversationStore
+        from qqbot.infrastructure.storage.conversation import ConversationStore
 
         database = SqliteDatabase(self.root / "bot.sqlite3")
         conversations = ConversationStore(database)
@@ -464,7 +464,7 @@ class RegisterTests(StoreTestCase):
 
     def test_package_never_references_or_writes_the_persona_file(self):
         package = (
-            Path(__file__).resolve().parents[2] / "src" / "qunbot" / "features" / "style_echo"
+            Path(__file__).resolve().parents[2] / "src" / "qqbot" / "features" / "style_echo"
         )
         for path in package.rglob("*.py"):
             source = path.read_text(encoding="utf-8")

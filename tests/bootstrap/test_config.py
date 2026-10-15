@@ -19,8 +19,8 @@ from dataclasses import fields
 from pathlib import Path
 from unittest import mock
 
-from qunbot.bootstrap.config import CONFIG_VERSION, Config
-from qunbot.contracts.models import ConfigError
+from qqbot.bootstrap.config import CONFIG_VERSION, Config
+from qqbot.contracts.models import ConfigError
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -95,12 +95,12 @@ class CoreConfigScopeTests(unittest.TestCase):
     """Config carries core settings only. Optional ones live in their package."""
 
     def test_config_module_reads_only_core_settings(self):
-        source = (ROOT / "src" / "qunbot" / "bootstrap" / "config.py").read_text(encoding="utf-8")
+        source = (ROOT / "src" / "qqbot" / "bootstrap" / "config.py").read_text(encoding="utf-8")
         read = set(re.findall(r'"(BOT_[A-Z0-9_]+)"', source))
         self.assertEqual(read, CORE_SETTINGS)
 
     def test_no_optional_feature_setting_appears_in_config(self):
-        source = (ROOT / "src" / "qunbot" / "bootstrap" / "config.py").read_text(encoding="utf-8")
+        source = (ROOT / "src" / "qqbot" / "bootstrap" / "config.py").read_text(encoding="utf-8")
         leaked = [name for name in OPTIONAL_SETTINGS if name in source]
         self.assertEqual(leaked, [], f"optional settings leaked into Config: {leaked}")
 
@@ -119,7 +119,7 @@ class CoreConfigScopeTests(unittest.TestCase):
 
     def test_optional_settings_are_validated_inside_their_own_package(self):
         """The voice extension still owns its own four-field requirement."""
-        from qunbot.features.voice import register as voice
+        from qqbot.features.voice import register as voice
 
         with env():
             with self.assertRaises(ValueError) as caught:

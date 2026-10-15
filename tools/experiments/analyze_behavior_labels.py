@@ -26,7 +26,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 
 
-from qunbot.agent.cognition.experience.graph_retrieval import BehaviorGraphRetriever
+from qqbot.agent.cognition.experience.graph_retrieval import BehaviorGraphRetriever
 
 DEFAULT_GRAPH = Path("data/private/derived/behavior-graph-compiled-final-20261014-v8")
 

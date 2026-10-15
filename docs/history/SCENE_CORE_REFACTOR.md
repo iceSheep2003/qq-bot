@@ -44,22 +44,22 @@ this refactor are internal; no runtime tool, graph or code plugin loader exists.
 
 ## Quality workflow
 
-Architecture ownership is fixed in `.veritygate/ARCHITECTURE.md`. The initial
+Architecture ownership is fixed in `.code-quality-gate/ARCHITECTURE.md`. The initial
 contract revisions and evidence are retained. R2 adds the disabled-private-tools
 negative case; R3 corrects the ledger assertion and tests JUnit compatibility.
 The user instructed continuation after the frozen-test correction was explained;
 the revised acceptance was rerun against the pre-refactor baseline before green.
-No threshold was lowered. See `.veritygate/REVISION_R3.md`.
+No threshold was lowered. See `.code-quality-gate/REVISION_R3.md`.
 
-Use the committed VerityGate tarball and lockfile:
+Use the committed Code Quality Gate tarball and lockfile:
 
 ```sh
-npm ci --prefix .veritygate/toolchain --ignore-scripts
-node .veritygate/toolchain/node_modules/veritygate/src/cli.mjs status
-node .veritygate/toolchain/node_modules/veritygate/src/cli.mjs gate
+npm ci --prefix .code-quality-gate/toolchain --ignore-scripts
+node .code-quality-gate/toolchain/node_modules/code-quality-gate/src/cli.mjs status
+node .code-quality-gate/toolchain/node_modules/code-quality-gate/src/cli.mjs gate
 ```
 
 The active R3 manifest selects `quality.config.json`. Tests and
 adapters are frozen after red. Every green attempt and final gate produces a
-Markdown/JSON report under `.quality/veritygate/`. The gate runs all configured
+Markdown/JSON report under `.quality/code-quality-gate/`. The gate runs all configured
 checks again and validates source hashes. No remote branch protection is claimed.

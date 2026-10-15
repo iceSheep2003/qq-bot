@@ -3,17 +3,17 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace
 
-from qunbot.interfaces.console.ontology import OntologyConsole
-from qunbot.agent.conversation.projection import ConversationProjector
-from qunbot.contracts.models import MessageEvent
-from qunbot.interfaces.webui.memory_query import MemoryConsoleQuery
-from qunbot.agent.memory.knowledge.coordinator import OntologyMemory
-from qunbot.agent.memory.knowledge.service import KnowledgeService
-from qunbot.contracts.ontology.objects import entity, stable_id
-from qunbot.infrastructure.storage.conversation import ConversationStore
-from qunbot.infrastructure.storage.database import SqliteDatabase
-from qunbot.infrastructure.storage.extraction_runs import ExtractionRunStore
-from qunbot.infrastructure.storage.ontology import GraphStore
+from qqbot.interfaces.console.ontology import OntologyConsole
+from qqbot.agent.conversation.projection import ConversationProjector
+from qqbot.contracts.models import MessageEvent
+from qqbot.interfaces.webui.memory_query import MemoryConsoleQuery
+from qqbot.agent.memory.knowledge.coordinator import OntologyMemory
+from qqbot.agent.memory.knowledge.service import KnowledgeService
+from qqbot.contracts.ontology.objects import entity, stable_id
+from qqbot.infrastructure.storage.conversation import ConversationStore
+from qqbot.infrastructure.storage.database import SqliteDatabase
+from qqbot.infrastructure.storage.extraction_runs import ExtractionRunStore
+from qqbot.infrastructure.storage.ontology import GraphStore
 
 
 class OntologyConsoleTests(unittest.IsolatedAsyncioTestCase):

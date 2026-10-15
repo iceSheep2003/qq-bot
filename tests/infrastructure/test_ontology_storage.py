@@ -2,11 +2,11 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from qunbot.contracts.schema import ContractError
-from qunbot.agent.memory.knowledge.service import KnowledgeService
-from qunbot.contracts.ontology.objects import entity, edge, ref
-from qunbot.infrastructure.storage.database import SqliteDatabase
-from qunbot.infrastructure.storage.ontology import GraphStore
+from qqbot.contracts.schema import ContractError
+from qqbot.agent.memory.knowledge.service import KnowledgeService
+from qqbot.contracts.ontology.objects import entity, edge, ref
+from qqbot.infrastructure.storage.database import SqliteDatabase
+from qqbot.infrastructure.storage.ontology import GraphStore
 
 
 class GraphTests(unittest.TestCase):

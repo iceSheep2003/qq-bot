@@ -21,7 +21,7 @@ import sys
 from pathlib import Path
 
 
-from qunbot.agent.cognition.experience.graph_retrieval import DEFAULT_TAXONOMY  # noqa: E402
+from qqbot.agent.cognition.experience.graph_retrieval import DEFAULT_TAXONOMY  # noqa: E402
 from tools.experiments.bench_behavior_retrieval import (  # noqa: E402
     DEFAULT_CALIBRATION,
     DEFAULT_CORPUS,

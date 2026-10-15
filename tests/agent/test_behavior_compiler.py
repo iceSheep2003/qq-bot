@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import unittest
 
-from qunbot.agent.cognition.experience.compiler import BehaviorCompiler
-from qunbot.agent.cognition.experience.retrieval import BehaviorOption
+from qqbot.agent.cognition.experience.compiler import BehaviorCompiler
+from qqbot.agent.cognition.experience.retrieval import BehaviorOption
 
 
 def option(strategy: str, score: float, *, action: str = "joke", media: str = "none"):

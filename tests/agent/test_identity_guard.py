@@ -9,9 +9,9 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace
 
-from qunbot.contracts.models import MessageEvent
-from qunbot.agent.identity.guard import IdentityGuard
-from qunbot.agent.service import BotPolicy, ConversationService
+from qqbot.contracts.models import MessageEvent
+from qqbot.agent.identity.guard import IdentityGuard
+from qqbot.agent.service import BotPolicy, ConversationService
 from tests.support import Store
 
 

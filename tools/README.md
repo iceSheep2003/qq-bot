@@ -12,4 +12,4 @@
 工具不随 Bot wheel 分发，也不是用户能力扩展入口。实验输出保存在本地
 `experiments/`，私有输入仍保存在本地 `data/`；目录整理不会自动运行导出、模型请求或 QQ 动作。
 
-质量门禁的入口仍是 `.veritygate/toolchain/` 中锁定版本的 VerityGate。
+质量门禁的入口仍是 `.code-quality-gate/toolchain/` 中锁定版本的 Code Quality Gate。

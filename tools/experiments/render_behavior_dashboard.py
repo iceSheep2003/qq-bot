@@ -1,7 +1,7 @@
 """Render the behavior-retrieval benchmark into a self-contained HTML page.
 
 This is the offline twin of the console's "实验看板" section. Both read the same
-projection (:mod:`qunbot.interfaces.webui.experiments`), so the numbers and the
+projection (:mod:`qqbot.interfaces.webui.experiments`), so the numbers and the
 conclusions cannot disagree between the two — only the layout differs.
 
 The page inlines its data instead of fetching it: a file opened straight from
@@ -20,7 +20,7 @@ from datetime import datetime
 from pathlib import Path
 
 
-from qunbot.interfaces.webui.experiments import ExperimentConsoleQuery
+from qqbot.interfaces.webui.experiments import ExperimentConsoleQuery
 
 DEFAULT_OUTPUT = Path("experiments/behavior-retrieval-dashboard.html")
 

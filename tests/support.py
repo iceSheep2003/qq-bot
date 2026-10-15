@@ -1,11 +1,11 @@
 """Test fixture combining repositories; production has no composite Store."""
 
-from qunbot.infrastructure.storage.activity import ActivityStore
-from qunbot.infrastructure.storage.conversation import ConversationStore
-from qunbot.infrastructure.storage.database import SqliteDatabase
-from qunbot.infrastructure.storage.jobs import JobsStore
-from qunbot.infrastructure.storage.memory import MemoryStore
-from qunbot.infrastructure.storage.relationships import RelationshipsStore
+from qqbot.infrastructure.storage.activity import ActivityStore
+from qqbot.infrastructure.storage.conversation import ConversationStore
+from qqbot.infrastructure.storage.database import SqliteDatabase
+from qqbot.infrastructure.storage.jobs import JobsStore
+from qqbot.infrastructure.storage.memory import MemoryStore
+from qqbot.infrastructure.storage.relationships import RelationshipsStore
 
 
 class Store:

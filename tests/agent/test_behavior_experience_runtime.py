@@ -31,16 +31,16 @@ from contextlib import contextmanager
 from pathlib import Path
 from unittest import mock
 
-from qunbot.contracts.models import MessageEvent
-from qunbot.agent.cognition.experience import graph_retrieval
-from qunbot.agent.cognition.experience.graph_retrieval import DEFAULT_TAXONOMY, BehaviorGraphRetriever
-from qunbot.agent.cognition.experience.retrieval import _terms
-from qunbot.agent.cognition.experience.runtime import (
+from qqbot.contracts.models import MessageEvent
+from qqbot.agent.cognition.experience import graph_retrieval
+from qqbot.agent.cognition.experience.graph_retrieval import DEFAULT_TAXONOMY, BehaviorGraphRetriever
+from qqbot.agent.cognition.experience.retrieval import _terms
+from qqbot.agent.cognition.experience.runtime import (
     CompiledBehaviorExperience,
     configured_behavior_experience,
 )
-from qunbot.agent.cognition.experience.decision import configured_behavior_decision
-from qunbot.agent.orchestrator import Agent
+from qqbot.agent.cognition.experience.decision import configured_behavior_decision
+from qqbot.agent.orchestrator import Agent
 
 _ENV_KEYS = (
     "BOT_BEHAVIOR_MODE",

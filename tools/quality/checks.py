@@ -11,16 +11,16 @@ from tools.quality.junit_report import normalize_junit
 
 ROOT = Path(__file__).resolve().parents[2]
 NEW_FILES = [
-    "src/qunbot/agent/conversation/channels.py",
-    "src/qunbot/agent/skills/audience.py",
-    "src/qunbot/agent/cognition/routes.py",
+    "src/qqbot/agent/conversation/channels.py",
+    "src/qqbot/agent/skills/audience.py",
+    "src/qqbot/agent/cognition/routes.py",
 ]
 CODE_FILES = NEW_FILES + [
-    "src/qunbot/agent/cognition/__init__.py", "src/qunbot/agent/skills/catalog.py",
-    "src/qunbot/agent/skills/host.py", "src/qunbot/agent/orchestrator.py", "src/qunbot/agent/service.py",
-    "src/qunbot/actions/tools/kernel.py", "src/qunbot/bootstrap/app.py", "src/qunbot/bootstrap/config.py",
-    "src/qunbot/agent/cognition/experience/runtime.py", "src/qunbot/contracts/extension_inputs.py",
-    "src/qunbot/infrastructure/tool_handlers.py", "src/qunbot/contracts/ports.py", "tools/quality/junit_report.py",
+    "src/qqbot/agent/cognition/__init__.py", "src/qqbot/agent/skills/catalog.py",
+    "src/qqbot/agent/skills/host.py", "src/qqbot/agent/orchestrator.py", "src/qqbot/agent/service.py",
+    "src/qqbot/actions/tools/kernel.py", "src/qqbot/bootstrap/app.py", "src/qqbot/bootstrap/config.py",
+    "src/qqbot/agent/cognition/experience/runtime.py", "src/qqbot/contracts/extension_inputs.py",
+    "src/qqbot/infrastructure/tool_handlers.py", "src/qqbot/contracts/ports.py", "tools/quality/junit_report.py",
 ]
 
 

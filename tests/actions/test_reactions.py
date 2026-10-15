@@ -4,9 +4,9 @@ import asyncio
 import unittest
 from datetime import date
 
-from qunbot.infrastructure.adapters.onebot import OneBotError, OneBotGateway
-from qunbot.contracts.models import MessageEvent
-from qunbot.actions.interactions import (
+from qqbot.infrastructure.adapters.onebot import OneBotError, OneBotGateway
+from qqbot.contracts.models import MessageEvent
+from qqbot.actions.interactions import (
     LightInteractionPolicy, LightInteractionSettings, PokeController, PokeSettings,
     ReactionPolicy, ReactionSettings,
 )

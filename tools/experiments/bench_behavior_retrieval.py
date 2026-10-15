@@ -39,8 +39,8 @@ from collections import Counter, defaultdict
 from pathlib import Path
 
 
-from qunbot.agent.cognition.experience.graph_retrieval import BehaviorGraphRetriever
-from qunbot.agent.cognition.experience.retrieval import _terms
+from qqbot.agent.cognition.experience.graph_retrieval import BehaviorGraphRetriever
+from qqbot.agent.cognition.experience.retrieval import _terms
 from tools.experiments.compile_behavior_graph import situation_family
 
 DEFAULT_GRAPH = Path("data/private/derived/behavior-graph-compiled-final-20261014-v8")
@@ -963,7 +963,7 @@ def main() -> int:
 
     taxonomy = None
     if args.taxonomy == "shipped":
-        from qunbot.agent.cognition.experience.graph_retrieval import DEFAULT_TAXONOMY
+        from qqbot.agent.cognition.experience.graph_retrieval import DEFAULT_TAXONOMY
 
         taxonomy = DEFAULT_TAXONOMY
 

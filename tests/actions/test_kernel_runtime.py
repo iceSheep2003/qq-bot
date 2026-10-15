@@ -4,12 +4,12 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace
 
-from qunbot.contracts.kernel_v1 import tool_names
-from qunbot.contracts.schema import ContractError
-from qunbot.actions.tools.kernel import KernelTools
-from qunbot.infrastructure.storage.database import SqliteDatabase
-from qunbot.infrastructure.storage.executions import ExecutionStore
-from qunbot.infrastructure.adapters.schema_projection import model_tool_projection
+from qqbot.contracts.kernel_v1 import tool_names
+from qqbot.contracts.schema import ContractError
+from qqbot.actions.tools.kernel import KernelTools
+from qqbot.infrastructure.storage.database import SqliteDatabase
+from qqbot.infrastructure.storage.executions import ExecutionStore
+from qqbot.infrastructure.adapters.schema_projection import model_tool_projection
 
 
 class KernelTests(unittest.IsolatedAsyncioTestCase):
@@ -26,7 +26,7 @@ class KernelTests(unittest.IsolatedAsyncioTestCase):
         self.tmp.cleanup()
 
     async def test_wire_projection_preserves_fixed_contract_and_union_constraints(self):
-        from qunbot.contracts.kernel_v1 import model_tool_schemas, validate_tool_input
+        from qqbot.contracts.kernel_v1 import model_tool_schemas, validate_tool_input
 
         original = model_tool_schemas()
         projected = model_tool_projection(original)

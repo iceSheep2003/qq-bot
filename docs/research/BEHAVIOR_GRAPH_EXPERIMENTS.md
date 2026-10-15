@@ -2,7 +2,7 @@
 
 更新时间：2026-10-15。实验脚本：[`tools/experiments/bench_behavior_retrieval.py`](../../tools/experiments/bench_behavior_retrieval.py)；
 原始数据：`experiments/behavior-retrieval.json`（已被 `.gitignore` 忽略，可随时重跑）；
-只读投影：`src/qunbot/interfaces/webui/experiments.py`（控制台「实验」页与离线看板共用）。
+只读投影：`src/qqbot/interfaces/webui/experiments.py`（控制台「实验」页与离线看板共用）。
 
 本文记录每一次实验的**过程、数据与结论**，而不是最终数字。结论会随证据改变——
 第 4 次实验就推翻了前三次的结论，那正是把它写下来的原因。
@@ -254,7 +254,7 @@
 
 ## 10. 落地决定（重构）
 
-依据以上证据，对 `src/qunbot/agent/cognition/experience/graph_retrieval.py` 做的改动：
+依据以上证据，对 `src/qqbot/agent/cognition/experience/graph_retrieval.py` 做的改动：
 
 1. **默认只索引互动线索字段**（`fields="interaction"`，默认值）：`observable_cues` +
    策略/动作/表达/变体。话题侧（`situation_text` / `topic_terms` / 情境名 / 情境族）不再参与匹配。
@@ -295,7 +295,7 @@
 ```
 
 控制台里，实验结果通过 `GET /api/experiments/behavior-retrieval`（仅群主）暴露，
-由 `src/qunbot/interfaces/webui/experiments.py` 做只读投影——所有结论都在 Python 里派生，
+由 `src/qqbot/interfaces/webui/experiments.py` 做只读投影——所有结论都在 Python 里派生，
 所以是可测试的，而不是记在脑子里的。
 
 ---
@@ -373,7 +373,7 @@
 
 ### 12.4 已落地
 
-9 类体系已经作为**线上默认**落进 `src/qunbot/agent/cognition/experience/graph_retrieval.py`：
+9 类体系已经作为**线上默认**落进 `src/qqbot/agent/cognition/experience/graph_retrieval.py`：
 
 - `DEFAULT_TAXONOMY`：13 个细类 → 9 个粗类（`附和 / 答疑 / 情绪支持 / 玩梗 / 转话题 /
   降温 / 轻调侃 / 不参与 / 庆祝`）。

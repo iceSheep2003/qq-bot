@@ -1,0 +1,4 @@
+{
+  "manifest": ".code-quality-gate/tasks/CQG-INTEGRATION-006-R2.json",
+  "config": "quality.config.json"
+}

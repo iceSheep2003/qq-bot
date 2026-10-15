@@ -12,8 +12,8 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace
 
-from qunbot.contracts.models import MessageEvent
-from qunbot.agent.service import BotPolicy, ConversationService
+from qqbot.contracts.models import MessageEvent
+from qqbot.agent.service import BotPolicy, ConversationService
 from tests.support import Store
 
 
@@ -252,7 +252,7 @@ class ServiceTests(unittest.TestCase):
         agent, sender = FakeAgent(), FakeSender()
         agent.fail = True
         service = self.service(agent=agent, sender=sender)
-        with self.assertLogs("qunbot.agent.service", level="ERROR"):
+        with self.assertLogs("qqbot.agent.service", level="ERROR"):
             asyncio.run(service.handle_message(event("1")))
         self.assertEqual(sender.sent, [])
         self.assertEqual(self.store.message_count("group:42"), 1)
@@ -309,7 +309,7 @@ class ServiceTests(unittest.TestCase):
             )
             await service.aclose()
 
-        with self.assertLogs("qunbot.agent.service", level="ERROR"):
+        with self.assertLogs("qqbot.agent.service", level="ERROR"):
             asyncio.run(run())
         self.assertEqual(observer.started, 1)
         self.assertEqual(service.observations.failed, 1)
@@ -327,7 +327,7 @@ class ServiceTests(unittest.TestCase):
             self.assertLessEqual(service.pending_observations, 1)
             await service.aclose()
 
-        with self.assertLogs("qunbot.agent.service", level="WARNING"):
+        with self.assertLogs("qqbot.agent.service", level="WARNING"):
             asyncio.run(run())
         self.assertEqual(service.observations.enqueued, 1)
         self.assertEqual(service.observations.dropped, 9)
@@ -358,7 +358,7 @@ class ServiceTests(unittest.TestCase):
             await service.aclose(timeout=0.05)
             return asyncio.get_running_loop().time() - started
 
-        with self.assertLogs("qunbot.agent.service", level="WARNING"):
+        with self.assertLogs("qqbot.agent.service", level="WARNING"):
             elapsed = asyncio.run(run())
         self.assertLess(elapsed, 1.0)
         self.assertEqual(observer.started, 1)

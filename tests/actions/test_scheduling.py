@@ -16,8 +16,8 @@ from pathlib import Path
 from types import SimpleNamespace
 from zoneinfo import ZoneInfo
 
-from qunbot.contracts.models import JobSkipped
-from qunbot.actions.scheduling import (
+from qqbot.contracts.models import JobSkipped
+from qqbot.actions.scheduling import (
     JOB_SPEC_VERSION,
     JobHandlerRegistry,
     JobSpec,
@@ -25,8 +25,8 @@ from qunbot.actions.scheduling import (
     count_missed,
     next_occurrence,
 )
-from qunbot.actions.scheduling.runner import JobRunner
-from qunbot.actions.scheduling.management import ScheduleManagementService
+from qqbot.actions.scheduling.runner import JobRunner
+from qqbot.actions.scheduling.management import ScheduleManagementService
 from tests.support import Store
 
 
