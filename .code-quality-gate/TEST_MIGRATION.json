@@ -1520,9 +1520,10 @@
   },
   "tests/infrastructure/test_wiki_runtime.py": {
     "tests": [
+      "test_enabled_runtime_refreshes_after_markdown_snapshot_changes",
       "test_enabled_wiki_runtime_reads_published_markdown",
       "test_wiki_runtime_is_off_by_default"
     ],
-    "assertions": 3
+    "assertions": 5
   }
 }
