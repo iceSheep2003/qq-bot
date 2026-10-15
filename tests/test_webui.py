@@ -72,7 +72,7 @@ def test_markdown_guide_is_task_oriented_and_covers_every_module() -> None:
     guide = (Path(__file__).parents[1] / "qunbot/extensions/webui/docs/GUIDE.md").read_text(
         encoding="utf-8"
     )
-    assert guide.startswith("# QunBot 操作手册")
+    assert guide.startswith("# Kinna bot 操作手册")
     assert "[TOC]" in guide
     for task in (
         "接入 NapCat 和模型",

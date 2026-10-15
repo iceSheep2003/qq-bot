@@ -1,0 +1,11 @@
+{
+  "folders": [
+    {
+      "name": "Kinna bot",
+      "path": "."
+    }
+  ],
+  "settings": {
+    "window.title": "Kinna bot · ${activeEditorShort} · ${appName}"
+  }
+}

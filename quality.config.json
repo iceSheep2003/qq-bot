@@ -68,6 +68,38 @@
         ]
       },
       {
+        "id": "branding",
+        "title": "Kinna bot public identity and existing CLI compatibility",
+        "command": [
+          ".venv/bin/python",
+          "-m",
+          "pytest",
+          "tests/test_branding.py",
+          "tests/test_webui.py::test_markdown_guide_is_task_oriented_and_covers_every_module",
+          "-q",
+          "--junitxml=.quality/branding.xml"
+        ],
+        "report": ".quality/branding.xml",
+        "format": "junit",
+        "metrics": [
+          {
+            "name": "Branding cases",
+            "path": "tests",
+            "min": 4
+          },
+          {
+            "name": "Success rate",
+            "path": "successRate",
+            "equals": 100
+          },
+          {
+            "name": "Skipped",
+            "path": "skipped",
+            "equals": 0
+          }
+        ]
+      },
+      {
         "id": "regression",
         "title": "Complete legacy and new Python regression suite",
         "command": [

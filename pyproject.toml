@@ -1,7 +1,7 @@
 [project]
 name = "qunbot"
 version = "0.1.0"
-description = "A skill-driven QQ group companion bot for OneBot v11"
+description = "Kinna bot: a skill-driven QQ companion for group and private chat over OneBot v11"
 requires-python = ">=3.11"
 dependencies = [
     "websockets>=13,<17",

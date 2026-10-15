@@ -1,12 +1,12 @@
-# Kinna · QQ Bot
+# Kinna bot
 
-基于 Python 和 NapCat 的 QQ 群聊机器人，支持长期记忆、角色人格、表情包和语音互动。
+基于 Python 和 NapCat 的 QQ 机器人，支持群聊与可选私聊，支持长期记忆、角色人格、表情包和语音互动。
 
 ![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)
 ![QQ](https://img.shields.io/badge/QQ-NapCat-2563EB)
 ![OneBot](https://img.shields.io/badge/OneBot-v11-2563EB)
 
-[快速开始](#快速开始) · [使用文档](#使用文档) · [开发指南](CONTRIBUTING.md) · [反馈问题](https://github.com/iceSheep2003/qq-bot/issues)
+[代码从哪里看](docs/CODE_MAP.md) · [快速开始](#快速开始) · [使用文档](#使用文档) · [开发指南](CONTRIBUTING.md) · [反馈问题](https://github.com/iceSheep2003/qq-bot/issues)
 
 <p align="center">
   <img src="memes/ip/zinxtick-present-sheet.png" alt="Kinna：蓝发、黑卫衣，拿着一张清单" width="306" />

@@ -430,7 +430,7 @@ class BotApp:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Skill-driven QQ group bot")
+    parser = argparse.ArgumentParser(description="Kinna bot — skill-driven QQ group and private chat")
     parser.add_argument(
         "--check", action="store_true", help="validate configuration without connecting"
     )
