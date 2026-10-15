@@ -50,6 +50,13 @@ _CACHE_SOURCES: tuple[tuple[str, ...], ...] = (
     ("cache_read_input_tokens",),  # Anthropic style
     ("cached_tokens",),  # already-normalised / flat providers
 )
+_CACHE_WRITE_SOURCES: tuple[tuple[str, ...], ...] = (
+    ("prompt_tokens_details", "cache_write_tokens"),
+    ("prompt_tokens_details", "cache_creation_tokens"),
+    ("cache_write_input_tokens",),
+    ("cache_creation_input_tokens",),
+    ("cache_write_tokens",),
+)
 
 
 # --------------------------------------------------------------------------- #
@@ -301,12 +308,15 @@ def normalize_usage(raw: dict | None) -> dict:
     if total is None and prompt is not None and completion is not None:
         total = prompt + completion
     cached = _first_int(usage, _CACHE_SOURCES)
+    cache_write = _first_int(usage, _CACHE_WRITE_SOURCES)
 
     usage["prompt_tokens"] = prompt if prompt is not None else UNKNOWN
     usage["completion_tokens"] = completion if completion is not None else UNKNOWN
     usage["total_tokens"] = total if total is not None else UNKNOWN
     usage["cached_tokens"] = cached if cached is not None else UNKNOWN
+    usage["cache_write_tokens"] = cache_write if cache_write is not None else UNKNOWN
     usage["cache_metrics_known"] = cached is not None
+    usage["cache_write_metrics_known"] = cache_write is not None
     usage["cache_hit_ratio"] = (
         round(cached / prompt, 4) if cached is not None and prompt else None
     )
@@ -373,7 +383,9 @@ class ModelCallMetrics:
     prompt_tokens: int | str
     completion_tokens: int | str
     cached_tokens: int | str
+    cache_write_tokens: int | str
     cache_metrics_known: bool
+    cache_write_metrics_known: bool
     attempts: int
     duration_ms: int
     tools_offered: int
@@ -465,7 +477,9 @@ class ModelClient:
             "sequence_hash": last.sequence_hash if last else UNKNOWN,
             "prompt_tokens": last.prompt_tokens if last else UNKNOWN,
             "cached_tokens": last.cached_tokens if last else UNKNOWN,
+            "cache_write_tokens": last.cache_write_tokens if last else UNKNOWN,
             "cache_metrics_known": bool(last) and last.cache_metrics_known,
+            "cache_write_metrics_known": bool(last) and last.cache_write_metrics_known,
             "provider_cache_hit": bool(
                 last
                 and last.cache_metrics_known
@@ -677,7 +691,9 @@ class ModelClient:
                     prompt_tokens=usage["prompt_tokens"],
                     completion_tokens=usage["completion_tokens"],
                     cached_tokens=usage["cached_tokens"],
+                    cache_write_tokens=usage["cache_write_tokens"],
                     cache_metrics_known=usage["cache_metrics_known"],
+                    cache_write_metrics_known=usage["cache_write_metrics_known"],
                     attempts=attempt,
                     duration_ms=int((self._clock() - started) * 1000),
                     tools_offered=len(tools or ()),

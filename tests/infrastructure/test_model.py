@@ -171,6 +171,21 @@ class UsageNormalizationTests(unittest.TestCase):
         self.assertEqual(anthropic["completion_tokens"], 4)
         self.assertEqual(anthropic["cached_tokens"], 8)
 
+    def test_cache_write_fields_are_normalized_without_confusing_reads(self):
+        usage = normalize_usage(
+            {
+                "prompt_tokens": 100,
+                "completion_tokens": 5,
+                "prompt_tokens_details": {
+                    "cached_tokens": 64,
+                    "cache_write_tokens": 36,
+                },
+            }
+        )
+        self.assertEqual(usage["cached_tokens"], 64)
+        self.assertEqual(usage["cache_write_tokens"], 36)
+        self.assertTrue(usage["cache_write_metrics_known"])
+
     def test_missing_cache_metric_is_unknown_not_zero(self):
         usage = normalize_usage({"prompt_tokens": 10, "completion_tokens": 5})
         self.assertEqual(usage["cached_tokens"], UNKNOWN)
@@ -283,6 +298,27 @@ class SuccessPathTests(unittest.TestCase):
         self.assertTrue(report["provider_cache_hit"])
         self.assertEqual(report["cached_tokens"], 80)
         self.assertTrue(report["cache_metrics_known"])
+
+    def test_cache_report_includes_cache_write_tokens(self):
+        provider = FakeProvider(
+            ok(usage={
+                "prompt_tokens": 100,
+                "completion_tokens": 1,
+                "total_tokens": 101,
+                "prompt_tokens_details": {
+                    "cached_tokens": 0,
+                    "cache_write_tokens": 100,
+                },
+            })
+        )
+        client, _ = make_client(provider)
+        try:
+            run(client.complete(messages()))
+            report = client.cache_report()
+        finally:
+            run(client.close())
+        self.assertEqual(report["cache_write_tokens"], 100)
+        self.assertTrue(report["cache_write_metrics_known"])
 
     def test_cache_report_without_provider_field_says_unknown(self):
         provider = FakeProvider(ok(usage={"prompt_tokens": 10, "completion_tokens": 1}))
