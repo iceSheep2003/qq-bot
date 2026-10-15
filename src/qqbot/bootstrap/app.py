@@ -80,6 +80,7 @@ from qqbot.infrastructure.storage.topic_observations import TopicObservationStor
 from qqbot.infrastructure.storage.relationships import RelationshipsStore
 from qqbot.actions.tools.registry import built_in_tools
 from qqbot.agent.cognition.routes import configured_scene_routes
+from qqbot.infrastructure.storage.wiki_runtime import configured_wiki_reader
 
 log = logging.getLogger(__name__)
 
@@ -206,6 +207,7 @@ class BotApp:
             history_message_limit=config.conversation_window_messages,
             live_scene_seconds=config.conversation_window_seconds,
             continuity_ttl_seconds=config.conversation_snapshot_ttl_seconds,
+            wiki_reader=configured_wiki_reader(),
         )
         gateway = OneBotGateway(
             config.onebot_host,

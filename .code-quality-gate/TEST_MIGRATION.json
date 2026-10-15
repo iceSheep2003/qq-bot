@@ -1517,5 +1517,12 @@
       "test_markdown_snapshot_round_trips_to_page"
     ],
     "assertions": 7
+  },
+  "tests/infrastructure/test_wiki_runtime.py": {
+    "tests": [
+      "test_enabled_wiki_runtime_reads_published_markdown",
+      "test_wiki_runtime_is_off_by_default"
+    ],
+    "assertions": 3
   }
 }
