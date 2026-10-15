@@ -14,6 +14,7 @@ from .update_policy import WikiUpdatePolicy, published_version
 from .reader import WikiReader
 from .writer import WikiWriter
 from .legacy import LegacyWikiProjector
+from .migration import WikiMigration, WikiMigrationReport
 
 __all__ = [
     "WikiContextCache",
@@ -31,4 +32,6 @@ __all__ = [
     "WikiReader",
     "WikiWriter",
     "LegacyWikiProjector",
+    "WikiMigration",
+    "WikiMigrationReport",
 ]

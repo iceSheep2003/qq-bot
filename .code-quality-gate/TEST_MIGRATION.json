@@ -1503,5 +1503,13 @@
       "test_projection_separates_group_person_and_private_memory"
     ],
     "assertions": 5
+  },
+  "tests/agent/test_wiki_migration.py": {
+    "tests": [
+      "test_database_reader_uses_read_only_mode_and_does_not_migrate",
+      "test_dry_run_reports_pages_without_writing",
+      "test_write_is_repeatable_and_reports_written_pages"
+    ],
+    "assertions": 8
   }
 }

@@ -106,3 +106,17 @@ Wiki 候选可以即时落盘，但发布版按批次更新：默认 8 条候选
 - Reader/Writer 尚未接入线上旧版 `qunbot` 的启动组合；线上仍保持原有长期记忆和黑话路径。
 - 下一步是只读投影旧 `memories`、`memory_topics` 和黑话记录，生成可回滚的 Wiki 快照，再决定是否替换 Agent 读取路径。
 
+本地迁移命令：
+
+```bash
+# 只读预览，不创建 Markdown
+PYTHONPATH=src python -m qqbot.infrastructure.storage.wiki_migration \
+  --db ./data/qqbot.sqlite3 --wiki-root ./data/wiki
+
+# 明确要求后才写入 Wiki 快照；旧数据库仍以只读方式打开
+PYTHONPATH=src python -m qqbot.infrastructure.storage.wiki_migration \
+  --db ./data/qqbot.sqlite3 --wiki-root ./data/wiki --write
+```
+
+迁移输出包含页面数、事实数、主题数、黑话数和实际写入数；重复执行会生成相同内容。
+
