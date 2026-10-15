@@ -21,14 +21,17 @@ Agent 内部按六种职责组织：`perception/` 处理输入理解，`conversa
 工作记忆与压缩，`identity/` 保存自身规则与情绪，`memory/` 负责长期事实、证据和关系，
 `cognition/` 选择可选认知路线，`skills/` 负责声明式 Skill 的可见性与加载。
 `context.py` 管理动态上下文，`fairness.py` 管理后台工作的范围预算。
+`observation.py` 独立管理回复后观察；`conversation/maintenance.py` 独立管理
+提炼与压缩的任务生命周期。`service.py` 在消息成功入账和回复成功发送的位置调用它们，
+不再持有这两类维护任务的队列、scope 占用或并发状态。
 
 ## 依赖规则
 
 启动装配可以选择具体实现。Agent 主循环读取端口和数据模型，通过注入对象访问模型、
 存储和发送能力。公共契约位于依赖底层，不能反向导入 Agent、动作或任何具体接入。
 
-`.importlinter` 执行六条约束：公共契约、场景准入、Skill 范围、Skill 目录、认知决策、
-Agent 主循环。它们禁止向具体基础设施、管理界面和功能装配反向依赖。
+`.importlinter` 执行八条约束：公共契约、场景准入、Skill 范围、Skill 目录、认知决策、
+Agent 主循环、回复后观察和会话维护。它们禁止向具体基础设施、管理界面和功能装配反向依赖。
 认知抽取中使用 Instructor 的具体适配器归到 `infrastructure/extraction/`。
 
 内部功能注册仍通过固定的 `features/manifest.py` 完成。该包包含注册和运行逻辑，

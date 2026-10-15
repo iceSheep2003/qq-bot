@@ -225,6 +225,37 @@
         ]
       },
       {
+        "id": "conversation-maintenance",
+        "title": "Memory extraction, compaction and service shutdown ownership",
+        "command": [
+          ".venv/bin/python",
+          "-m",
+          "pytest",
+          "tests/agent/test_conversation_maintenance.py",
+          "-q",
+          "--junitxml=.quality/conversation-maintenance.xml"
+        ],
+        "report": ".quality/conversation-maintenance.xml",
+        "format": "junit",
+        "metrics": [
+          {
+            "name": "Maintenance cases",
+            "path": "tests",
+            "min": 28
+          },
+          {
+            "name": "Success rate",
+            "path": "successRate",
+            "equals": 100
+          },
+          {
+            "name": "Skipped",
+            "path": "skipped",
+            "equals": 0
+          }
+        ]
+      },
+      {
         "id": "regression",
         "title": "Complete legacy and new Python regression suite",
         "command": [
@@ -339,6 +370,40 @@
             "name": "Branches",
             "path": "branches",
             "min": 40
+          }
+        ]
+      },
+      {
+        "id": "maintenance-coverage",
+        "title": "Independent maintenance module coverage",
+        "command": [
+          ".venv/bin/python",
+          "-m",
+          "tools.quality.checks",
+          "maintenance-coverage"
+        ],
+        "report": ".quality/maintenance-coverage-metrics.json",
+        "format": "json",
+        "metrics": [
+          {
+            "name": "Line coverage",
+            "path": "lineCoverage",
+            "min": 90
+          },
+          {
+            "name": "Branch coverage",
+            "path": "branchCoverage",
+            "min": 80
+          },
+          {
+            "name": "Statements",
+            "path": "statements",
+            "min": 40
+          },
+          {
+            "name": "Branches",
+            "path": "branches",
+            "min": 16
           }
         ]
       }

@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "id": "CONVERSATION-MAINTENANCE-008",
+  "title": "Isolate memory extraction and compaction lifecycle from the conversation service",
+  "requirements": [
+    "ConversationMaintenance owns extraction tasks, scope reservations, extraction concurrency, compaction tasks, per-scope compaction budget and shutdown without importing service or concrete adapters.",
+    "Extraction is scheduled after actual message persistence only for positive counts at the configured interval, at most one task per scope and two concurrent extractions by default; failures log without automatic retry.",
+    "Compaction is scheduled only at the successful reply-delivery boundary, excludes operator events and disabled compaction, preserves group and private scope and current event ID, and retains the existing independent per-scope budget.",
+    "Closing maintenance rejects new work, cancels and awaits running or queued jobs and supports repeated, concurrent and cancelled closers; service must finish this cleanup even when observation shutdown fails or is cancelled.",
+    "Service delegates to one maintenance owner without duplicate state or obsolete forwarding methods; all historical acceptance, regression, architecture, lint, wheel and coverage checks remain required."
+  ],
+  "testFiles": [
+    "tests/agent/test_conversation_maintenance.py"
+  ],
+  "codeFiles": [
+    "src/qqbot/agent/conversation/maintenance.py",
+    "src/qqbot/agent/service.py",
+    "src/qqbot/agent/README.md",
+    "docs/architecture/README.md",
+    "docs/architecture/RUNTIME.md",
+    "docs/development/ROADMAP.md"
+  ],
+  "testChecks": [
+    "conversation-maintenance"
+  ],
+  "protectedFiles": [
+    "tools/quality/checks.py",
+    "tools/quality/junit_report.py",
+    ".importlinter",
+    ".code-quality-gate/CONVERSATION_MAINTENANCE.md",
+    ".code-quality-gate/ci-setup.sh",
+    "tests/support.py",
+    "tests/agent/test_service.py",
+    "tests/agent/test_observation.py",
+    "tests/quality/test_project_layout.py",
+    "tests/quality/test_quality_integration.py"
+  ],
+  "maxAttempts": 12
+}

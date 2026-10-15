@@ -1,4 +1,4 @@
 {
-  "manifest": ".code-quality-gate/tasks/AGENT-OBSERVATION-007.json",
+  "manifest": ".code-quality-gate/tasks/CONVERSATION-MAINTENANCE-008.json",
   "config": "quality.config.json"
 }

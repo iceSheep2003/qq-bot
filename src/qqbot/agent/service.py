@@ -54,7 +54,7 @@ from qqbot.actions.replies import (
     parse_reply_draft,
 )
 from qqbot.actions.replies.repetition import repeats_recent
-from qqbot.agent.fairness import ScopeWorkBudget
+from qqbot.agent.conversation.maintenance import ConversationMaintenance
 from qqbot.agent.observation import ObservationDispatcher
 
 log = logging.getLogger(__name__)
@@ -133,8 +133,6 @@ class ConversationService:
         self.prompt_sessions = prompt_sessions
         self.scope_locks: dict[str, asyncio.Lock] = {}
         self.last_reply: dict[str, float] = {}
-        self.extracting: set[str] = set()
-        self.extract_slots = asyncio.Semaphore(2)
         # Bounded, at-most-once post-reply observation queue. Created lazily so
         # a service that never replies never allocates a worker.
         # Defaults live here; environment parsing lives in config.Config, which
@@ -147,12 +145,13 @@ class ConversationService:
             dedupe=observation_dedupe or DEFAULT_OBSERVATION_DEDUPE,
             store=observation_store,
         )
-        self._extract_tasks: set[asyncio.Task] = set()
-        # Compaction is maintenance, never part of the interactive reply
-        # latency. One task per scope prevents a hot group from creating a
-        # model-call backlog; the model adapter still enforces the global cap.
-        self._compaction_tasks: dict[str, asyncio.Task] = {}
-        self._compaction_budget = ScopeWorkBudget(max_per_scope=2)
+        self.maintenance = ConversationMaintenance(
+            message_count=lambda scope: conversations.message_count(scope),
+            extract_memory=lambda scope: agent.extract_memory(scope),
+            extract_every=policy.memory_extract_every,
+            compactor=getattr(agent, "conversation_compactor", None),
+            logger=log,
+        )
         self.observations = self.post_reply.stats
         if restore_last_reply:
             self.restore_last_reply()
@@ -184,7 +183,7 @@ class ConversationService:
     def restore_last_reply(self) -> None:
         """Rebuild the reply cooldown from persisted history.
 
-        ``scope_locks`` and ``extracting`` are pure in-process coordination and
+        Scope locks and maintenance reservations are in-process coordination and
         are intentionally *not* restored: a lock has no meaning before the
         process starts, and a half-finished extraction simply runs again on the
         next message. ``last_reply`` is different — the scheduler and the
@@ -338,7 +337,7 @@ class ConversationService:
             )
         if self.conversation_intelligence is not None:
             self.conversation_intelligence.observe(event)
-        self._maybe_extract(event.scope)
+        self.maintenance.maybe_extract(event.scope)
         return True
 
     # --- use case 2: reply decision --------------------------------------
@@ -436,7 +435,7 @@ class ConversationService:
             if callable(record):
                 record(event, clean)
             self.dispatch_post_reply(event, clean, draft)
-            self._schedule_compaction(event)
+            self.maintenance.after_reply(event)
             return clean
 
     def _is_unrequested_echo(self, event: MessageEvent, text: str) -> bool:
@@ -637,77 +636,12 @@ class ConversationService:
         return await self.post_reply.run_durable()
 
     async def aclose(self, timeout: float = 5.0) -> None:
-        """Stop post-reply work, then cancel compaction and extraction tasks."""
-        await self.post_reply.aclose(timeout=timeout)
-        compactions = list(self._compaction_tasks.values())
-        for task in compactions:
-            task.cancel()
-        if compactions:
-            await asyncio.gather(*compactions, return_exceptions=True)
-        self._compaction_tasks.clear()
-        tasks = list(self._extract_tasks)
-        for task in tasks:
-            task.cancel()
-        if tasks:
-            await asyncio.gather(*tasks, return_exceptions=True)
-            self._extract_tasks.clear()
-
-    # --- memory extraction ------------------------------------------------
-
-    def _maybe_extract(self, scope: str) -> None:
-        if (
-            self.conversations.message_count(scope) % self.policy.memory_extract_every
-            == 0
-            and scope not in self.extracting
-        ):
-            self.extracting.add(scope)
-            task = asyncio.get_running_loop().create_task(self._extract_safe(scope))
-            self._extract_tasks.add(task)
-            task.add_done_callback(self._extract_tasks.discard)
-
-    async def _extract_safe(self, scope: str) -> None:
+        """Settle maintenance even when observation draining fails or is cancelled."""
+        maintenance_close = asyncio.create_task(self.maintenance.aclose())
         try:
-            async with self.extract_slots:
-                await self.agent.extract_memory(scope)
-        except asyncio.CancelledError:
-            raise
-        except Exception:
-            log.exception("Memory extraction failed for %s", scope)
+            await self.post_reply.aclose(timeout=timeout)
         finally:
-            self.extracting.discard(scope)
-
-    def _schedule_compaction(self, event: MessageEvent) -> None:
-        """Schedule short-term maintenance after delivery has been committed.
-
-        A provider timeout or a slow summarizer can no longer block the next
-        conversational turn. The ledger remains authoritative while this task
-        is pending, and the compactor's compare-and-swap commit discards a
-        stale result safely if new messages arrive first.
-        """
-        if event.origin == "operator":
-            return
-        compactor = getattr(self.agent, "conversation_compactor", None)
-        if (
-            compactor is None
-            or event.scope in self._compaction_tasks
-            or not self._compaction_budget.admit(event.scope)
-        ):
-            return
-        task = asyncio.get_running_loop().create_task(
-            self._compact_safe(compactor, event.scope, event.event_id)
-        )
-        self._compaction_tasks[event.scope] = task
-        task.add_done_callback(
-            lambda done, scope=event.scope: self._compaction_tasks.pop(scope, None)
-        )
-
-    async def _compact_safe(self, compactor, scope: str, event_id: str) -> None:
-        try:
-            await compactor.compact_if_needed(scope, current_event_id=event_id)
-        except asyncio.CancelledError:
-            raise
-        except Exception:
-            log.exception("Background short-term compaction failed scope=%s", scope)
+            await maintenance_close
 
     def scope_lock(self, scope: str) -> asyncio.Lock:
         return self.scope_locks.setdefault(scope, asyncio.Lock())

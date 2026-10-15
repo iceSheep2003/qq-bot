@@ -16,6 +16,7 @@ NEW_FILES = [
     "src/qqbot/agent/cognition/routes.py",
 ]
 CODE_FILES = NEW_FILES + [
+    "src/qqbot/agent/conversation/maintenance.py", "tests/agent/test_conversation_maintenance.py",
     "src/qqbot/agent/observation.py", "tests/agent/test_observation.py",
     "src/qqbot/agent/cognition/__init__.py", "src/qqbot/agent/skills/catalog.py",
     "src/qqbot/agent/skills/host.py", "src/qqbot/agent/orchestrator.py", "src/qqbot/agent/service.py",
@@ -71,6 +72,8 @@ def main() -> int:
         return coverage_report()
     if sys.argv[1] == "observation-coverage":
         return coverage_report(["src/qqbot/agent/observation.py"], "observation", "observation-coverage-metrics")
+    if sys.argv[1] == "maintenance-coverage":
+        return coverage_report(["src/qqbot/agent/conversation/maintenance.py"], "maintenance", "maintenance-coverage-metrics")
     result = run(commands[sys.argv[1]])
     if sys.argv[1] == "regression":
         normalize_junit(ROOT / ".quality/regression.xml")

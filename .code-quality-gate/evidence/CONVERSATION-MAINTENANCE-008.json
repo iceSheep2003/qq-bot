@@ -1,0 +1,65 @@
+{
+  "version": 1,
+  "id": "CONVERSATION-MAINTENANCE-008",
+  "attempts": 2,
+  "red": {
+    "time": "2026-10-15T17:35:24.832Z",
+    "snapshot": {
+      "contract": "80b2bedf2f039542cda08f07c4e1d1bb53ee27f21d0b03d281aecbbeaee6ee43",
+      "protected": {
+        ".code-quality-gate/CONVERSATION_MAINTENANCE.md": "96d05d2ef1dc32f0b9bf0d27db23558f40347c833baba2bb3c85069dc53efcda",
+        ".code-quality-gate/ci-setup.sh": "8c6636d8a04487aa9d8c623fce23aaab751bec431c25aa8a402a841532a8a69f",
+        ".code-quality-gate/tasks/CONVERSATION-MAINTENANCE-008.json": "f4d73b2d2154bdc64027269b4120d6604340fa05807d3c72e876654e0556ec66",
+        ".importlinter": "d93e21e83110ba79d106ca7b394b1dc62f723de3dfc53e511b62c957dc56f8db",
+        "quality.config.json": "fe5135628f277301c027484ed2fd2b87a314f94d7af59f2cb0196875653d706e",
+        "tests/agent/test_conversation_maintenance.py": "5bc397638ceafb3f7b06ae56fdd923289469b017de6eea154bb0e8588cf379d5",
+        "tests/agent/test_observation.py": "9d4df67ef2d643a0ef9cfdb510b60cd816e4512df14947628858f8efbb4bb6e2",
+        "tests/agent/test_service.py": "1368c3244ab4718c81b349ffa30136b0d576693e0d758222f8435e76f0359e77",
+        "tests/quality/test_project_layout.py": "6380bfcc9cc16bd2590a07dacbf589933fe6ab8d5eb661a6cb925d0b8c58d5ec",
+        "tests/quality/test_quality_integration.py": "a75d63f91d7eff628b543d93f9eebb42b5adf097b360684293da71455c27a7a5",
+        "tests/support.py": "207e58cfcd3fa592fc9e39ddfb5f9903231ce629767ef0ae01f8de74ee42f276",
+        "tools/quality/checks.py": "f5bf703fb1b483bab53385e392b149abcba0ef3c3c869620812a5e3b9fad985a",
+        "tools/quality/junit_report.py": "082cff7fb89c4f5cac8d71a198185f857b5d2501f7a59f74905cf4bf22b48c8b"
+      },
+      "code": {
+        "docs/architecture/README.md": "634ac252f463087c53135b8c569292df08017917102d94a878658b7f2aff4007",
+        "docs/architecture/RUNTIME.md": "6b8bd996af847c7cd401f4178293194e8e09bd2aa80358fa29ae029f19a0ad5e",
+        "docs/development/ROADMAP.md": "84b16a1642515166bd6ceba0abcaef9656347d802ccdc1386b01616f0789660a",
+        "src/qqbot/agent/README.md": "ce6f54d0ed35427b4426820f89d9d729e22333bd7789da93fecdeb3ae185c2a2",
+        "src/qqbot/agent/conversation/maintenance.py": "f546c4a657047e64abd5f4fe481db239ea9228d85c2332238bd7d5a00293b094",
+        "src/qqbot/agent/service.py": "c95aec7c737806ef2357cbfab002e512cc97b800d7d025130e8dfe02084aecd3"
+      }
+    },
+    "report": ".quality/code-quality-gate/CONVERSATION-MAINTENANCE-008/red-9df057c9-e017-4d96-9e59-e95c8b6ad252.md"
+  },
+  "green": {
+    "time": "2026-10-15T17:39:53.663Z",
+    "snapshot": {
+      "contract": "80b2bedf2f039542cda08f07c4e1d1bb53ee27f21d0b03d281aecbbeaee6ee43",
+      "protected": {
+        ".code-quality-gate/CONVERSATION_MAINTENANCE.md": "96d05d2ef1dc32f0b9bf0d27db23558f40347c833baba2bb3c85069dc53efcda",
+        ".code-quality-gate/ci-setup.sh": "8c6636d8a04487aa9d8c623fce23aaab751bec431c25aa8a402a841532a8a69f",
+        ".code-quality-gate/tasks/CONVERSATION-MAINTENANCE-008.json": "f4d73b2d2154bdc64027269b4120d6604340fa05807d3c72e876654e0556ec66",
+        ".importlinter": "d93e21e83110ba79d106ca7b394b1dc62f723de3dfc53e511b62c957dc56f8db",
+        "quality.config.json": "fe5135628f277301c027484ed2fd2b87a314f94d7af59f2cb0196875653d706e",
+        "tests/agent/test_conversation_maintenance.py": "5bc397638ceafb3f7b06ae56fdd923289469b017de6eea154bb0e8588cf379d5",
+        "tests/agent/test_observation.py": "9d4df67ef2d643a0ef9cfdb510b60cd816e4512df14947628858f8efbb4bb6e2",
+        "tests/agent/test_service.py": "1368c3244ab4718c81b349ffa30136b0d576693e0d758222f8435e76f0359e77",
+        "tests/quality/test_project_layout.py": "6380bfcc9cc16bd2590a07dacbf589933fe6ab8d5eb661a6cb925d0b8c58d5ec",
+        "tests/quality/test_quality_integration.py": "a75d63f91d7eff628b543d93f9eebb42b5adf097b360684293da71455c27a7a5",
+        "tests/support.py": "207e58cfcd3fa592fc9e39ddfb5f9903231ce629767ef0ae01f8de74ee42f276",
+        "tools/quality/checks.py": "f5bf703fb1b483bab53385e392b149abcba0ef3c3c869620812a5e3b9fad985a",
+        "tools/quality/junit_report.py": "082cff7fb89c4f5cac8d71a198185f857b5d2501f7a59f74905cf4bf22b48c8b"
+      },
+      "code": {
+        "docs/architecture/README.md": "8aa345bba051976dea284dd278971b022b2ea153766ff2ac57b5c2b6e9c8cea2",
+        "docs/architecture/RUNTIME.md": "7a7b329a0f658bd1856a35850e6fd08e87110ac74d13731666a743e4197c0f8a",
+        "docs/development/ROADMAP.md": "377b7eb37a34b8fac7cb8425ec382ba5ce31a2ba424e4007c78ec66f273e481d",
+        "src/qqbot/agent/README.md": "75e2f19af8016dc0a3260e1567e473a2c68c4076e985d97259b1735d0b98f073",
+        "src/qqbot/agent/conversation/maintenance.py": "79d194c823d1d05b723ecd16130cf9d533d9298cfca1a18566580d83f125b9e6",
+        "src/qqbot/agent/service.py": "fdbc913bc561a9f0097e4c8f263810eaa3a848cf4a3745f2c42013ccbbbad0d2"
+      }
+    },
+    "report": ".quality/code-quality-gate/CONVERSATION-MAINTENANCE-008/green-136761b4-b30d-4b9f-871e-05e58e579c2c.md"
+  }
+}

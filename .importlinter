@@ -80,3 +80,15 @@ forbidden_modules =
     qqbot.features
     qqbot.interfaces
     qqbot.bootstrap
+
+[importlinter:contract:maintenance]
+name = Conversation maintenance depends on ports rather than service or adapters
+type = forbidden
+source_modules = qqbot.agent.conversation.maintenance
+forbidden_modules =
+    qqbot.agent.service
+    qqbot.agent.orchestrator
+    qqbot.infrastructure
+    qqbot.features
+    qqbot.interfaces
+    qqbot.bootstrap
