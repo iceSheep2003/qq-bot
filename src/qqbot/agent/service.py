@@ -26,11 +26,13 @@ from zoneinfo import ZoneInfo
 
 from qqbot.contracts.models import MessageEvent
 from qqbot.agent.conversation.channels import ChannelPolicy
+from qqbot.agent.conversation.delivery import ConversationDelivery
 from qqbot.contracts.ports import (
     ActivityRepository,
     AffectionObserver,
     AgentRunner,
     InboundMediaPort,
+    ObservationRepository,
     ConversationRepository,
     ConversationIntelligencePort,
     MediaProcessor,
@@ -110,7 +112,7 @@ class ConversationService:
         observation_backlog: int | None = None,
         observation_workers: int | None = None,
         observation_dedupe: int | None = None,
-        observation_store=None,
+        observation_store: ObservationRepository | None = None,
         inbound_media: InboundMediaPort | None = None,
         restore_last_reply: bool = True,
     ):
@@ -121,6 +123,10 @@ class ConversationService:
         self.inbound_media = inbound_media
         self.reply_planner = reply_planner or DefaultReplyPlanner()
         self.reply_dispatcher = reply_dispatcher or ReplyDispatcher(sender, media)
+        self.delivery = ConversationDelivery(
+            conversations, self.reply_dispatcher, prompt_sessions=prompt_sessions,
+            conversation_intelligence=conversation_intelligence, logger=log,
+        )
         self.conversation_intelligence = conversation_intelligence
         # None means the built-in "@ me only" rule; an injected policy replaces
         # it. Advisory only — a failure falls back to the default.
@@ -143,7 +149,7 @@ class ConversationService:
             backlog=observation_backlog or DEFAULT_OBSERVATION_BACKLOG,
             workers=observation_workers or DEFAULT_OBSERVATION_WORKERS,
             dedupe=observation_dedupe or DEFAULT_OBSERVATION_DEDUPE,
-            store=observation_store,
+            store=observation_store, logger=log,
         )
         self.maintenance = ConversationMaintenance(
             message_count=lambda scope: conversations.message_count(scope),
@@ -407,7 +413,7 @@ class ConversationService:
             if event.group_id and self._is_unrequested_echo(event, plan.semantic_text):
                 log.info("Suppressing unrequested model echo event=%s", event.event_id)
                 return None
-            delivered = await self._deliver(
+            delivered = await self.delivery.deliver(
                 plan,
                 group_id=event.group_id,
                 user_id=None if event.group_id else event.user_id,
@@ -417,19 +423,11 @@ class ConversationService:
             if not delivered.sent:
                 return None
             clean = delivered.transcript
-            if not getattr(self.reply_dispatcher, "supports_part_receipts", False):
-                self.conversations.add_message(
-                    f"reply:{event.event_id}",
-                    event.scope,
-                    "bot",
-                    "Bot",
-                    "assistant",
-                    clean,
-                )
+            self.delivery.record_transcript(event, clean)
             commit = getattr(self.agent, "commit_delivered_reply", None)
             if callable(commit):
                 commit(reply, event, clean)
-            self._observe_assistant(event, clean, f"reply:{event.event_id}")
+            self.delivery.observe_assistant(event, clean, f"reply:{event.event_id}")
             self.last_reply[event.scope] = time.time()
             record = getattr(self.reply_policy, "record_delivery", None)
             if callable(record):
@@ -451,57 +449,12 @@ class ConversationService:
     def _normalize_repeat_marker(text: str) -> str:
         return re.sub(r"\s+", "", str(text or "")).lower()
 
-    def record_assistant_turn(
-        self, trigger: MessageEvent, text: str, *, event_id: str
-    ) -> None:
-        """Persist and index one actual outbound turn through one boundary."""
-        has_delivery = getattr(self.conversations, "has_delivery", None)
-        if not (callable(has_delivery) and has_delivery(f"reply:{trigger.event_id}")):
-            self.conversations.add_message(
-                event_id, trigger.scope, "bot", "Bot", "assistant", text
-            )
-        if self.prompt_sessions is not None and text.strip():
-            try:
-                self.prompt_sessions.append(
-                    trigger.scope, [{"role": "assistant", "content": text.strip()}]
-                )
-            except Exception:
-                log.exception("Could not sync local assistant turn event=%s", event_id)
-        self._observe_assistant(trigger, text, event_id)
+    def record_assistant_turn(self, trigger: MessageEvent, text: str, *, event_id: str) -> None:
+        self.delivery.record_assistant(trigger, text, event_id=event_id)
 
     def record_outbound(self, trigger, text, *, event_id):
         """Scheduling port uses the same actual-delivery recording boundary."""
         self.record_assistant_turn(trigger, text, event_id=event_id)
-
-    def _observe_assistant(
-        self, trigger: MessageEvent, text: str, event_id: str
-    ) -> None:
-        if self.conversation_intelligence is None or not trigger.group_id:
-            return
-        reply_to = trigger.platform_message_id
-        if trigger.origin == "operator":
-            latest = self.conversation_intelligence.latest_frame(trigger.scope)
-            reply_to = latest.focus.platform_message_id if latest is not None else ""
-        self.conversation_intelligence.observe(
-            MessageEvent(
-                event_id=event_id,
-                scope=trigger.scope,
-                group_id=trigger.group_id,
-                user_id="bot",
-                nickname="Kinna",
-                text=text,
-                image_urls=(),
-                at_bot=False,
-                at_users=(),
-                timestamp=int(time.time()),
-                platform_message_id=event_id,
-                reply_to_message_id=reply_to,
-                reply_to_user_id=trigger.user_id
-                if trigger.origin != "operator"
-                else "",
-                origin="assistant",
-            )
-        )
 
     async def send_reply(
         self,
@@ -534,7 +487,7 @@ class ConversationService:
         the same delivery boundary used by ordinary inbound turns.
         """
         plan = await self.reply_planner.plan(draft, event)
-        result = await self._deliver(
+        result = await self.delivery.deliver(
             plan,
             group_id=group_id,
             user_id=user_id,
@@ -542,68 +495,6 @@ class ConversationService:
             event=event,
         )
         return result.transcript if result.sent else ""
-
-    async def _deliver(self, plan, *, group_id, user_id, allowed_at, event=None):
-        kwargs = {"group_id": group_id, "user_id": user_id, "allowed_at": allowed_at}
-        if event is not None and getattr(
-            self.reply_dispatcher, "supports_part_receipts", False
-        ):
-            begin_part = getattr(self.conversations, "begin_part", None)
-            if callable(begin_part):
-
-                async def intent(index, kind, text):
-                    return begin_part(
-                        f"reply:{event.event_id}", index, event.scope, kind, text
-                    )
-
-                kwargs["on_intent"] = intent
-
-            async def record(receipt):
-                settle = getattr(self.conversations, "settle_part", None)
-                if callable(settle):
-                    settle(f"reply:{event.event_id}", receipt)
-                if receipt.status != "sent":
-                    log.warning(
-                        "Uncertain delivery event=%s part=%s",
-                        event.event_id,
-                        receipt.index,
-                    )
-                    return
-                event_id = f"part:reply:{event.event_id}:{receipt.index}"
-                metadata = {
-                    "origin": "agent",
-                    "event_time": int(time.time() * 1000),
-                    "platform_message_id": receipt.platform_message_id,
-                    "reply_to_id": plan.quote_message_id,
-                    "parent_id": f"reply:{event.event_id}",
-                    "delivery_status": "sent",
-                    "parts": [{"kind": "text", "text": receipt.transcript}],
-                }
-                # Concrete store supports receipt metadata; small test adapters
-                # keep the original narrow repository interface.
-                if callable(getattr(self.conversations, "actual_recent", None)):
-                    self.conversations.add_message(
-                        event_id,
-                        event.scope,
-                        "bot",
-                        "Bot",
-                        "assistant",
-                        receipt.transcript,
-                        metadata=metadata,
-                    )
-                else:
-                    self.conversations.add_message(
-                        event_id,
-                        event.scope,
-                        "bot",
-                        "Bot",
-                        "assistant",
-                        receipt.transcript,
-                    )
-                self._observe_assistant(event, receipt.transcript, event_id)
-
-            kwargs["on_receipt"] = record
-        return await self.reply_dispatcher.dispatch(plan, **kwargs)
 
     @staticmethod
     def _roster(event: MessageEvent | None) -> frozenset[str]:

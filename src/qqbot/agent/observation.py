@@ -11,12 +11,11 @@ import json
 import logging
 from collections import OrderedDict
 from dataclasses import asdict, dataclass
-from typing import Any
 
 from qqbot.actions.replies.models import ReplyDraft
 from qqbot.contracts.models import MessageEvent
+from qqbot.contracts.ports import ObservationRepository
 
-log = logging.getLogger("qqbot.agent.service")
 DEFAULT_BACKLOG = 256
 DEFAULT_WORKERS = 1
 DEFAULT_DEDUPE = 4096
@@ -56,7 +55,8 @@ class ObservationDispatcher:
         backlog: int = DEFAULT_BACKLOG,
         workers: int = DEFAULT_WORKERS,
         dedupe: int = DEFAULT_DEDUPE,
-        store: Any | None = None,
+        store: ObservationRepository | None = None,
+        logger: logging.Logger | None = None,
     ) -> None:
         if backlog < 1 or workers < 1 or dedupe < 1:
             raise ValueError("observation bounds must be positive")
@@ -64,6 +64,7 @@ class ObservationDispatcher:
         self.observers = tuple(observers)
         self.affection_enabled = affection_enabled
         self.backlog, self.worker_count, self.dedupe_limit = backlog, workers, dedupe
+        self.log = logger if logger is not None else logging.getLogger(__name__)
         self.store = store
         self.stats = ObservationStats()
         self._queue: asyncio.Queue | None = None
@@ -124,7 +125,7 @@ class ObservationDispatcher:
             queue.put_nowait((key, observer, event, reply))
         except asyncio.QueueFull:
             self.stats.dropped += 1
-            log.warning("Observation backlog full; dropped %s", key)
+            self.log.warning("Observation backlog full; dropped %s", key)
             return False
         self.stats.enqueued += 1
         return True
@@ -147,7 +148,7 @@ class ObservationDispatcher:
                 raise
             except Exception:
                 self.stats.failed += 1
-                log.exception("Post-reply observation failed for %s", key)
+                self.log.exception("Post-reply observation failed for %s", key)
             finally:
                 self._queue.task_done()
 
@@ -185,7 +186,7 @@ class ObservationDispatcher:
                 except Exception:
                     self.store.failed(row["id"])
                     self.stats.failed += 1
-                    log.warning("Durable observation failed handler=%s", row["handler_id"])
+                    self.log.warning("Durable observation failed handler=%s", row["handler_id"])
         finally:
             if current is not None:
                 self._durable_tasks.discard(current)
@@ -204,7 +205,7 @@ class ObservationDispatcher:
             try:
                 await asyncio.wait_for(self._queue.join(), timeout=timeout)
             except (TimeoutError, asyncio.TimeoutError):
-                log.warning("Observation queue did not drain within %.1fs; dropping %d", timeout, self._queue.qsize())
+                self.log.warning("Observation queue did not drain within %.1fs; dropping %d", timeout, self._queue.qsize())
             except asyncio.CancelledError:
                 for task in workers:
                     task.cancel()

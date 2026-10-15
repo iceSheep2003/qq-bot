@@ -1,4 +1,4 @@
 {
-  "manifest": ".code-quality-gate/tasks/CONVERSATION-MAINTENANCE-008.json",
+  "manifest": ".code-quality-gate/tasks/DELIVERY-BOUNDARY-009-R2.json",
   "config": "quality.config.json"
 }

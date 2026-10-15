@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "id": "DELIVERY-BOUNDARY-009-R2",
+  "title": "Single outbound delivery owner and explicit observation repository",
+  "requirements": [
+    "One delivery component owns part receipts, metadata, actual assistant-message recording and intelligence observation without concrete adapters.",
+    "Service delegates delivery without duplicating receipt handling; scheduled/local recording retains prompt synchronization and group/private isolation.",
+    "Observation persistence uses an explicit port and instance-injected logger; legacy service logs and durable consumer identities remain stable.",
+    "Repeated outbound event recording must not repeat prompt synchronization or intelligence projection."
+  ],
+  "testFiles": [
+    "tests/agent/test_delivery_boundary.py"
+  ],
+  "codeFiles": [
+    "src/qqbot/agent/conversation/delivery.py",
+    "src/qqbot/agent/service.py",
+    "src/qqbot/agent/observation.py",
+    "src/qqbot/contracts/ports.py"
+  ],
+  "testChecks": [
+    "delivery-boundary"
+  ],
+  "protectedFiles": [
+    "tools/quality/checks.py",
+    "tools/quality/junit_report.py",
+    ".importlinter",
+    ".code-quality-gate/REFACTOR_COMPLETION.md",
+    ".code-quality-gate/ci-setup.sh",
+    "tests/agent/test_service.py",
+    "tests/agent/test_observation.py",
+    "tests/agent/test_ledger_runtime.py",
+    ".code-quality-gate/history/DELIVERY-009-R1-inputs.zip",
+    ".code-quality-gate/evidence/DELIVERY-BOUNDARY-009.json",
+    ".code-quality-gate/DELIVERY_TEST_REVIEW.md"
+  ],
+  "maxAttempts": 12
+}

@@ -92,3 +92,14 @@ forbidden_modules =
     qqbot.features
     qqbot.interfaces
     qqbot.bootstrap
+
+[importlinter:contract:delivery]
+name = Outbound ledger boundary has no concrete adapter or service dependency
+type = forbidden
+source_modules = qqbot.agent.conversation.delivery
+forbidden_modules =
+    qqbot.agent.service
+    qqbot.infrastructure
+    qqbot.features
+    qqbot.bootstrap
+    qqbot.interfaces

@@ -1,0 +1,63 @@
+{
+  "version": 1,
+  "id": "DELIVERY-BOUNDARY-009-R2",
+  "attempts": 1,
+  "red": {
+    "time": "2026-10-15T17:48:36.771Z",
+    "snapshot": {
+      "contract": "25c7171f83c3361ad7df051abbf6880c94a87117e98bc5e5780f6fe200c4d2ee",
+      "protected": {
+        ".code-quality-gate/DELIVERY_TEST_REVIEW.md": "dcdb3a47f83e79b163f86a3c75b01e8006ee711e3e195bae8a8ba1412fcc663e",
+        ".code-quality-gate/REFACTOR_COMPLETION.md": "2ee7ed7b3f38a4df2d9fbd143e3f6641d46980035f105fbf50a75d5e0108058c",
+        ".code-quality-gate/ci-setup.sh": "8c6636d8a04487aa9d8c623fce23aaab751bec431c25aa8a402a841532a8a69f",
+        ".code-quality-gate/evidence/DELIVERY-BOUNDARY-009.json": "c084022c2bd43d53e3caa8b1bb6e8ddf59371d8becf27e5cfb5de9627f6f8923",
+        ".code-quality-gate/history/DELIVERY-009-R1-inputs.zip": "eab721e152b959886c4a0299fff1a8e0ee9c895c85b5338e1a74d5046d7ad103",
+        ".code-quality-gate/tasks/DELIVERY-BOUNDARY-009-R2.json": "3e086d68329897a52b27d4ce5a3b797893a2d5c4975bf4be080051b3e9743cc0",
+        ".importlinter": "aa54cf0857b699cb32d94ab09bad29a08bf675397f3179ac85a80ecf390128a6",
+        "quality.config.json": "1ca74c6de642c129dddc5a0e2d6b0afbc1e30eec87f6f6faab1115db7d0341b1",
+        "tests/agent/test_delivery_boundary.py": "7ebafba4f9458226326e5a2d3968e60d4568ee9c5da320b4185ebe286b5a4bb6",
+        "tests/agent/test_ledger_runtime.py": "691f3a7edf9746fe6738b0786131810a59600f0fe37443173d0c1efa96e66cce",
+        "tests/agent/test_observation.py": "9d4df67ef2d643a0ef9cfdb510b60cd816e4512df14947628858f8efbb4bb6e2",
+        "tests/agent/test_service.py": "1368c3244ab4718c81b349ffa30136b0d576693e0d758222f8435e76f0359e77",
+        "tools/quality/checks.py": "84e3423b7f37ec4eb795597f844ae7f2cd89b6176bde7a81e64850d8041f3443",
+        "tools/quality/junit_report.py": "082cff7fb89c4f5cac8d71a198185f857b5d2501f7a59f74905cf4bf22b48c8b"
+      },
+      "code": {
+        "src/qqbot/agent/conversation/delivery.py": "d26761be4ad1be3233f4a5ee788f17a6d65af2185e0f96792f58502503f7cb01",
+        "src/qqbot/agent/observation.py": "6a45918b11b2b99225fb5ab13d5e8215efe529921b3c51e816d49fa5603b9512",
+        "src/qqbot/agent/service.py": "3339730d1ec255a3ae8768ae91159550c6f350fb7980ff0f6efe676218486140",
+        "src/qqbot/contracts/ports.py": "8b75543ba31d1a3efe8bbba04ec11910f771ceaa00de2c633414eb7cadcf7fd1"
+      }
+    },
+    "report": ".quality/code-quality-gate/DELIVERY-BOUNDARY-009-R2/red-a879b764-aca2-4dc8-b4c3-89e573ce8d87.md"
+  },
+  "green": {
+    "time": "2026-10-15T17:50:00.773Z",
+    "snapshot": {
+      "contract": "25c7171f83c3361ad7df051abbf6880c94a87117e98bc5e5780f6fe200c4d2ee",
+      "protected": {
+        ".code-quality-gate/DELIVERY_TEST_REVIEW.md": "dcdb3a47f83e79b163f86a3c75b01e8006ee711e3e195bae8a8ba1412fcc663e",
+        ".code-quality-gate/REFACTOR_COMPLETION.md": "2ee7ed7b3f38a4df2d9fbd143e3f6641d46980035f105fbf50a75d5e0108058c",
+        ".code-quality-gate/ci-setup.sh": "8c6636d8a04487aa9d8c623fce23aaab751bec431c25aa8a402a841532a8a69f",
+        ".code-quality-gate/evidence/DELIVERY-BOUNDARY-009.json": "c084022c2bd43d53e3caa8b1bb6e8ddf59371d8becf27e5cfb5de9627f6f8923",
+        ".code-quality-gate/history/DELIVERY-009-R1-inputs.zip": "eab721e152b959886c4a0299fff1a8e0ee9c895c85b5338e1a74d5046d7ad103",
+        ".code-quality-gate/tasks/DELIVERY-BOUNDARY-009-R2.json": "3e086d68329897a52b27d4ce5a3b797893a2d5c4975bf4be080051b3e9743cc0",
+        ".importlinter": "aa54cf0857b699cb32d94ab09bad29a08bf675397f3179ac85a80ecf390128a6",
+        "quality.config.json": "1ca74c6de642c129dddc5a0e2d6b0afbc1e30eec87f6f6faab1115db7d0341b1",
+        "tests/agent/test_delivery_boundary.py": "7ebafba4f9458226326e5a2d3968e60d4568ee9c5da320b4185ebe286b5a4bb6",
+        "tests/agent/test_ledger_runtime.py": "691f3a7edf9746fe6738b0786131810a59600f0fe37443173d0c1efa96e66cce",
+        "tests/agent/test_observation.py": "9d4df67ef2d643a0ef9cfdb510b60cd816e4512df14947628858f8efbb4bb6e2",
+        "tests/agent/test_service.py": "1368c3244ab4718c81b349ffa30136b0d576693e0d758222f8435e76f0359e77",
+        "tools/quality/checks.py": "84e3423b7f37ec4eb795597f844ae7f2cd89b6176bde7a81e64850d8041f3443",
+        "tools/quality/junit_report.py": "082cff7fb89c4f5cac8d71a198185f857b5d2501f7a59f74905cf4bf22b48c8b"
+      },
+      "code": {
+        "src/qqbot/agent/conversation/delivery.py": "170f1e6061cff41311c1f7233b591f2d711598cefd001c6e3dcc235be91c4a02",
+        "src/qqbot/agent/observation.py": "6a45918b11b2b99225fb5ab13d5e8215efe529921b3c51e816d49fa5603b9512",
+        "src/qqbot/agent/service.py": "5b3272a15f8e629a9ecb7a58475be3cba2a2ee01cbebc668647517e0cb9586f7",
+        "src/qqbot/contracts/ports.py": "8b75543ba31d1a3efe8bbba04ec11910f771ceaa00de2c633414eb7cadcf7fd1"
+      }
+    },
+    "report": ".quality/code-quality-gate/DELIVERY-BOUNDARY-009-R2/green-65d33f2c-2e9b-4485-adf2-f0277a561161.md"
+  }
+}

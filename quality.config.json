@@ -256,6 +256,37 @@
         ]
       },
       {
+        "id": "delivery-boundary",
+        "title": "Single outbound delivery owner and explicit observation repository",
+        "command": [
+          ".venv/bin/python",
+          "-m",
+          "pytest",
+          "tests/agent/test_delivery_boundary.py",
+          "-q",
+          "--junitxml=.quality/delivery-boundary.xml"
+        ],
+        "report": ".quality/delivery-boundary.xml",
+        "format": "junit",
+        "metrics": [
+          {
+            "name": "Acceptance cases",
+            "path": "tests",
+            "min": 9
+          },
+          {
+            "name": "Success rate",
+            "path": "successRate",
+            "equals": 100
+          },
+          {
+            "name": "Skipped",
+            "path": "skipped",
+            "equals": 0
+          }
+        ]
+      },
+      {
         "id": "regression",
         "title": "Complete legacy and new Python regression suite",
         "command": [
@@ -404,6 +435,40 @@
             "name": "Branches",
             "path": "branches",
             "min": 16
+          }
+        ]
+      },
+      {
+        "id": "delivery-boundary-coverage",
+        "title": "Single outbound delivery owner and explicit observation repository measured coverage",
+        "command": [
+          ".venv/bin/python",
+          "-m",
+          "tools.quality.checks",
+          "delivery-boundary-coverage"
+        ],
+        "report": ".quality/delivery-boundary-coverage-metrics.json",
+        "format": "json",
+        "metrics": [
+          {
+            "name": "Line coverage",
+            "path": "lineCoverage",
+            "min": 90
+          },
+          {
+            "name": "Branch coverage",
+            "path": "branchCoverage",
+            "min": 80
+          },
+          {
+            "name": "Statements",
+            "path": "statements",
+            "min": 20
+          },
+          {
+            "name": "Branches",
+            "path": "branches",
+            "min": 4
           }
         ]
       }

@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "id": "DELIVERY-BOUNDARY-009",
+  "attempts": 0,
+  "red": {
+    "time": "2026-10-15T17:47:08.532Z",
+    "snapshot": {
+      "contract": "94de634e29397285f6480305f112cdc972e3a0aa945e8b4bb82c7057ff6d3dba",
+      "protected": {
+        ".code-quality-gate/REFACTOR_COMPLETION.md": "2ee7ed7b3f38a4df2d9fbd143e3f6641d46980035f105fbf50a75d5e0108058c",
+        ".code-quality-gate/ci-setup.sh": "8c6636d8a04487aa9d8c623fce23aaab751bec431c25aa8a402a841532a8a69f",
+        ".code-quality-gate/tasks/DELIVERY-BOUNDARY-009.json": "5e9769db00ebc130dfc7cdcc8118897583a338da2eea0589df54e859f6f4a1cf",
+        ".importlinter": "aa54cf0857b699cb32d94ab09bad29a08bf675397f3179ac85a80ecf390128a6",
+        "quality.config.json": "1ca74c6de642c129dddc5a0e2d6b0afbc1e30eec87f6f6faab1115db7d0341b1",
+        "tests/agent/test_delivery_boundary.py": "2fa0dc43283674129e7278f90daac200928cef2e0959626e9b0c214f52c6d638",
+        "tests/agent/test_ledger_runtime.py": "691f3a7edf9746fe6738b0786131810a59600f0fe37443173d0c1efa96e66cce",
+        "tests/agent/test_observation.py": "9d4df67ef2d643a0ef9cfdb510b60cd816e4512df14947628858f8efbb4bb6e2",
+        "tests/agent/test_service.py": "1368c3244ab4718c81b349ffa30136b0d576693e0d758222f8435e76f0359e77",
+        "tools/quality/checks.py": "84e3423b7f37ec4eb795597f844ae7f2cd89b6176bde7a81e64850d8041f3443",
+        "tools/quality/junit_report.py": "082cff7fb89c4f5cac8d71a198185f857b5d2501f7a59f74905cf4bf22b48c8b"
+      },
+      "code": {
+        "src/qqbot/agent/conversation/delivery.py": "b1a80a450f0fb618369a503d0ba56982eefbe631e737a312da17de7728bf938e",
+        "src/qqbot/agent/observation.py": "48db912c0acd8e8e46353fad3723fc7a5c8c663771426815eaa7ab2c0a56cd5e",
+        "src/qqbot/agent/service.py": "fdbc913bc561a9f0097e4c8f263810eaa3a848cf4a3745f2c42013ccbbbad0d2",
+        "src/qqbot/contracts/ports.py": "313b636c6a0c9356f3444e45b00a545e73438e10a9a1e09aa2a28e0f1d0b4b07"
+      }
+    },
+    "report": ".quality/code-quality-gate/DELIVERY-BOUNDARY-009/red-08921249-664b-4f86-b795-6697e7eadf60.md"
+  }
+}
