@@ -1489,5 +1489,12 @@
       "test_selected_read_merges_group_and_person_without_reading_everything"
     ],
     "assertions": 10
+  },
+  "tests/agent/test_wiki_writer.py": {
+    "tests": [
+      "test_writer_renders_stable_frontmatter_and_latest_first_entries",
+      "test_writer_writes_only_inside_root_and_replaces_atomically"
+    ],
+    "assertions": 11
   }
 }

@@ -12,6 +12,7 @@ from .page import (
 from .links import LinkCandidate, markdown_link, reciprocal
 from .update_policy import WikiUpdatePolicy, published_version
 from .reader import WikiReader
+from .writer import WikiWriter
 
 __all__ = [
     "WikiContextCache",
@@ -27,4 +28,5 @@ __all__ = [
     "WikiUpdatePolicy",
     "published_version",
     "WikiReader",
+    "WikiWriter",
 ]
