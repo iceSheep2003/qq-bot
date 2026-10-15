@@ -12,6 +12,10 @@
 *.db
 *.log
 /outputs/
+# Offline experiment reports and the HTML rendered from them. Both are derived
+# from data/private/ and both are one command to rebuild; the console shows an
+# empty state with that command when the report is absent.
+/experiments/
 /config/schedules.json
 /config/proactive_groups.json
 /config/slang_review.json
@@ -21,6 +25,9 @@
 /qunbot/extensions/exam_poster/campuses/
 .DS_Store
 .pytest_cache/
+# Scratch dir pytest is pointed at here; the sandbox forbids its default
+# location, so runs use --basetemp=.pytest_tmp.
+.pytest_tmp/
 *.egg-info/
 /build/
 /dist/

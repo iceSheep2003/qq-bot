@@ -47,7 +47,7 @@ def evaluate(corpus: Path, graph: Path, flat: Path, split: str, limit: int = 0, 
             if options:
                 covered += 1
                 strategy_counts[options[0].strategy] += 1
-            expected_family, _ = situation_family(query, [], "")
+            expected_family, _ = situation_family(query, [])
             families = {
                 example.get("situation_family")
                 for option in options

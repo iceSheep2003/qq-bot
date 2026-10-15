@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 import re
 from array import array
 from collections import defaultdict
@@ -17,6 +18,88 @@ _UNSAFE = (
     re.compile(r"不断(?:地)?提问|每次都提问"),
 )
 
+#: How hard the ranking is pulled toward the graph's own strategy frequency, as
+#: ``log(prior) + weight * normalised_score``.
+#:
+#: Measured, not guessed. Over 2007 cases under 5-fold session cross-validation
+#: the *un-calibrated* scorer reaches 26.4% top-1 while the constant predictor
+#: ("always answer the majority strategy") reaches 34.7%; at weight 1.5 the same
+#: scorer reaches 35.8%, which beats the constant predictor by 1.1 points at
+#: p=0.002 with all five folds agreeing on the direction.
+#:
+#: But that is the *micro* story, and micro accuracy is dominated by the 35%
+#: majority class. On macro recall the same calibration *hurts*: 8.2% against
+#: 14.9% for the raw scorer, because pulling the ranking toward one strategy
+#: zeroes the recall of every other class. The hint this read model feeds the
+#: prompt is supposed to suggest a *situationally appropriate* stance, so a
+#: collapse to "supplement" adds no information the model did not already have.
+#:
+#: The default is therefore ``None`` — calibration off. It stays available for
+#: callers whose objective really is "name the single most likely move", and the
+#: weight is still read from ``BOT_BEHAVIOR_PRIOR_WEIGHT``.
+DEFAULT_PRIOR_WEIGHT: float | None = None
+
+#: Which half of each case the query is matched against. ``"interaction"`` keeps
+#: only the interactional half (observable cues plus what the bot did); ``"topic"``
+#: keeps the topical half (what the room was discussing); ``"full"`` keeps both.
+#:
+#: ``"interaction"`` is the default because it is the only setting that beats the
+#: shipped scorer on *both* micro and macro accuracy (29.3% / 17.0% against
+#: 26.4% / 14.9%). The topical half is not just unhelpful, it is noise: matching
+#: "what was being discussed" against a query of raw room messages pulls the
+#: ranking toward whichever case shares the most common words.
+DEFAULT_FIELDS = "interaction"
+#: Weight matched terms by ``log(N / df)`` instead of counting them. Common
+#: bigrams swamp rare, discriminative ones under a plain count; IDF is the
+#: standard correction and lifts both micro (27.9% vs 26.4%) and macro (15.7% vs
+#: 14.9%).
+DEFAULT_USE_IDF = True
+#: The three hand-written boosts, all measured as neutral-to-harmful on the
+#: held-out set and therefore off by default. ``hint_union`` folds the strategy
+#: hint table's terms into the overlap; ``intent_bonus`` and ``family_bonus`` add
+#: fixed constants from the query's keyword tables. Turning all three off is
+#: worth ~1.7 points of top-1 (28.1% vs 26.4%).
+DEFAULT_HINT_UNION = False
+DEFAULT_INTENT_BONUS = False
+DEFAULT_FAMILY_BONUS = False
+
+#: Fine strategy key -> coarse behavior class.
+#:
+#: The compiled graph labels 13 strategies, but several of them are not
+#: separable in practice: ``supplement``/``acknowledge``/``agree`` all mean
+#: "just add something", ``clarify``/``answer_directly`` both mean "address the
+#: question", and ``empathize``/``encourage`` both mean "support the mood".
+#: Collapsing them is *measured*, not stylistic — under 5-fold session
+#: cross-validation it lifts held-out top-1 from 29.3% to 40.3% (+11.0pt),
+#: balanced accuracy from 17.0% to 23.1% and any@3 from 63.7% to 79.5%.
+#:
+#: The gain is *larger* than the oracle ceiling moves (+8.3pt), which is the
+#: tell that the retriever's confusions were concentrated exactly inside these
+#: groups: the classes being merged are the classes being confused.
+#:
+#: ``supplement`` is the worst offender — 34.7% of the corpus and the single
+#: most frequent strategy in six of the nine situation families, which is what a
+#: catch-all label looks like.
+#:
+#: The fine key is still read per row (it drives the hint table and the dialogue
+#: act); only the grouping and the reported class are coarse. ``None`` restores
+#: the raw 13-class behaviour.
+DEFAULT_TAXONOMY: dict[str, str] = {
+    "supplement": "附和",
+    "acknowledge": "附和",
+    "agree": "附和",
+    "clarify": "答疑",
+    "answer_directly": "答疑",
+    "empathize": "情绪支持",
+    "encourage": "情绪支持",
+    "banter": "玩梗",
+    "tease_gently": "轻调侃",
+    "topic_shift": "转话题",
+    "deescalate": "降温",
+    "abstain": "不参与",
+    "celebrate": "庆祝",
+}
+
 
 class BehaviorGraphRetriever:
     """Read a compiled graph and return only complete evidence paths.
@@ -26,8 +109,36 @@ class BehaviorGraphRetriever:
     graph branches are never combined into one option.
     """
 
-    def __init__(self, snapshot: Path | str, calibration: Path | str | None = None):
+    def __init__(
+        self,
+        snapshot: Path | str,
+        calibration: Path | str | None = None,
+        prior_weight: float | None = DEFAULT_PRIOR_WEIGHT,
+        *,
+        fields: str = DEFAULT_FIELDS,
+        use_idf: bool = DEFAULT_USE_IDF,
+        hint_union: bool = DEFAULT_HINT_UNION,
+        intent_bonus: bool = DEFAULT_INTENT_BONUS,
+        family_bonus: bool = DEFAULT_FAMILY_BONUS,
+        taxonomy: dict[str, str] | None = DEFAULT_TAXONOMY,
+    ):
         self.snapshot = Path(snapshot)
+        # ``None`` switches the calibration off and leaves the raw overlap
+        # ranking; ``0.0`` is not "off" but the far end of the scale — pure
+        # prior, i.e. always answer the majority strategy. Those are different
+        # behaviours, so the sentinel has to be distinct from zero.
+        self.prior_weight = (
+            None if prior_weight is None else max(0.0, float(prior_weight))
+        )
+        if fields not in ("interaction", "topic", "full"):
+            raise ValueError(f"unknown field set: {fields!r}")
+        self.fields = fields
+        self.use_idf = bool(use_idf)
+        self.hint_union = bool(hint_union)
+        self.intent_bonus = bool(intent_bonus)
+        self.family_bonus = bool(family_bonus)
+        # ``None`` keeps the raw 13-class labels; a table collapses them.
+        self.taxonomy = dict(taxonomy) if taxonomy else None
         manifest = self.snapshot / "manifest.json"
         nodes_path = self.snapshot / "nodes.jsonl"
         edges_path = self.snapshot / "edges.jsonl"
@@ -50,28 +161,36 @@ class BehaviorGraphRetriever:
         self.case_paths = self._build_paths()
         self._build_index()
 
-    @staticmethod
-    def _searchable(path) -> str:
+    def _searchable(self, path) -> str:
         """The static text a case path is matched against.
 
         Every field here comes from the compiled snapshot, so the result is
         immutable for the lifetime of the process — which is what makes
         pre-tokenising it in :meth:`_build_index` safe.
+
+        The two halves are split deliberately. The *topical* half says what the
+        room was discussing; the *interactional* half says what was observed and
+        what the bot did. The label is interactional, so which half the index is
+        built from is a first-class choice, not a detail — see ``DEFAULT_FIELDS``.
         """
         case, strategy, action, expression, _media, situation, _evidence = path
-        return " ".join(
-            [
+        parts: list[str] = []
+        if self.fields in ("full", "topic"):
+            parts += [
                 case.get("situation_text", ""),
                 situation.get("name", ""),
                 situation.get("family_key", ""),
-                *case.get("observable_cues", []),
                 *case.get("topic_terms", []),
+            ]
+        if self.fields in ("full", "interaction"):
+            parts += [
+                *case.get("observable_cues", []),
                 strategy.get("key", ""),
                 action.get("key", ""),
                 expression.get("name", ""),
                 *expression.get("raw_variants", [])[:5],
             ]
-        )
+        return " ".join(parts)
 
     def _build_index(self) -> None:
         """Tokenise every case path once, at load, into an inverted index.
@@ -90,6 +209,13 @@ class BehaviorGraphRetriever:
             for term in _terms(self._searchable(path)):
                 postings[term].append(index)
         self._postings = {term: array("i", rows) for term, rows in postings.items()}
+        # ``log(N / df)`` per term, so the scorer can sum weights instead of
+        # counting overlaps. A term carried by most cases says almost nothing
+        # about which case fits; a rare one says a lot.
+        total_paths = len(self.case_paths) or 1
+        self._idf = {
+            term: math.log(total_paths / len(rows)) for term, rows in postings.items()
+        }
         # Strategy hints are the only terms consulted *per path* ("does this
         # case carry this hint term?"), so those get a set for O(1) membership.
         # The set is bounded by the 13 hint rows, not by the whole vocabulary.
@@ -99,6 +225,22 @@ class BehaviorGraphRetriever:
             for term in hint_terms
             if term in self._postings
         }
+        # Strategy frequency across the graph, for the ranking's prior term.
+        # Rebuilt here rather than in ``__init__`` because callers that hold out
+        # a slice of the graph reassign ``case_paths`` and rebuild the index —
+        # the prior has to follow the paths it is derived from, or it would leak
+        # the held-out distribution into the ranking.
+        counts: defaultdict[str, int] = defaultdict(int)
+        for _case, strategy, _action, _expression, _media, _situation, _evidence in self.case_paths:
+            counts[self._class_of(strategy.get("key", ""))] += 1
+        total = sum(counts.values()) or 1
+        self._prior = {key: count / total for key, count in counts.items()}
+
+    def _class_of(self, strategy_key: str) -> str:
+        """Map a fine strategy key to the coarse class the ranking groups by."""
+        if not self.taxonomy:
+            return strategy_key
+        return self.taxonomy.get(strategy_key, strategy_key)
 
     def _build_paths(self):
         paths = []
@@ -134,15 +276,22 @@ class BehaviorGraphRetriever:
             return []
         limit = max(1, min(3, int(limit)))
         query_terms = _terms(query)
-        intent_bonus = self._intent_bonus(query_terms)
-        family_bonus = self.calibration.get(self._query_family(query), {})
-        # |query_terms & case_terms| for every path, in one pass over postings.
-        # This is the same set intersection the previous implementation did per
-        # path; the index just answers it without re-tokenising the case.
-        matched: defaultdict[int, int] = defaultdict(int)
+        # The three hand-written boosts are computed only when enabled: each
+        # consults a keyword table, and all three are off by default because the
+        # held-out evaluation measured them as neutral-to-harmful.
+        intent_bonus = self._intent_bonus(query_terms) if self.intent_bonus else {}
+        family_bonus = (
+            self.calibration.get(self._query_family(query), {})
+            if self.family_bonus
+            else {}
+        )
+        # The matched terms for every path, in one pass over postings. This is
+        # the same set intersection the previous implementation did per path;
+        # the index just answers it without re-tokenising the case.
+        matched: defaultdict[int, list[str]] = defaultdict(list)
         for term in query_terms:
             for index in self._postings.get(term, ()):
-                matched[index] += 1
+                matched[index].append(term)
         grouped: defaultdict[str, list[tuple[float, dict]]] = defaultdict(list)
         for index, (
             case,
@@ -154,20 +303,26 @@ class BehaviorGraphRetriever:
             evidence_id,
         ) in enumerate(self.case_paths):
             strategy_key = strategy.get("key", "")
-            overlap = matched.get(index, 0)
+            terms = list(matched.get(index, ()))
             # A strategy hint contributes query terms the case text itself does
             # not carry, so only the ones this path is missing are added.
-            for term in self._hints.get(strategy_key, ()):
-                if term in query_terms and index not in self._hint_postings.get(term, ()):
-                    overlap += 1
-            if not overlap:
+            if self.hint_union:
+                for term in self._hints.get(strategy_key, ()):
+                    if term in query_terms and index not in self._hint_postings.get(term, ()):
+                        terms.append(term)
+            if not terms:
                 continue
-            score = (
-                float(overlap)
-                + intent_bonus.get(strategy_key, 0.0)
-                + float(family_bonus.get(strategy_key, 0.0))
-            )
-            grouped[strategy["id"]].append(
+            if self.use_idf:
+                score = sum(self._idf.get(term, 0.0) for term in terms)
+            else:
+                score = float(len(terms))
+            score += intent_bonus.get(strategy_key, 0.0)
+            score += float(family_bonus.get(strategy_key, 0.0))
+            # Group by the *coarse class*, not the strategy node id: the whole
+            # point of the taxonomy is that several fine strategies collapse
+            # into one choice, and grouping is what decides which choices are
+            # offered at all.
+            grouped[self._class_of(strategy_key)].append(
                 (
                     score,
                     {
@@ -182,7 +337,7 @@ class BehaviorGraphRetriever:
                 )
             )
         ranked = []
-        for strategy_id, rows in grouped.items():
+        for class_key, rows in grouped.items():
             rows.sort(key=lambda item: (-item[0], item[1]["case"].get("case_id", "")))
             best = rows[0][1]
             strategy = best["strategy"]
@@ -198,22 +353,55 @@ class BehaviorGraphRetriever:
                         "evidence_id": item["evidence_id"],
                     }
                 )
+            # Support is summed across every fine strategy folded into this
+            # class: the class stands for all of them, so it should report their
+            # combined support rather than whichever node happened to rank first.
+            support = 0
+            seen_nodes: set[str] = set()
+            for _, item in rows:
+                node_id = item["strategy"]["id"]
+                if node_id in seen_nodes:
+                    continue
+                seen_nodes.add(node_id)
+                support += int(item["strategy"].get("support_case_count", 0) or 0)
             ranked.append(
                 (
                     best_score := sum(item[0] for item in rows[:3]) / min(3, len(rows)),
                     BehaviorOption(
-                        strategy=strategy.get("key", ""),
+                        strategy=class_key,
                         dialogue_act=best["action"].get("key", "wait"),
                         expression_pattern=expression.get("name", ""),
                         avoid=tuple(expression.get("avoid", [])[:6]),
                         media_intent=best["media"].get("key", "none"),
-                        support_case_count=int(strategy.get("support_case_count", len(rows))),
+                        support_case_count=support or len(rows),
                         examples=tuple(examples),
                         score=best_score,
                         snapshot_version=str(self.manifest.get("pipeline_version", "unknown")),
                     ),
                 )
             )
+        if self.prior_weight is not None:
+            # ``log(prior) + weight * normalised_retrieval``. Normalising against
+            # this query's own best score keeps the term scale-free, so the
+            # weight means the same thing regardless of how long the query was.
+            # ``None`` is "off"; ``0.0`` is pure prior (constant predictor), which
+            # is a real, distinct behaviour and must not be collapsed into "off".
+            #
+            # Off by default. Calibration is a *micro*-accuracy tool: it lifts
+            # top-1 by pulling the ranking toward the 35% majority class, and in
+            # doing so collapses the hint to a constant. Since the prompt uses the
+            # hint to suggest a stance, that trades away exactly the diversity it
+            # is there for — macro recall falls from 14.9% to 8.2%. Callers that
+            # really want "name the single most likely move" can turn it back on.
+            ceiling = max((item[0] for item in ranked), default=0.0) or 1.0
+            ranked = [
+                (
+                    self.prior_weight * (score / ceiling)
+                    + math.log(self._prior.get(option.strategy, 1e-6)),
+                    option,
+                )
+                for score, option in ranked
+            ]
         ranked.sort(key=lambda item: (-item[0], -item[1].support_case_count, item[1].strategy))
         return [item[1] for item in ranked[:limit]]
 

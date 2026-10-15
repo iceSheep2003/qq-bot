@@ -145,7 +145,7 @@ def evaluate(source: Path, corpus: Path, output: Path, min_support: int) -> dict
                 continue
             seen_situations.add(situation)
             family_key, family_label = situation_family(
-                row["situation"], row.get("observable_cues", []), strategy
+                row["situation"], row.get("observable_cues", [])
             )
             representatives.append(
                 {

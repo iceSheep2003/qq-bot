@@ -5,7 +5,7 @@ No OneBot, SQLite or HTTP client types may appear in this module.
 
 from __future__ import annotations
 
-from typing import Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
 from .domain import (
     ChatMessage,
@@ -17,6 +17,9 @@ from .domain import (
     SkillRef,
     TrustLabel,
 )
+
+if TYPE_CHECKING:  # the decision types live with the experience package
+    from .experience.decision import BehaviorDecision
 
 
 class ReplyResult(Protocol):
@@ -389,3 +392,21 @@ class BehaviorExperiencePort(Protocol):
     """
 
     def context_for(self, query: str) -> str: ...
+
+
+class BehaviorDecisionPort(Protocol):
+    """Who decides how the bot takes part in this turn.
+
+    Two routes sit behind this port — the model alone (``off``) and the behavior
+    graph (``hint`` / ``graph``) — and deployment picks between them. Returning
+    ``None`` means "this route contributes nothing to the prompt", which is
+    exactly how the model-alone route behaves.
+
+    The port exists so the reply pipeline never learns which route it is on: it
+    asks for a decision and injects whatever comes back, under the authority the
+    decision itself carries.
+    """
+
+    mode: str
+
+    def decide(self, query: str) -> "BehaviorDecision | None": ...

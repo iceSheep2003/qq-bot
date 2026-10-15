@@ -6,7 +6,8 @@ let original = {};
 
 const glyphs = {
   connection: "⌁", conversation: "◌", personality: "✦", proactive: "◴",
-  moderation: "◇", media: "▣", system: "⚙", memory: "◎", schedules: "◷", guide: "?",
+  moderation: "◇", media: "▣", system: "⚙", memory: "◎", schedules: "◷",
+  experiments: "⌬", guide: "?",
 };
 
 let memoryView = { tab: "overview", scope: "", after: "", previous: [], query: "", status: "" };
@@ -307,7 +308,7 @@ async function renderMemory(tab = memoryView.tab) {
       : tab === "persona_review" ? renderPersonaQueue(payload)
       : tab === "extractions" ? renderExtractions(payload)
       : overview.source === "ontology" && !memoryView.scope ? emptyState("选择一个群查看图谱", "右上角选择会话范围；不同群的图谱分别展示。")
-      : `<div class="graph-shell"><div class="graph-note"><b>关系图谱</b><span>滚轮缩放 · 拖动画布 · 拖拽节点 · 点击查看详情</span></div><canvas id="memory-graph" aria-label="记忆关系图谱"></canvas><div class="graph-legend"><span class="legend-topic">Topic</span><span class="legend-memory">记忆</span><span class="legend-person">群友</span><span class="legend-bot">Bot</span></div></div>`;
+      : `<div class="graph-shell"><div class="graph-note"><span class="graph-note-avatar"><img src="/kinna-avatar.png" alt=""></span><div class="graph-note-text"><b>关系图谱</b><span>滚轮缩放 · 拖动画布 · 拖拽节点 · 点击查看详情</span></div></div><canvas id="memory-graph" aria-label="记忆关系图谱"></canvas><div class="graph-legend"><span class="legend-topic">Topic</span><span class="legend-memory">记忆</span><span class="legend-person">群友</span><span class="legend-bot">Bot</span></div></div>`;
     if (epoch !== memoryRenderEpoch) return;
     const paged = overview.source === "ontology" && ["items", "topics", "people", "slang"].includes(tab);
     const pagination = paged ? `<div class="review-actions"><button id="memory-previous" ${memoryView.previous.length ? "" : "disabled"}>上一页</button><span>本页 ${payload.length} 条</span><button id="memory-next" ${payload.length >= 200 ? "" : "disabled"}>下一页</button></div>` : "";
@@ -635,9 +636,307 @@ async function renderSchedules(tab = scheduleView.tab) {
   } catch (error) { $("#content").innerHTML = `<section class="schedule-workspace">${emptyState("任务中心加载失败", error.message || "请稍后重试")}</section>`; }
 }
 
+/* Experiment lab --------------------------------------------------------- */
+/* Everything here renders a projection the server already computed
+   (qunbot/extensions/webui/experiments.py). The browser does no reading of its
+   own: the same conclusions drive the standalone HTML page, and deriving them
+   in two places is how a dashboard starts lying. */
+
+let experimentView = { tab: "holdout", data: null };
+
+function percent(value, digits = 1) {
+  return value === null || value === undefined ? "—" : `${(value * 100).toFixed(digits)}%`;
+}
+
+function signed(value, digits = 1) {
+  if (value === null || value === undefined) return "—";
+  const text = (value * 100).toFixed(digits);
+  return value > 0 ? `+${text}` : text;
+}
+
+function experimentBar(value, maximum, level) {
+  const width = maximum > 0 ? Math.max(0, Math.min(1, value / maximum)) * 100 : 0;
+  return `<div class="exp-bar ${escapeHtml(level)}"><i style="width:${width.toFixed(1)}%"></i></div>`;
+}
+
+function renderExperimentHeadline(view) {
+  const head = view.headline || {};
+  const oracle = head.oracle_value;
+  const cards = [
+    ["图谱案例", view.graph_cases ?? "—", "编译后的行为图谱规模"],
+    ["留出案例", head.held_out_cases ?? "—", `${head.held_out_sessions ?? 0} 个整会话未参与检索`],
+    [head.reference_label || "多数类基线", percent(head.reference_value), "任何变体都要先超过它"],
+    ["最优变体", percent(head.best_value), head.best_name || ""],
+  ];
+  const paired = head.best_paired || {};
+  const overReference = (head.best_value || 0) - (head.reference_value || 0);
+  let verdict;
+  if (head.beats_reference && head.best_significant) {
+    verdict = `<span class="exp-verdict good">显著超过常数预测器 ${signed(overReference)}（p=${paired.p_value.toFixed(3)}）</span>`;
+  } else if (head.beats_reference) {
+    verdict = `<span class="exp-verdict warn">高于常数预测器 ${signed(overReference)}，但配对检验 p=${paired.p_value.toFixed(3)}，未达显著</span>`;
+  } else {
+    verdict = `<span class="exp-verdict bad">仍低于常数预测器，差 ${signed(overReference)}</span>`;
+  }
+  const tax = head.taxonomy || null;
+  const taxonomyChip = tax
+    ? `<span class="exp-oracle">标签体系 ${tax.coarse_classes} 类（由 ${tax.fine_classes} 个细类合并，与线上代码一致）</span>`
+    : `<span class="exp-oracle">标签体系 原始细类</span>`;
+  return `<div class="metric-grid experiment-metrics">
+    ${cards.map(([label, value, note]) => `<article class="metric-card"><span>${escapeHtml(label)}</span><strong>${escapeHtml(String(value))}</strong><small>${escapeHtml(note)}</small></article>`).join("")}
+  </div>
+  <div class="experiment-verdict">
+    ${verdict}
+    ${oracle === null || oracle === undefined ? "" : `<span class="exp-oracle">情境完美时的上限 ${percent(oracle)}（${head.oracle_families ?? 0} 个情境族）</span>`}
+    ${taxonomyChip}
+  </div>`;
+}
+
+function renderExperimentFindings(view) {
+  const findings = view.findings || [];
+  if (!findings.length) return "";
+  return `<section class="exp-findings">
+    <div class="panel-title"><h3>结论与下一步</h3><span class="muted">由本次实验数据推出，重新跑实验后自动更新</span></div>
+    ${findings.map((item) => `<article class="exp-finding ${escapeHtml(item.level)}">
+      <div class="exp-finding-head"><span class="exp-level">${({good: "利好", warn: "注意", bad: "问题", info: "观察"})[item.level] || "观察"}</span><h4>${escapeHtml(item.title)}</h4></div>
+      <p>${escapeHtml(item.detail)}</p>
+      <div class="exp-action"><b>下一步</b><span>${escapeHtml(item.action)}</span></div>
+    </article>`).join("")}
+  </section>`;
+}
+
+function pairedCell(paired) {
+  if (!paired) return "—";
+  const color = paired.significant ? "#167057" : (paired.fixed > paired.broke ? "#8A6519" : "#7b8b9c");
+  return `<span class="mono" style="color:${color}">${paired.fixed}↑ / ${paired.broke}↓ p=${paired.p_value.toFixed(3)}</span>`;
+}
+
+function renderExperimentVariants(protocol) {
+  const metric = protocol.metric || {};
+  const reference = protocol.reference || {};
+  const header = `<tr>
+    <th>评分变体</th>
+    ${metric.show_coverage ? `<th class="num">覆盖@3</th>` : ""}
+    ${metric.secondary_label ? `<th class="num">${escapeHtml(metric.secondary_label)}</th>` : ""}
+    <th class="num">${escapeHtml(metric.primary_label)}</th>
+    <th class="num">对比现状</th>
+    <th class="num">配对检验 vs 纯先验</th>
+    <th class="graph">分布</th>
+  </tr>`;
+  const groups = (protocol.groups || []).map((group) => {
+    const rows = group.rows.map((row) => {
+      const marker = row.is_baseline ? "基准" : row.level === "better" ? "↑" : row.level === "worse" ? "↓" : "=";
+      return `<tr class="${row.is_baseline ? "is-baseline" : ""}">
+        <td class="name">${escapeHtml(row.name)}</td>
+        ${metric.show_coverage ? `<td class="num">${percent(row.coverage)}</td>` : ""}
+        ${metric.secondary_label ? `<td class="num">${percent(row.secondary)}</td>` : ""}
+        <td class="num strong">${percent(row.primary)}</td>
+        <td class="num delta ${escapeHtml(row.level)}">${marker} <span class="mono">${row.is_baseline ? "—" : signed(row.delta)}</span></td>
+        <td class="num">${pairedCell(row.paired)}</td>
+        <td class="graph">${experimentBar(row.primary, protocol.maximum, row.level)}</td>
+      </tr>`;
+    }).join("");
+    return `<tr class="exp-group"><th colspan="7">${escapeHtml(group.title)}<span class="blurb">${escapeHtml(group.blurb)}</span></th></tr>${rows}`;
+  }).join("");
+  const trainNote = reference.train_value === null || reference.train_value === undefined
+    ? "" : `（训练侧占 ${percent(reference.train_value)}）`;
+  return `<div class="exp-reference">
+      <div><span>必须超过的基线</span><b>${percent(reference.value)}</b><small>${escapeHtml(reference.label)}${trainNote}</small></div>
+      <p>${escapeHtml(reference.note)}</p>
+    </div>
+    <table class="exp-table"><thead>${header}</thead><tbody>${groups}</tbody></table>
+    <p class="exp-foot">「${escapeHtml(metric.primary_label)}」：${escapeHtml(metric.primary_help)}${metric.secondary_label ? `；「${escapeHtml(metric.secondary_label)}」：${escapeHtml(metric.secondary_help)}` : ""}。「配对检验」只看两个排序在同一批案例上不一致的那些：修好的条数明显多于弄坏的、且 p &lt; 0.05，才算真的赢。</p>`;
+}
+
+function renderExperimentSweep(protocol) {
+  const sweep = protocol.sweep || [];
+  if (sweep.length < 2) return "";
+  const peak = sweep.reduce((a, b) => (b.primary > a.primary ? b : a));
+  const pure = sweep.find((row) => row.weight === 0);
+  const rows = sweep.map((row) => `<tr class="${row === peak ? "is-baseline" : ""}">
+      <td class="name mono">λ=${row.weight}</td>
+      <td class="num strong">${percent(row.primary)}</td>
+      <td class="num">${percent(row.secondary)}</td>
+      <td class="num">${pairedCell(row.paired)}</td>
+      <td class="graph">${experimentBar(row.primary, protocol.maximum, row === peak ? "better" : "same")}</td>
+    </tr>`).join("");
+  const gain = peak.primary - (pure ? pure.primary : 0);
+  return `<section class="exp-section">
+    <div class="panel-title"><h3>先验校准曲线</h3><span class="muted">λ=0 是构造出来的常数预测器，是这条曲线的起点</span></div>
+    <table class="exp-table">
+      <thead><tr><th>权重</th><th class="num">Top-1 命中</th><th class="num">任意@3</th><th class="num">配对检验 vs λ=0</th><th class="graph">分布</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+    <p class="exp-foot">峰值在 λ=${peak.weight}，${percent(peak.primary)}，比纯先验高 ${percent(gain)}。λ 越大越像纯检索；曲线两端都低、中间有峰，说明检索和先验各自都缺一半信息。</p>
+  </section>`;
+}
+
+function renderExperimentPerClass(protocol) {
+  const table = protocol.per_class || { rows: [] };
+  const best = protocol.per_class_best || { rows: [] };
+  if (!table.rows.length) return "";
+  const bestByStrategy = new Map(best.rows.map((row) => [row.strategy, row]));
+  const rows = table.rows.map((row) => {
+    const other = bestByStrategy.get(row.strategy) || {};
+    const lift = row.lift || 0;
+    return `<tr>
+      <td class="name">${escapeHtml(row.strategy)}</td>
+      <td class="num">${percent(row.share)}</td>
+      <td class="num strong">${percent(row.recall_top1)}</td>
+      <td class="num">${percent(row.precision_top1)}</td>
+      <td class="num" style="color:${lift > 0.02 ? "#167057" : lift < 0 ? "#9B3750" : "#7b8b9c"}">${signed(lift)}</td>
+      <td class="num">${percent(row.recall_any3)}</td>
+      <td class="num">${percent(other.recall_top1)}</td>
+      <td class="graph">${experimentBar(row.precision_top1, 1, lift > 0 ? "better" : "worse")}</td>
+    </tr>`;
+  }).join("");
+  return `<section class="exp-section">
+    <div class="panel-title"><h3>分类召回与精确率</h3><span class="muted">聚合准确率会掩盖失败模式，逐类看才看得出检索到底认出了什么</span></div>
+    <table class="exp-table">
+      <thead><tr>
+        <th>策略</th><th class="num">占比</th><th class="num">Top-1 召回</th>
+        <th class="num">精确率</th><th class="num">提升</th>
+        <th class="num">任意@3 召回</th><th class="num">最优变体召回</th><th class="graph">精确率 vs 占比</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+    <p class="exp-foot">基准变体：${escapeHtml(table.variant || "")}；最优变体：${escapeHtml(best.variant || "")}。<b>召回</b>高于占比说明这一类被认出来了；<b>精确率</b>高于占比（即「提升」为正）说明「预测成这一类」本身带信息，而不是靠先验凑数。提升为负的类等于从未被正确预测过。</p>
+  </section>`;
+}
+
+function renderExperimentShift(protocol) {
+  const shift = protocol.prediction_shift || { rows: [] };
+  if (!shift.rows.length) return "";
+  const rows = shift.rows.map((row) => `<tr>
+      <td class="name">${escapeHtml(row.strategy)}</td>
+      <td class="num">${percent(row.prior)}</td>
+      <td class="num">${percent(row.baseline)}</td>
+      <td class="num">${percent(row.best)}</td>
+      <td class="graph">${experimentBar(row.best, 1, row.best > row.prior + 0.05 ? "worse" : "same")}</td>
+    </tr>`).join("");
+  return `<section class="exp-section">
+    <div class="panel-title"><h3>预测分布 vs 真实占比</h3><span class="muted">用来判断准确率的上涨是不是只靠多猜最大类</span></div>
+    <table class="exp-table">
+      <thead><tr><th>策略</th><th class="num">训练侧占比</th><th class="num">基准预测</th><th class="num">最优预测</th><th class="graph">偏移</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+    <p class="exp-foot">「训练侧占比」是这一类真实出现的比例。预测比例明显高于它，说明系统在往先验上塌。</p>
+  </section>`;
+}
+
+function renderExperimentFolds(protocol) {
+  const folds = protocol.per_fold || [];
+  if (folds.length < 2) return "";
+  const agree = folds.filter((fold) => fold.beats_constant).length;
+  const rows = folds.map((fold) => `<tr>
+      <td class="name">折 ${fold.fold}</td>
+      <td class="num">${fold.held_out_cases}</td>
+      <td class="num">${fold.train_cases}</td>
+      <td class="num">${percent(fold.constant)}</td>
+      <td class="num strong">${percent(fold.best)}</td>
+      <td class="num" style="color:${fold.beats_constant ? "#167057" : "#9B3750"}">${signed(fold.edge)}</td>
+      <td class="name mono">${escapeHtml(fold.best_name)}</td>
+    </tr>`).join("");
+  return `<section class="exp-section">
+    <div class="panel-title"><h3>每折结果</h3><span class="muted">${folds.length} 折里 ${agree} 折的最优变体高于该折的常数预测器</span></div>
+    <table class="exp-table">
+      <thead><tr>
+        <th>折</th><th class="num">评测条数</th><th class="num">训练条数</th>
+        <th class="num">该折常数预测器</th><th class="num">该折最优</th><th class="num">差距</th><th>最优变体</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+    <p class="exp-foot">折之间训练集互不相同，但评测覆盖全部案例且互不重叠。方向一致才说明结论不是划分方式带来的偶然。</p>
+  </section>`;
+}
+
+function renderExperimentProtocol(protocol) {
+  const head = protocol.counts || {};
+  const split = protocol.id === "holdout_strategy" && head.folds
+    ? `<div class="exp-split">
+        <span>${head.folds} 折交叉验证</span>
+        <span>每折训练约 ${head.train_cases} 条</span>
+        <span>共评测 ${head.held_out_cases} 条 / ${head.held_out_sessions} 个会话</span>
+      </div>`
+    : "";
+  return `<section class="exp-protocol">
+    <div class="exp-protocol-head">
+      <div><p class="eyebrow">${escapeHtml(protocol.id === "holdout_strategy" ? "PRIMARY PROTOCOL" : "LEGACY REPRODUCTION")}</p><h3>${escapeHtml(protocol.title)}</h3><p class="muted">${escapeHtml(protocol.description)}</p></div>
+      <span class="section-count">${escapeHtml(protocol.headline)}</span>
+    </div>
+    ${split}
+    ${renderExperimentVariants(protocol)}
+    ${protocol.id === "holdout_strategy" ? renderExperimentSweep(protocol) + renderExperimentFolds(protocol) + renderExperimentPerClass(protocol) + renderExperimentShift(protocol) : ""}
+  </section>`;
+}
+
+function renderExperimentMethod(view) {
+  const oracle = view.headline?.oracle_value;
+  return `<section class="exp-protocol">
+    <div class="exp-protocol-head"><div><p class="eyebrow">HOW TO READ</p><h3>指标说明</h3><p class="muted">这张看板为什么这样设计</p></div></div>
+    <ol class="exp-method">
+      <li><b>只看第一个协议。</b>第二个协议复现的是旧指标：它的期望标签来自关键词表，兜底桶占了 ${percent(view.protocols[1]?.reference?.value ?? 0)} 以上，本身不是正确性标准。</li>
+      <li><b>先看常数预测器。</b>${escapeHtml(view.headline?.reference_label || "")}在留出集上是 ${percent(view.headline?.reference_value)}。这是「不看问题、永远回答同一个策略」的成绩，也是检索必须先超过的线。</li>
+      <li><b>再看先验校准曲线。</b>λ=0 是构造出来的常数预测器，所以这条曲线从基线出发。两端都低、中间有峰，说明检索和先验各自都缺一半信息；整条线都不超过 λ=0 就说明检索没有价值。</li>
+      <li><b>看配对检验，不要只看准确率。</b>两个排序跑在同一批案例上，只有它们<b>不一致</b>的那些才提供证据：修好的条数多于弄坏的、且 p &lt; 0.05，才算真的赢。</li>
+      <li><b>再看分类召回与精确率。</b>聚合准确率会掩盖失败模式：一个只会预测最大类的系统能拿到与先验持平的分数，却在其它类上完全无用。精确率高于占比，才说明「预测成这一类」本身带信息。</li>
+      <li><b>最后看字段拆分。</b>「只看话题/情境文本」和「只看互动线索文本」这两行直接回答「检索靠哪半边在匹配」。</li>
+      ${oracle === null || oracle === undefined ? "" : `<li><b>情境上限。</b>「若情境分类完全正确」是图谱自身情境→策略统计能达到的天花板 ${percent(oracle)}。它衡量的是分类体系给得起多少空间，不是当前能拿到多少。</li>`}
+      <li><b>数据来自文件。</b>看板读的是 <span class="mono">${escapeHtml(view.path || "")}</span>，由 <span class="mono">${escapeHtml(view.command || "")}</span> 生成。重跑实验再刷新即可更新。</li>
+    </ol>
+  </section>`;
+}
+
+function experimentChrome(view, body) {
+  const tabs = [["holdout", "真实留出评估"], ["legacy", "旧指标复现"], ["method", "指标说明"]];
+  return `<section class="experiment-workspace">
+    <div class="experiment-toolbar">
+      <div><p class="eyebrow">EXPERIMENT LAB</p><h2>实验看板</h2></div>
+      <span class="exp-source mono">${escapeHtml(view.path || "")}</span>
+    </div>
+    ${view.headline && Object.keys(view.headline).length ? renderExperimentHeadline(view) : ""}
+    ${renderExperimentFindings(view)}
+    <div class="memory-tabs">${tabs.map(([id, label]) => `<button class="memory-tab ${experimentView.tab === id ? "active" : ""}" data-experiment-tab="${id}">${label}</button>`).join("")}</div>
+    <div class="experiment-body">${body}</div>
+  </section>`;
+}
+
+async function renderExperiments(tab = experimentView.tab) {
+  experimentView.tab = tab;
+  document.querySelectorAll(".nav-item").forEach((item) => item.classList.toggle("active", item.dataset.target === "experiments"));
+  $(".search").classList.add("hidden");
+  $("#save").classList.add("hidden");
+  history.replaceState(null, "", "#experiments");
+  $("#content").innerHTML = `<section class="experiment-workspace loading-state">正在读取实验数据…</section>`;
+  try {
+    const view = (await api("/api/experiments/behavior-retrieval")).data;
+    if (!view.available) {
+      $("#content").innerHTML = `<section class="experiment-workspace">${emptyState(view.reason || "没有实验数据", `${view.detail || ""} 生成命令：${view.command || ""}`)}</section>`;
+      return;
+    }
+    experimentView.data = view;
+    const protocol = view.protocols.find((item) => item.id === "holdout_strategy") || view.protocols[0];
+    const legacy = view.protocols.find((item) => item.id === "legacy_family");
+    const body = tab === "legacy" ? (legacy ? renderExperimentProtocol(legacy) : emptyState("没有旧指标数据", "本次报告里没有 legacy_family 协议。"))
+      : tab === "method" ? renderExperimentMethod(view)
+      : renderExperimentProtocol(protocol);
+    $("#content").innerHTML = experimentChrome(view, body);
+    document.querySelectorAll("[data-experiment-tab]").forEach((button) => {
+      button.onclick = () => renderExperiments(button.dataset.experimentTab);
+    });
+  } catch (error) {
+    $("#content").innerHTML = `<section class="experiment-workspace">${emptyState("实验看板加载失败", error.message || "请稍后重试")}</section>`;
+  }
+}
+
 function activateSection(id) {
   if (id === "memory") {
     renderMemory();
+    $("#search").value = "";
+    return;
+  }
+  if (id === "experiments") {
+    renderExperiments();
     $("#search").value = "";
     return;
   }
@@ -670,7 +969,7 @@ function render(data) {
   original = {};
   Object.entries(data.values).forEach(([key, value]) => { original[key] = value.value; });
   const modules = data.sections.map((section) => `<button class="nav-item" data-target="${section.id}"><span class="nav-glyph">${glyphs[section.id] || "·"}</span><span>${escapeHtml(section.label)}</span></button>`).join("");
-  $("#nav").innerHTML = `${modules}<div class="nav-divider"></div><button class="nav-item" data-target="memory"><span class="nav-glyph">${glyphs.memory}</span><span>记忆中心</span></button><button class="nav-item" data-target="schedules"><span class="nav-glyph">${glyphs.schedules}</span><span>任务中心</span></button><button class="nav-item" data-target="guide"><span class="nav-glyph">${glyphs.guide}</span><span>使用指南</span></button>`;
+  $("#nav").innerHTML = `${modules}<div class="nav-divider"></div><button class="nav-item" data-target="memory"><span class="nav-glyph">${glyphs.memory}</span><span>记忆中心</span></button><button class="nav-item" data-target="schedules"><span class="nav-glyph">${glyphs.schedules}</span><span>任务中心</span></button><button class="nav-item" data-target="experiments"><span class="nav-glyph">${glyphs.experiments}</span><span>实验看板</span></button><button class="nav-item" data-target="guide"><span class="nav-glyph">${glyphs.guide}</span><span>使用指南</span></button>`;
   document.querySelectorAll(".nav-item").forEach((button) => {
     button.onclick = () => activateSection(button.dataset.target);
   });

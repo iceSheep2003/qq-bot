@@ -39,7 +39,7 @@
 **启用方式**：在 `.env` 里指向编译好的快照目录即可。
 
 ```dotenv
-BOT_BEHAVIOR_GRAPH_PATH=data/private/derived/behavior-graph-compiled-final-20261014-v7
+BOT_BEHAVIOR_GRAPH_PATH=data/private/derived/behavior-graph-compiled-final-20261014-v8
 BOT_BEHAVIOR_CALIBRATION_PATH=data/private/derived/behavior-validation-final-20261014/calibration.json
 ```
 

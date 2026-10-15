@@ -64,7 +64,7 @@ class BehaviorRetrieverTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             nodes = [
-                {"id": "case", "type": "InteractionCase", "case_id": "c1", "situation_text": "有人调侃开玩笑", "observable_cues": [], "topic_terms": []},
+                {"id": "case", "type": "InteractionCase", "case_id": "c1", "situation_text": "有人调侃开玩笑", "observable_cues": ["有人开玩笑调侃", "有人用夸张说法起哄"], "topic_terms": []},
                 {"id": "strategy", "type": "Strategy", "key": "banter", "support_case_count": 2},
                 {"id": "action", "type": "DialogueAct", "key": "joke"},
                 {"id": "expr", "type": "ExpressionPattern", "name": "夸张接梗", "raw_variants": ["用夸张说法接话"], "avoid": []},
@@ -86,14 +86,14 @@ class BehaviorRetrieverTests(unittest.TestCase):
             write_jsonl(root / "nodes.jsonl", nodes)
             write_jsonl(root / "edges.jsonl", edges)
             options = BehaviorGraphRetriever(root).retrieve("群里有人开玩笑")
-            self.assertEqual(options[0].strategy, "banter")
+            self.assertEqual(options[0].strategy, "玩梗")
             self.assertEqual(options[0].examples[0]["evidence_id"], "evidence")
 
     def test_runtime_adapter_returns_bounded_read_only_context(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             nodes = [
-                {"id": "case", "type": "InteractionCase", "case_id": "c1", "situation_text": "有人调侃开玩笑", "observable_cues": [], "topic_terms": []},
+                {"id": "case", "type": "InteractionCase", "case_id": "c1", "situation_text": "有人调侃开玩笑", "observable_cues": ["有人开玩笑调侃", "有人用夸张说法起哄"], "topic_terms": []},
                 {"id": "strategy", "type": "Strategy", "key": "banter", "support_case_count": 2},
                 {"id": "action", "type": "DialogueAct", "key": "joke"},
                 {"id": "expr", "type": "ExpressionPattern", "name": "夸张接梗", "raw_variants": ["用轻松的夸张说法接话"], "avoid": ["不要照抄案例"]},
@@ -117,7 +117,7 @@ class BehaviorRetrieverTests(unittest.TestCase):
             provider = CompiledBehaviorExperience(BehaviorGraphRetriever(root))
             context = provider.context_for("群里有人开玩笑调侃")
             self.assertIn("行为经验候选", context)
-            self.assertIn("banter", context)
+            self.assertIn("玩梗", context)
             self.assertLessEqual(len(context), 1200)
 
 

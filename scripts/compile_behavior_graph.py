@@ -57,22 +57,30 @@ def clean(value: str) -> str:
     return re.sub(r"\s+", " ", str(value)).strip().lower()
 
 
-def situation_family(text: str, cues: list[str], strategy: str) -> tuple[str, str]:
+def situation_family(text: str, cues: list[str]) -> tuple[str, str]:
     """Map free-form model prose to a small retrieval taxonomy.
 
     The original sentence remains on InteractionCase.  This mapping is only a
     deterministic index key, never a claim that a keyword proves intent.
+
+    The family is derived from the *situation text and cues alone*.  It used to
+    fall back to the case's own strategy when no keyword matched, which made the
+    mapping partly circular: 15% of cases were filed under a family *because* of
+    the very label that family was later used to predict.  Every statistic read
+    off the family — "does the situation predict the strategy?" — was therefore
+    self-fulfilling for those cases, and the measured ceiling was inflated by
+    1.7pt (13 classes) / 3.0pt (9 classes).
+
+    Taking the strategy out of the signature is deliberate: while the parameter
+    exists, the shortcut can come back.  Cases no marker matches land in
+    ``general_group_exchange``, which is a real answer rather than a failure —
+    the markers cover the situations this taxonomy names, and everything else
+    genuinely is ordinary group chatter.
     """
     haystack = clean(" ".join([text, *cues]))
     for key, label, markers in SITUATION_FAMILIES:
         if any(marker in haystack for marker in markers):
             return key, label
-    if strategy in {"banter", "tease_gently"}:
-        return "banter_or_joke", "玩笑、调侃或群内梗"
-    if strategy in {"answer_directly", "clarify"}:
-        return "direct_question", "明确提问或求助"
-    if strategy in {"empathize", "encourage"}:
-        return "emotional_complaint", "抱怨、疲惫或负面情绪"
     return "general_group_exchange", "一般群聊互动"
 
 
@@ -189,6 +197,14 @@ def compile_graph(source: Path, output: Path) -> dict:
             selected_message_ids=proposal.get("selected_source_message_ids", proposal.get("source_message_ids", [])),
             abstracted_behavior=proposal.get("abstraction", ""),
         )
+        # The expression family is needed by the case node as well as by the
+        # ExpressionPattern node, so it is resolved once, here, rather than
+        # after the case has already been written.
+        expression_key, expression_label = expression_family(
+            proposal.get("expression_pattern", ""),
+            proposal["strategy"],
+            proposal["dialogue_act"],
+        )
         case_id_node = node(
             "InteractionCase",
             case_id,
@@ -201,10 +217,15 @@ def compile_graph(source: Path, output: Path) -> dict:
             abstraction=proposal.get("abstraction", ""),
             strategy=proposal.get("strategy", ""),
             dialogue_act=proposal.get("dialogue_act", ""),
+            # Both are case-level text the retriever scores. They were dropped
+            # once and nothing noticed, because the shipped snapshot still had
+            # them and no test rebuilt the graph from proposals.
+            expression_pattern_text=proposal.get("expression_pattern", ""),
+            expression_family=expression_key,
         )
         cases_seen.add(case_id)
         family_key, family_label = situation_family(
-            proposal["situation"], proposal.get("observable_cues", []), proposal["strategy"]
+            proposal["situation"], proposal.get("observable_cues", [])
         )
         situation = node(
             "Situation",
@@ -219,10 +240,21 @@ def compile_graph(source: Path, output: Path) -> dict:
         case_node["situation_family"] = family_key
         strategy = node("Strategy", proposal["strategy"], key=proposal["strategy"])
         act = node("DialogueAct", proposal["dialogue_act"], key=proposal["dialogue_act"])
+        # Keyed by the *expression family*, not by the raw wording. The node()
+        # helper accumulates ``avoid`` and ``raw_variants`` across every case
+        # that shares an identity, and the retriever reads exactly those two
+        # fields (plus ``name``) — so keying by the raw text builds one node per
+        # case, the accumulator never fires, and the retriever is handed
+        # ExpressionPattern nodes with no ``name`` and no ``raw_variants`` to
+        # match on. That regression was live: recompiling produced 2004
+        # expression nodes against the shipped snapshot's 15.
         expression = node(
             "ExpressionPattern",
-            proposal["expression_pattern"],
-            pattern=proposal["expression_pattern"],
+            expression_key,
+            family_key=expression_key,
+            name=expression_label,
+            pattern=expression_label,
+            raw_variants=[proposal["expression_pattern"]],
             avoid=proposal.get("avoid", []),
         )
         media = node("MediaIntent", proposal["media_intent"], key=proposal["media_intent"])

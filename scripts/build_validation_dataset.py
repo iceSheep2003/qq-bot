@@ -111,7 +111,7 @@ def build(corpus: Path, output: Path, size: int, raw_root: Path) -> dict:
     for case in cases:
         # This is only a sampling bucket, not a behavior label.
         target = messages[case["continuation_id"]]["text"]
-        family, _ = situation_family(target, [], "")
+        family, _ = situation_family(target, [])
         buckets[family].append(case)
     for rows in buckets.values():
         rows.sort(key=lambda row: hashlib.sha256(row["id"].encode()).hexdigest())

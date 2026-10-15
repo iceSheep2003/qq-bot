@@ -14,6 +14,7 @@ from urllib.parse import parse_qs, unquote, urlsplit
 
 from .config import WebUIConfig
 from .envfile import EnvConfigStore
+from .experiments import ExperimentConsoleQuery
 from .review_queue import ReviewFileEditor, ReviewFormatError
 from .schema import SECTIONS, SETTINGS
 from .memory_query import MemoryConsoleQuery
@@ -35,6 +36,10 @@ class WebUIServer:
         self.memory_query: MemoryConsoleQuery | None = None
         self.persona_queue: PersonaQueueQuery | None = None
         self.schedule_management = None
+        # Offline experiment reports. Unlike the projections above this needs no
+        # composed runtime: it reads a JSON file an operator produced, so it is
+        # available even on a console whose bot is not running.
+        self.experiments = ExperimentConsoleQuery()
         # The one write surface outside the env editor. It rewrites a file a
         # deployer owns, and nothing else in the bot reads decisions from
         # anywhere else.
@@ -187,6 +192,9 @@ class WebUIServer:
                 if path == "/app.js":
                     self._asset("app.js", "text/javascript; charset=utf-8")
                     return
+                if path == "/kinna.png":
+                    self._asset("kinna.png", "image/png")
+                    return
                 if not path.startswith("/api/"):
                     self._json(HTTPStatus.NOT_FOUND, {"error": "not found"})
                     return
@@ -235,6 +243,14 @@ class WebUIServer:
                             ),
                             "env_path": str(owner.config.env_path),
                         },
+                    )
+                elif path == "/api/experiments/behavior-retrieval":
+                    # Read-only, and deliberately independent of the composed
+                    # runtime: the report is a file, so the section still works
+                    # on a console whose bot has not finished starting.
+                    self._json(
+                        HTTPStatus.OK,
+                        {"data": owner.experiments.behavior_retrieval()},
                     )
                 elif path.startswith("/api/memory/"):
                     if owner.memory_query is None:

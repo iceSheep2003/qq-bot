@@ -80,7 +80,7 @@ from .social_interactions import (
 from .storage.topic_observations import TopicObservationStore
 from .storage.relationships import RelationshipsStore
 from .runtime.tools import built_in_tools
-from .experience.runtime import configured_behavior_experience
+from .experience.decision import configured_behavior_decision
 
 log = logging.getLogger(__name__)
 
@@ -247,7 +247,7 @@ class BotApp:
             conversation_intelligence=conversation_intelligence,
             prompt_sessions=prompt_sessions,
             conversation_compactor=conversation_compactor,
-            behavior_experience=configured_behavior_experience(),
+            behavior_decision=configured_behavior_decision(),
             history_char_budget=config.conversation_window_chars,
             history_message_limit=config.conversation_window_messages,
             live_scene_seconds=config.conversation_window_seconds,
