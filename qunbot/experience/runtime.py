@@ -32,12 +32,28 @@ class CompiledBehaviorExperience:
         )
 
     def context_for(self, query: str) -> str:
+        """A bounded hint for this turn, or ``""`` when there is nothing to say.
+
+        Never raises. This is the anti-corruption layer: a snapshot that loaded
+        cleanly can still fail on a particular query — an unexpected node shape,
+        a missing field on one of 2000 cases — and the graph's problem must not
+        become the reply's problem. An empty string is the honest answer in that
+        case: the agent answers from the scene, memory and skills alone.
+        """
         if not isinstance(query, str) or not query.strip():
             return ""
-        options = self.retriever.retrieve(query[:2400], limit=3)
-        if not options:
+        try:
+            options = self.retriever.retrieve(query[:2400], limit=3)
+            if not options:
+                return ""
+            return self.compiler.compile(options).render()
+        except Exception as exc:
+            log.warning(
+                "behavior experience retrieval failed (%s: %s); contributing nothing",
+                type(exc).__name__,
+                exc,
+            )
             return ""
-        return self.compiler.compile(options).render()
 
 
 def configured_behavior_experience() -> CompiledBehaviorExperience | None:

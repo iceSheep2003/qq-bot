@@ -305,9 +305,19 @@ class Agent:
                 behavior_query_parts.extend(
                     item.text for item in frame.recent_window[-8:] if item.text
                 )
-            behavior_hint = self.behavior_experience.context_for(
-                "\n".join(behavior_query_parts)
-            )
+            # The port is read-only guidance, not a dependency: a deployment may
+            # supply one that raises, and a hint nobody asked for must never be
+            # the reason a group member gets no reply.
+            try:
+                behavior_hint = self.behavior_experience.context_for(
+                    "\n".join(behavior_query_parts)
+                )
+            except Exception:
+                log.exception(
+                    "behavior experience failed for scope=%s; replying without it",
+                    event.scope,
+                )
+                behavior_hint = ""
             if behavior_hint:
                 dynamic["行为经验"] = {
                     "authority": "derived_read_only",

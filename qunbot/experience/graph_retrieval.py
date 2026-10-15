@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+from array import array
 from collections import defaultdict
 from pathlib import Path
 
@@ -47,6 +48,57 @@ class BehaviorGraphRetriever:
         if calibration:
             self.calibration = json.loads(Path(calibration).read_text(encoding="utf-8")).get("family_strategy_bonus", {})
         self.case_paths = self._build_paths()
+        self._build_index()
+
+    @staticmethod
+    def _searchable(path) -> str:
+        """The static text a case path is matched against.
+
+        Every field here comes from the compiled snapshot, so the result is
+        immutable for the lifetime of the process — which is what makes
+        pre-tokenising it in :meth:`_build_index` safe.
+        """
+        case, strategy, action, expression, _media, situation, _evidence = path
+        return " ".join(
+            [
+                case.get("situation_text", ""),
+                situation.get("name", ""),
+                situation.get("family_key", ""),
+                *case.get("observable_cues", []),
+                *case.get("topic_terms", []),
+                strategy.get("key", ""),
+                action.get("key", ""),
+                expression.get("name", ""),
+                *expression.get("raw_variants", [])[:5],
+            ]
+        )
+
+    def _build_index(self) -> None:
+        """Tokenise every case path once, at load, into an inverted index.
+
+        ``retrieve`` runs inside a turn, on the event loop. Rebuilding and
+        re-tokenising ~2000 searchable strings on every call cost ~157 ms per
+        turn, which is why this read model had no caller: the cost was paid on
+        the hot path. The text never changes after load, so the tokenisation is
+        paid once here instead, and a turn costs a few milliseconds.
+
+        Postings are appended while walking paths in order, so every posting
+        list is already sorted and needs no separate sort pass.
+        """
+        postings: defaultdict[str, list[int]] = defaultdict(list)
+        for index, path in enumerate(self.case_paths):
+            for term in _terms(self._searchable(path)):
+                postings[term].append(index)
+        self._postings = {term: array("i", rows) for term, rows in postings.items()}
+        # Strategy hints are the only terms consulted *per path* ("does this
+        # case carry this hint term?"), so those get a set for O(1) membership.
+        # The set is bounded by the 13 hint rows, not by the whole vocabulary.
+        hint_terms = {term for terms in self._hints.values() for term in terms}
+        self._hint_postings = {
+            term: set(self._postings[term])
+            for term in hint_terms
+            if term in self._postings
+        }
 
     def _build_paths(self):
         paths = []
@@ -84,28 +136,37 @@ class BehaviorGraphRetriever:
         query_terms = _terms(query)
         intent_bonus = self._intent_bonus(query_terms)
         family_bonus = self.calibration.get(self._query_family(query), {})
+        # |query_terms & case_terms| for every path, in one pass over postings.
+        # This is the same set intersection the previous implementation did per
+        # path; the index just answers it without re-tokenising the case.
+        matched: defaultdict[int, int] = defaultdict(int)
+        for term in query_terms:
+            for index in self._postings.get(term, ()):
+                matched[index] += 1
         grouped: defaultdict[str, list[tuple[float, dict]]] = defaultdict(list)
-        strategy_nodes = {node["id"]: node for node in self.nodes.values() if node.get("type") == "Strategy"}
-        for case, strategy, action, expression, media, situation, evidence_id in self._paths():
-            searchable = " ".join(
-                [
-                    case.get("situation_text", ""),
-                    situation.get("name", ""),
-                    situation.get("family_key", ""),
-                    *case.get("observable_cues", []),
-                    *case.get("topic_terms", []),
-                    strategy.get("key", ""),
-                    action.get("key", ""),
-                    expression.get("name", ""),
-                    *expression.get("raw_variants", [])[:5],
-                ]
-            )
-            overlap = query_terms & _terms(searchable)
-            overlap |= query_terms & self._hints.get(strategy.get("key", ""), set())
+        for index, (
+            case,
+            strategy,
+            action,
+            expression,
+            media,
+            situation,
+            evidence_id,
+        ) in enumerate(self.case_paths):
+            strategy_key = strategy.get("key", "")
+            overlap = matched.get(index, 0)
+            # A strategy hint contributes query terms the case text itself does
+            # not carry, so only the ones this path is missing are added.
+            for term in self._hints.get(strategy_key, ()):
+                if term in query_terms and index not in self._hint_postings.get(term, ()):
+                    overlap += 1
             if not overlap:
                 continue
-            strategy_key = strategy.get("key", "")
-            score = float(len(overlap)) + intent_bonus.get(strategy_key, 0.0) + float(family_bonus.get(strategy_key, 0.0))
+            score = (
+                float(overlap)
+                + intent_bonus.get(strategy_key, 0.0)
+                + float(family_bonus.get(strategy_key, 0.0))
+            )
             grouped[strategy["id"]].append(
                 (
                     score,
