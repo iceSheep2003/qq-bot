@@ -1496,5 +1496,12 @@
       "test_writer_writes_only_inside_root_and_replaces_atomically"
     ],
     "assertions": 11
+  },
+  "tests/agent/test_wiki_legacy_projection.py": {
+    "tests": [
+      "test_projection_keeps_topics_and_only_publishes_usable_slang",
+      "test_projection_separates_group_person_and_private_memory"
+    ],
+    "assertions": 5
   }
 }

@@ -13,6 +13,7 @@ from .links import LinkCandidate, markdown_link, reciprocal
 from .update_policy import WikiUpdatePolicy, published_version
 from .reader import WikiReader
 from .writer import WikiWriter
+from .legacy import LegacyWikiProjector
 
 __all__ = [
     "WikiContextCache",
@@ -29,4 +30,5 @@ __all__ = [
     "published_version",
     "WikiReader",
     "WikiWriter",
+    "LegacyWikiProjector",
 ]
