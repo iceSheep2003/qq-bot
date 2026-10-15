@@ -9,6 +9,8 @@ from .page import (
     WikiSlang,
     WikiTopic,
 )
+from .links import LinkCandidate, markdown_link, reciprocal
+from .update_policy import WikiUpdatePolicy, published_version
 
 __all__ = [
     "WikiContextCache",
@@ -18,4 +20,9 @@ __all__ = [
     "WikiRelation",
     "WikiSlang",
     "WikiTopic",
+    "LinkCandidate",
+    "markdown_link",
+    "reciprocal",
+    "WikiUpdatePolicy",
+    "published_version",
 ]

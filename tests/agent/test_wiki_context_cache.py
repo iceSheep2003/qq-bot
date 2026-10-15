@@ -10,6 +10,15 @@ from qqbot.agent.memory.wiki.page import (
     WikiTopic,
 )
 from qqbot.agent.memory.wiki.links import LinkCandidate, markdown_link, reciprocal
+from qqbot.agent.memory.wiki.update_policy import WikiUpdatePolicy, published_version
+
+
+def test_wiki_updates_are_batched_before_published_version_changes():
+    policy = WikiUpdatePolicy(min_interval_seconds=600, max_pending_entries=3)
+    assert not policy.should_publish(now=100, last_published_at=0, pending_entries=1)
+    assert policy.should_publish(now=100, last_published_at=0, pending_entries=3)
+    assert policy.should_publish(now=700, last_published_at=0, pending_entries=1)
+    assert published_version({"b": 2, "a": 1}) == published_version({"a": 1, "b": 2})
 
 
 def test_links_are_markdown_and_reciprocal_only_when_relation_is_stable():
