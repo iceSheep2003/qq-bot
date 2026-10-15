@@ -6,6 +6,16 @@ from dataclasses import dataclass, field
 from typing import Literal
 
 
+LinkKind = Literal[
+    "mentions",
+    "frequent_member",
+    "likes_topic",
+    "related_topic",
+    "affection",
+    "conflicts_with",
+]
+
+
 @dataclass(frozen=True)
 class WikiEntry:
     entry_id: str
@@ -50,6 +60,54 @@ class WikiRelation:
 
 
 @dataclass(frozen=True)
+class WikiTopic:
+    topic_id: str
+    name: str
+    summary: str = ""
+    aliases: tuple[str, ...] = ()
+    mention_count: int = 0
+    last_seen_at: int = 0
+
+    def __post_init__(self) -> None:
+        if not self.topic_id.strip() or not self.name.strip():
+            raise ValueError("WikiTopic requires an id and name")
+        if self.mention_count < 0:
+            raise ValueError("WikiTopic mention_count cannot be negative")
+
+
+@dataclass(frozen=True)
+class WikiSlang:
+    term: str
+    definition: str
+    examples: tuple[str, ...] = ()
+    source_event_ids: tuple[str, ...] = ()
+    confidence: float = 0.0
+    last_seen_at: int = 0
+
+    def __post_init__(self) -> None:
+        if not self.term.strip() or not self.definition.strip():
+            raise ValueError("WikiSlang requires a term and definition")
+        if not 0 <= self.confidence <= 1:
+            raise ValueError("WikiSlang confidence must be between 0 and 1")
+
+
+@dataclass(frozen=True)
+class WikiLink:
+    source_page_id: str
+    target_page_id: str
+    kind: LinkKind = "mentions"
+    label: str = ""
+    confidence: float = 1.0
+    observed_at: int = 0
+
+    def __post_init__(self) -> None:
+        if not self.source_page_id.strip() or not self.target_page_id.strip():
+            raise ValueError("WikiLink requires source and target page ids")
+        if not 0 <= self.confidence <= 1:
+            raise ValueError("WikiLink confidence must be between 0 and 1")
+
+
+@dataclass(frozen=True)
 class WikiPage:
     page_id: str
     scope: Literal["group", "group_member", "private"]
@@ -58,6 +116,10 @@ class WikiPage:
     summary: str = ""
     entries: tuple[WikiEntry, ...] = field(default_factory=tuple)
     relations: tuple[WikiRelation, ...] = field(default_factory=tuple)
+    topics: tuple[WikiTopic, ...] = field(default_factory=tuple)
+    slang: tuple[WikiSlang, ...] = field(default_factory=tuple)
+    links: tuple[WikiLink, ...] = field(default_factory=tuple)
+    member_page_ids: tuple[str, ...] = ()
     version: str = ""
 
     def __post_init__(self) -> None:

@@ -1,7 +1,14 @@
 from __future__ import annotations
 
 from qqbot.agent.memory.wiki.cache import WikiContextCache
-from qqbot.agent.memory.wiki.page import WikiEntry, WikiPage, WikiRelation
+from qqbot.agent.memory.wiki.page import (
+    WikiEntry,
+    WikiLink,
+    WikiPage,
+    WikiRelation,
+    WikiSlang,
+    WikiTopic,
+)
 
 
 def test_wiki_page_keeps_online_memory_fields_and_reads_latest_entries_first():
@@ -46,11 +53,18 @@ def test_wiki_page_keeps_online_memory_fields_and_reads_latest_entries_first():
                 source_event_id="evt-1",
             ),
         ),
+        topics=(WikiTopic("os", "操作系统", mention_count=12, last_seen_at=220),),
+        slang=(WikiSlang("开黑", "一起组队", confidence=0.95, last_seen_at=220),),
+        links=(WikiLink("groups/g1", "groups/g1/members/u1", "frequent_member"),),
+        member_page_ids=("groups/g1/members/u1",),
         version="v1",
     )
     assert page.preview()["title"] == "小明"
     assert page.select("学习", limit=1)[0].entry_id == "new"
     assert page.relations[0].score == 0.75
+    assert page.topics[0].mention_count == 12
+    assert page.slang[0].term == "开黑"
+    assert page.links[0].target_page_id.endswith("u1")
 
 
 def test_cache_reuses_query_scoped_wiki_context_until_ttl():
