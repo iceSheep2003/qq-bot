@@ -52,6 +52,8 @@ class LegacyWikiSynchronizer:
             self._last_source_version = state.get("source_version") or None
             published_at = state.get("published_at")
             self._last_published_at = int(published_at) if published_at is not None else None
+            pending_since = state.get("pending_since")
+            self._pending_since = int(pending_since) if pending_since is not None else None
         except (OSError, ValueError, TypeError):
             return
 
@@ -60,7 +62,11 @@ class LegacyWikiSynchronizer:
         temporary = self._state_path.with_suffix(".tmp")
         temporary.write_text(
             json.dumps(
-                {"source_version": self._last_source_version, "published_at": self._last_published_at},
+                {
+                    "source_version": self._last_source_version,
+                    "published_at": self._last_published_at,
+                    "pending_since": self._pending_since,
+                },
                 ensure_ascii=False,
                 sort_keys=True,
             )
@@ -83,6 +89,7 @@ class LegacyWikiSynchronizer:
         changed = source_version != self._last_source_version
         if changed and self._pending_since is None:
             self._pending_since = now
+            self._save_state()
         if not changed and self._pending_since is None:
             return WikiSyncReport(False, False, source_version)
         pending = sum(

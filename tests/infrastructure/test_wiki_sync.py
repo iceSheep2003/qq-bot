@@ -103,3 +103,25 @@ def test_sync_persists_published_source_version_across_restarts(tmp_path):
     second = LegacyWikiSynchronizer(lambda: snapshot, tmp_path)
 
     assert second.refresh().published is False
+
+
+def test_sync_persists_pending_since_across_restart(tmp_path):
+    now = [100]
+    snapshot = {"memories": [{"id": 1, "scope": "group:1", "user_id": "_group_", "content": "事实", "status": "active", "created_at": 1, "updated_at": 1, "confidence": 0.8}], "topics": [], "slang": []}
+    first = LegacyWikiSynchronizer(
+        lambda: snapshot,
+        tmp_path,
+        policy=WikiUpdatePolicy(min_interval_seconds=600, max_pending_entries=8),
+        clock=lambda: now[0],
+    )
+    assert first.refresh().published is False
+
+    now[0] = 700
+    second = LegacyWikiSynchronizer(
+        lambda: snapshot,
+        tmp_path,
+        policy=WikiUpdatePolicy(min_interval_seconds=600, max_pending_entries=8),
+        clock=lambda: now[0],
+    )
+
+    assert second.refresh().published is True
