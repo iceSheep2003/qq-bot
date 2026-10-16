@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "id": "WIKI-SEMANTIC-DELTA-018",
+  "title": "Batch actual Wiki changes instead of counting all database rows",
+  "requirements": [
+    "Count actual changed published facts, topics and slang against the last successfully published snapshot; persist baseline across restarts.",
+    "Ignore access counters, source row order and unpublished candidates when computing versions and publication thresholds.",
+    "At the next source check, prioritize removal of published records and allow empty replacements without manual force. Preserve the existing publication interval, forced refresh and source-check throttle."
+  ],
+  "testFiles": [
+    "tests/infrastructure/test_wiki_sync_deltas.py"
+  ],
+  "codeFiles": [
+    "src/qqbot/infrastructure/storage/wiki_sync.py",
+    "src/qqbot/infrastructure/storage/wiki_runtime.py",
+    "src/qqbot/agent/memory/wiki/legacy.py",
+    "src/qqbot/agent/memory/wiki/migration.py",
+    "src/qqbot/agent/memory/wiki/update_policy.py",
+    "docs/architecture/RUNTIME.md"
+  ],
+  "testChecks": [
+    "wiki-sync-deltas"
+  ],
+  "protectedFiles": [
+    "tools/quality/checks.py",
+    "tools/quality/junit_report.py",
+    ".importlinter",
+    ".code-quality-gate/ci-setup.sh"
+  ],
+  "maxAttempts": 12
+}

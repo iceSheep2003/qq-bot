@@ -1,0 +1,53 @@
+{
+  "version": 1,
+  "id": "WIKI-SEMANTIC-DELTA-018",
+  "attempts": 1,
+  "red": {
+    "time": "2026-10-16T06:36:08.769Z",
+    "snapshot": {
+      "contract": "c09247e295a622f9c9aae146d783f0983c016227ada4d27167ee3b3304a410d4",
+      "protected": {
+        ".code-quality-gate/ci-setup.sh": "8c6636d8a04487aa9d8c623fce23aaab751bec431c25aa8a402a841532a8a69f",
+        ".code-quality-gate/tasks/WIKI-SEMANTIC-DELTA-018.json": "0bea18b7577b6b1c4468c97dfafbf50f52bdd226e02d9603ebaf3656e590686c",
+        ".importlinter": "dbe30e5e76cf5a7c1c2377d8ea87502421d2eb93c175711447bab2baee6f1eca",
+        "quality.config.json": "24e4714f5bacefc34b3dbc340d99f96632553ff24388c90c1f84951fe6402a2c",
+        "tests/infrastructure/test_wiki_sync_deltas.py": "7e8b088a45589fe9882a8cd50808421a13b8e12fcfb763db31febb598cfed58c",
+        "tools/quality/checks.py": "6fa2eb95acb56139a72eb7f32b87c7672b64e2ebadd25d2c34d435a2b7392353",
+        "tools/quality/junit_report.py": "082cff7fb89c4f5cac8d71a198185f857b5d2501f7a59f74905cf4bf22b48c8b"
+      },
+      "code": {
+        "docs/architecture/RUNTIME.md": "81e5e8642e97c5a4ed8d7a43fac9c6459e513d7ab1781b6924bff738f7561dab",
+        "src/qqbot/agent/memory/wiki/legacy.py": "e7f463b3bfb6014355a6d701503a0bc50ec223e0ae25350ea0d1e84ace6419a4",
+        "src/qqbot/agent/memory/wiki/migration.py": "3678d3d4fe474a720dc66ddb6d26ac7929122a913eb57cd00c7d477b787d6299",
+        "src/qqbot/agent/memory/wiki/update_policy.py": "767fe9876f8831518caadff3b05fe17a1dc5128d8fa8c8daefcc8733a2469b6d",
+        "src/qqbot/infrastructure/storage/wiki_runtime.py": "4f2893bedf5bb8e4882c36559388bc83b2fab0c01c9eb3d1ff4888666682b22a",
+        "src/qqbot/infrastructure/storage/wiki_sync.py": "fa363fd68930ccfaad75ed63249f1fe3c04d6106f340377ca3dd3dbbda0dbc30"
+      }
+    },
+    "report": ".quality/code-quality-gate/WIKI-SEMANTIC-DELTA-018/red-575f7bfd-0cc0-431e-9db1-032b1780381b.md"
+  },
+  "green": {
+    "time": "2026-10-16T06:37:47.811Z",
+    "snapshot": {
+      "contract": "c09247e295a622f9c9aae146d783f0983c016227ada4d27167ee3b3304a410d4",
+      "protected": {
+        ".code-quality-gate/ci-setup.sh": "8c6636d8a04487aa9d8c623fce23aaab751bec431c25aa8a402a841532a8a69f",
+        ".code-quality-gate/tasks/WIKI-SEMANTIC-DELTA-018.json": "0bea18b7577b6b1c4468c97dfafbf50f52bdd226e02d9603ebaf3656e590686c",
+        ".importlinter": "dbe30e5e76cf5a7c1c2377d8ea87502421d2eb93c175711447bab2baee6f1eca",
+        "quality.config.json": "24e4714f5bacefc34b3dbc340d99f96632553ff24388c90c1f84951fe6402a2c",
+        "tests/infrastructure/test_wiki_sync_deltas.py": "7e8b088a45589fe9882a8cd50808421a13b8e12fcfb763db31febb598cfed58c",
+        "tools/quality/checks.py": "6fa2eb95acb56139a72eb7f32b87c7672b64e2ebadd25d2c34d435a2b7392353",
+        "tools/quality/junit_report.py": "082cff7fb89c4f5cac8d71a198185f857b5d2501f7a59f74905cf4bf22b48c8b"
+      },
+      "code": {
+        "docs/architecture/RUNTIME.md": "89ec1b9c373b05e0e9575ea1072bdc29fe88e60ad062633a2568d3df689fc822",
+        "src/qqbot/agent/memory/wiki/legacy.py": "e7f463b3bfb6014355a6d701503a0bc50ec223e0ae25350ea0d1e84ace6419a4",
+        "src/qqbot/agent/memory/wiki/migration.py": "3678d3d4fe474a720dc66ddb6d26ac7929122a913eb57cd00c7d477b787d6299",
+        "src/qqbot/agent/memory/wiki/update_policy.py": "767fe9876f8831518caadff3b05fe17a1dc5128d8fa8c8daefcc8733a2469b6d",
+        "src/qqbot/infrastructure/storage/wiki_runtime.py": "4f2893bedf5bb8e4882c36559388bc83b2fab0c01c9eb3d1ff4888666682b22a",
+        "src/qqbot/infrastructure/storage/wiki_sync.py": "21f89e1775bb520feb129b2f00f4ca5f07efef1394954143bcc39bd35a431e86"
+      }
+    },
+    "report": ".quality/code-quality-gate/WIKI-SEMANTIC-DELTA-018/green-b2c62cb3-4cc1-491a-8c06-bfd912a80195.md"
+  }
+}

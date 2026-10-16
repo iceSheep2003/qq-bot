@@ -1,4 +1,4 @@
 {
-  "manifest": ".code-quality-gate/tasks/WIKI-SNAPSHOT-REPLACEMENT-017.json",
+  "manifest": ".code-quality-gate/tasks/WIKI-SEMANTIC-DELTA-018.json",
   "config": "quality.config.json"
 }

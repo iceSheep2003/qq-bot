@@ -753,6 +753,37 @@
             "equals": 0
           }
         ]
+      },
+      {
+        "id": "wiki-sync-deltas",
+        "title": "Batch semantic Wiki changes and prioritize removals",
+        "command": [
+          ".venv/bin/python",
+          "-m",
+          "pytest",
+          "tests/infrastructure/test_wiki_sync_deltas.py",
+          "-q",
+          "--junitxml=.quality/wiki-sync-deltas.xml"
+        ],
+        "report": ".quality/wiki-sync-deltas.xml",
+        "format": "junit",
+        "metrics": [
+          {
+            "name": "Cases",
+            "path": "tests",
+            "min": 8
+          },
+          {
+            "name": "Success rate",
+            "path": "successRate",
+            "equals": 100
+          },
+          {
+            "name": "Skipped",
+            "path": "skipped",
+            "equals": 0
+          }
+        ]
       }
     ]
   }
