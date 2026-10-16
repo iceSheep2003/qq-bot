@@ -439,6 +439,7 @@ def test_the_experiment_endpoint_is_owner_only_and_serves_the_report(
         with pytest.raises(urllib.error.HTTPError) as denied:
             _request(base + "/api/experiments/behavior-retrieval")
         assert denied.value.code == 401
+        denied.value.close()
 
         status, body = _request(
             base + "/api/experiments/behavior-retrieval", "test-token"

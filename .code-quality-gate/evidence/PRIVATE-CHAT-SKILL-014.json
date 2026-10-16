@@ -1,0 +1,55 @@
+{
+  "version": 1,
+  "id": "PRIVATE-CHAT-SKILL-014",
+  "attempts": 1,
+  "red": {
+    "time": "2026-10-16T06:07:16.306Z",
+    "snapshot": {
+      "contract": "757beeaba61d691452af90c3706f096a4732d75db39bd3c442a7589a49c1a2cf",
+      "protected": {
+        ".code-quality-gate/ci-setup.sh": "8c6636d8a04487aa9d8c623fce23aaab751bec431c25aa8a402a841532a8a69f",
+        ".code-quality-gate/history/PRIVATE-CHAT-SKILL-014-original.zip": "7f56a2b4d58482afc31352224cfa8c100157544d51f32dbe645936c9d0398642",
+        ".code-quality-gate/history/PRIVATE-CHAT-SKILL-014-resource-failure.zip": "d17087b5bfdc9c4f44ba2a035db0114b8aaea256f4d011313f3e314730c977e4",
+        ".code-quality-gate/tasks/PRIVATE-CHAT-SKILL-014.json": "a87611431fbe591fdb623ee7524281974f5d288fbc5591862693f5b3315bade5",
+        ".importlinter": "dbe30e5e76cf5a7c1c2377d8ea87502421d2eb93c175711447bab2baee6f1eca",
+        "quality.config.json": "8a4e9be541e7d2000760b376590f0884d1d42eb6c65c57db0064414ffea918b4",
+        "tests/agent/test_private_chat_skill.py": "f36d6ecdcf90a24e7a81763c7bcaedee5b8cc7d8a2bfc86386b835d9e6c30d4d",
+        "tools/quality/checks.py": "6fa2eb95acb56139a72eb7f32b87c7672b64e2ebadd25d2c34d435a2b7392353",
+        "tools/quality/junit_report.py": "082cff7fb89c4f5cac8d71a198185f857b5d2501f7a59f74905cf4bf22b48c8b"
+      },
+      "code": {
+        "skills/private-chat/SKILL.md": null,
+        "skills/private-chat/bot-adapter.json": null,
+        "src/qqbot/features/loader.py": "7866770c5c73e8055253dfb33922e6223447c09a866748d410d609f7349e3454",
+        "tests/interfaces/test_experiment_console.py": "e845659792bc3ae734efe26cb34ecb75c4e3967956497e51625021895e2ceabb",
+        "tests/interfaces/test_webui.py": "6c2ddc6d4cd42d5f1eaac700b0bd1ee24fb10093b22655b5f8bac5cfae32eead"
+      }
+    },
+    "report": ".quality/code-quality-gate/PRIVATE-CHAT-SKILL-014/red-e4844e07-1c34-4a27-b34f-df57622ce225.md"
+  },
+  "green": {
+    "time": "2026-10-16T06:08:12.413Z",
+    "snapshot": {
+      "contract": "757beeaba61d691452af90c3706f096a4732d75db39bd3c442a7589a49c1a2cf",
+      "protected": {
+        ".code-quality-gate/ci-setup.sh": "8c6636d8a04487aa9d8c623fce23aaab751bec431c25aa8a402a841532a8a69f",
+        ".code-quality-gate/history/PRIVATE-CHAT-SKILL-014-original.zip": "7f56a2b4d58482afc31352224cfa8c100157544d51f32dbe645936c9d0398642",
+        ".code-quality-gate/history/PRIVATE-CHAT-SKILL-014-resource-failure.zip": "d17087b5bfdc9c4f44ba2a035db0114b8aaea256f4d011313f3e314730c977e4",
+        ".code-quality-gate/tasks/PRIVATE-CHAT-SKILL-014.json": "a87611431fbe591fdb623ee7524281974f5d288fbc5591862693f5b3315bade5",
+        ".importlinter": "dbe30e5e76cf5a7c1c2377d8ea87502421d2eb93c175711447bab2baee6f1eca",
+        "quality.config.json": "8a4e9be541e7d2000760b376590f0884d1d42eb6c65c57db0064414ffea918b4",
+        "tests/agent/test_private_chat_skill.py": "f36d6ecdcf90a24e7a81763c7bcaedee5b8cc7d8a2bfc86386b835d9e6c30d4d",
+        "tools/quality/checks.py": "6fa2eb95acb56139a72eb7f32b87c7672b64e2ebadd25d2c34d435a2b7392353",
+        "tools/quality/junit_report.py": "082cff7fb89c4f5cac8d71a198185f857b5d2501f7a59f74905cf4bf22b48c8b"
+      },
+      "code": {
+        "skills/private-chat/SKILL.md": "5c858c695df8d82fd4f8507c171453ee71d3da3e9e68d294e856950160075a80",
+        "skills/private-chat/bot-adapter.json": "90c400ef8cbc4ebd61ae9aacd17fd1357f995c70ee649cc951b3c119100bc5b9",
+        "src/qqbot/features/loader.py": "8ece69dc18c0b2bff92bd5bc7ea83a6e164756ceb06aed74a988ae690c2ea1f1",
+        "tests/interfaces/test_experiment_console.py": "f22c480356290056ee674eacb11e1fe9c7175a9538680696568e792df567e73e",
+        "tests/interfaces/test_webui.py": "6c2ddc6d4cd42d5f1eaac700b0bd1ee24fb10093b22655b5f8bac5cfae32eead"
+      }
+    },
+    "report": ".quality/code-quality-gate/PRIVATE-CHAT-SKILL-014/green-836e0fda-51cd-4cf2-afbf-f6daa2fc25cc.md"
+  }
+}

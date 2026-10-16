@@ -1,4 +1,4 @@
 {
-  "manifest": ".code-quality-gate/tasks/WIKI-READ-BOUNDARIES-013.json",
+  "manifest": ".code-quality-gate/tasks/PRIVATE-CHAT-SKILL-014.json",
   "config": "quality.config.json"
 }

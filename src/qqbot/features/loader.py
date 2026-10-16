@@ -446,6 +446,8 @@ def _entry_callable(manifest: ExtensionManifest, default_attribute: str):
 
 def enabled_skills(config: Config) -> frozenset[str]:
     names = {"group-chat", "goutoujunshi", "goutoujunshi-conversation"}
+    if getattr(config, "private_enabled", False):
+        names.add("private-chat")
     for extension in getattr(config, "extensions", ()) or ():
         manifest = MANIFESTS.get(extension)
         if manifest is not None:

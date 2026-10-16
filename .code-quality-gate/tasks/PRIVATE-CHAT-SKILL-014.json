@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "id": "PRIVATE-CHAT-SKILL-014",
+  "title": "Ship default private conversation guidance",
+  "requirements": [
+    "Default enabled skills include a private-only always-on conversation skill.",
+    "Private guidance preserves scope isolation, does not grant tools or promise private scheduling."
+  ],
+  "testFiles": [
+    "tests/agent/test_private_chat_skill.py"
+  ],
+  "codeFiles": [
+    "skills/private-chat/SKILL.md",
+    "src/qqbot/features/loader.py",
+    "skills/private-chat/bot-adapter.json",
+    "tests/interfaces/test_experiment_console.py",
+    "tests/interfaces/test_webui.py"
+  ],
+  "testChecks": [
+    "private-chat-skill"
+  ],
+  "protectedFiles": [
+    "tools/quality/checks.py",
+    "tools/quality/junit_report.py",
+    ".importlinter",
+    ".code-quality-gate/ci-setup.sh",
+    ".code-quality-gate/history/PRIVATE-CHAT-SKILL-014-original.zip",
+    ".code-quality-gate/history/PRIVATE-CHAT-SKILL-014-resource-failure.zip"
+  ],
+  "maxAttempts": 9
+}

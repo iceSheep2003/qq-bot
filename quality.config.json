@@ -629,6 +629,37 @@
             "equals": 0
           }
         ]
+      },
+      {
+        "id": "private-chat-skill",
+        "title": "Default private chat instructions and audience isolation",
+        "command": [
+          ".venv/bin/python",
+          "-m",
+          "pytest",
+          "tests/agent/test_private_chat_skill.py",
+          "-q",
+          "--junitxml=.quality/private-chat-skill.xml"
+        ],
+        "report": ".quality/private-chat-skill.xml",
+        "format": "junit",
+        "metrics": [
+          {
+            "name": "Cases",
+            "path": "tests",
+            "min": 3
+          },
+          {
+            "name": "Success rate",
+            "path": "successRate",
+            "equals": 100
+          },
+          {
+            "name": "Skipped",
+            "path": "skipped",
+            "equals": 0
+          }
+        ]
       }
     ]
   }

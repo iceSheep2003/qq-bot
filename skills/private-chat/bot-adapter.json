@@ -1,0 +1,9 @@
+{
+  "always_on": true,
+  "triggers": [],
+  "sections": [
+    "\u5bf9\u8bdd\u89c4\u5219"
+  ],
+  "priority": 20,
+  "max_chars": 2000
+}
