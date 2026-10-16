@@ -75,3 +75,21 @@ def test_topic_or_slang_change_also_enters_publication_window(tmp_path):
     now[0] = 700
 
     assert sync.refresh().published is True
+
+
+def test_sync_check_interval_avoids_scanning_legacy_store_every_turn(tmp_path):
+    now = [100]
+    calls = [0]
+
+    def load():
+        calls[0] += 1
+        return {"memories": [], "topics": [], "slang": []}
+
+    sync = LegacyWikiSynchronizer(load, tmp_path, check_interval_seconds=60, clock=lambda: now[0])
+    sync.refresh()
+    now[0] = 110
+    sync.refresh()
+    assert calls[0] == 1
+    now[0] = 161
+    sync.refresh()
+    assert calls[0] == 2

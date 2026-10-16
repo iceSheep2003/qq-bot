@@ -30,21 +30,31 @@ class LegacyWikiSynchronizer:
         policy: WikiUpdatePolicy | None = None,
         migration: WikiMigration | None = None,
         clock: Callable[[], int] = lambda: int(time.time()),
+        check_interval_seconds: int = 0,
     ) -> None:
         self._load = snapshot_loader
         self._root = Path(root)
         self._policy = policy or WikiUpdatePolicy()
         self._migration = migration or WikiMigration()
         self._clock = clock
+        self._check_interval_seconds = max(0, int(check_interval_seconds))
+        self._last_checked_at: int | None = None
         self._last_source_version: str | None = None
         self._last_published_at: int | None = None
         self._pending_since: int | None = None
 
     def refresh(self, *, force: bool = False) -> WikiSyncReport:
+        now = int(self._clock())
+        if (
+            not force
+            and self._last_checked_at is not None
+            and now - self._last_checked_at < self._check_interval_seconds
+        ):
+            return WikiSyncReport(False, False, self._last_source_version or "")
+        self._last_checked_at = now
         rows = self._load()
         source_version = published_version(rows)
         changed = source_version != self._last_source_version
-        now = int(self._clock())
         if changed and self._pending_since is None:
             self._pending_since = now
         if not changed and self._pending_since is None:

@@ -1535,8 +1535,9 @@
       "test_deferred_change_publishes_when_time_window_expires",
       "test_sync_batches_changed_legacy_rows_before_writing",
       "test_sync_can_be_forced_for_manual_correction",
+      "test_sync_check_interval_avoids_scanning_legacy_store_every_turn",
       "test_topic_or_slang_change_also_enters_publication_window"
     ],
-    "assertions": 10
+    "assertions": 12
   }
 }

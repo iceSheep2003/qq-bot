@@ -55,9 +55,14 @@ def configured_wiki_reader(db_path: Path | None = None) -> WikiReader | None:
     if os.getenv("BOT_WIKI_SYNC_LEGACY", "false").strip().lower() == "true":
         if db_path is None:
             raise ValueError("BOT_WIKI_SYNC_LEGACY requires a database path")
+        try:
+            check_interval = max(0, int(os.getenv("BOT_WIKI_SYNC_CHECK_SECONDS", "60")))
+        except ValueError as exc:
+            raise ValueError("BOT_WIKI_SYNC_CHECK_SECONDS must be an integer") from exc
         synchronizer = LegacyWikiSynchronizer(
             lambda: read_legacy_database(db_path),
             root,
+            check_interval_seconds=check_interval,
         )
     return FileBackedWikiReader(root, ttl_seconds=ttl, synchronizer=synchronizer)
 

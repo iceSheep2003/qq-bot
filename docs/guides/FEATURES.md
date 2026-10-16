@@ -79,6 +79,7 @@
 | `BOT_WIKI_ROOT` | `./data/wiki` | Markdown Wiki 根目录 |
 | `BOT_WIKI_CONTEXT_TTL_SECONDS` | `300` | 选中 Wiki 上下文的本地缓存 TTL |
 | `BOT_WIKI_SYNC_LEGACY` | `false` | 是否按批量策略从旧记忆只读同步 Wiki |
+| `BOT_WIKI_SYNC_CHECK_SECONDS` | `60` | 同步器检查旧库的最短间隔 |
 
 **四步都存在**：数据模型、提炼去重分离、混合检索、生命周期。
 
