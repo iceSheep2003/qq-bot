@@ -82,6 +82,9 @@ from qqbot.actions.tools.registry import built_in_tools
 from qqbot.agent.cognition.routes import configured_scene_routes
 from qqbot.infrastructure.storage.wiki_runtime import configured_wiki_reader
 from qqbot.infrastructure.storage.private_chat import PrivateChatQuota
+from qqbot.infrastructure.storage.personal_memory import PersonalMemoryStore
+from qqbot.agent.memory.continuity import PersonalContinuity
+from qqbot.agent.context import Trust
 
 log = logging.getLogger(__name__)
 
@@ -168,6 +171,12 @@ class BotApp:
         features = build_features(
             config, model, built_in_tools(memories), memory=memory
         )
+        personal_continuity = PersonalContinuity(PersonalMemoryStore(database), config.group_allowlist)
+        if config.private_enabled:
+            features.context.register(
+                "personal_continuity", personal_continuity.context,
+                trust=Trust.DERIVED, priority=15, max_chars=1000,
+            )
         tool_handlers = BuiltinHandlers(
             conversations,
             ontology,

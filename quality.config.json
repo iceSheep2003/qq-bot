@@ -691,6 +691,37 @@
             "equals": 0
           }
         ]
+      },
+      {
+        "id": "personal-continuity",
+        "title": "Automatic person continuity with no chat control surface",
+        "command": [
+          ".venv/bin/python",
+          "-m",
+          "pytest",
+          "tests/agent/test_personal_continuity.py",
+          "-q",
+          "--junitxml=.quality/personal-continuity.xml"
+        ],
+        "report": ".quality/personal-continuity.xml",
+        "format": "junit",
+        "metrics": [
+          {
+            "name": "Cases",
+            "path": "tests",
+            "min": 21
+          },
+          {
+            "name": "Success rate",
+            "path": "successRate",
+            "equals": 100
+          },
+          {
+            "name": "Skipped",
+            "path": "skipped",
+            "equals": 0
+          }
+        ]
       }
     ]
   }

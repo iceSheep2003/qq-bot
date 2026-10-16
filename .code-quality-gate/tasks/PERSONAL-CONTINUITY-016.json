@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "id": "PERSONAL-CONTINUITY-016",
+  "title": "Recall a familiar person without importing private conversations",
+  "requirements": [
+    "In private, recognize the same QQ identity using at most three bounded, active public self-reported preferences from allowlisted groups; exclude group discussion, relationships, other people, personal visibility, private sources and unsupported or expired facts.",
+    "No private-to-group propagation or group context injection. Sources remain authoritative; revoked or deleted sources cannot be reimported through caches or copied global profiles.",
+    "Chat users cannot enable or disable internal memory mechanics. Familiarity is automatic; backend-only controls remain inaccessible from chat or Skills. Former switch phrases follow normal private admission and never bypass daily cost quota or produce configuration acknowledgements.",
+    "Wire medium-trust dynamic context in bootstrap; shared facts do not alter stable prefix and ordinary chat behavior remains unchanged."
+  ],
+  "testFiles": [
+    "tests/agent/test_personal_continuity.py"
+  ],
+  "codeFiles": [
+    "src/qqbot/agent/memory/continuity.py",
+    "src/qqbot/infrastructure/storage/personal_memory.py",
+    "src/qqbot/infrastructure/storage/database.py",
+    "src/qqbot/contracts/ports.py",
+    "src/qqbot/agent/service.py",
+    "src/qqbot/bootstrap/app.py",
+    "docs/architecture/README.md",
+    "docs/architecture/RUNTIME.md",
+    "docs/development/ROADMAP.md",
+    "docs/guides/QUICKSTART.md",
+    "skills/private-chat/SKILL.md"
+  ],
+  "testChecks": [
+    "personal-continuity"
+  ],
+  "protectedFiles": [
+    "tools/quality/checks.py",
+    "tools/quality/junit_report.py",
+    "tests/support.py",
+    "tests/agent/test_service.py",
+    ".importlinter",
+    ".code-quality-gate/ci-setup.sh",
+    ".code-quality-gate/TEST_MIGRATION.json",
+    ".code-quality-gate/history/PERSONAL-CONTINUITY-016-chat-controls-rejected.zip"
+  ],
+  "maxAttempts": 11
+}

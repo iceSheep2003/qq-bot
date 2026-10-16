@@ -1,0 +1,71 @@
+{
+  "version": 1,
+  "id": "PERSONAL-CONTINUITY-016",
+  "attempts": 1,
+  "red": {
+    "time": "2026-10-16T06:23:06.856Z",
+    "snapshot": {
+      "contract": "1fab9d6f7249a05e68a477536122c45d6c76264ec7507bf4d612c1bb6d3adf8f",
+      "protected": {
+        ".code-quality-gate/TEST_MIGRATION.json": "6bf16c4632fdb9e2612965790d090afbfcd891b69c24b2514760c120e2c326b1",
+        ".code-quality-gate/ci-setup.sh": "8c6636d8a04487aa9d8c623fce23aaab751bec431c25aa8a402a841532a8a69f",
+        ".code-quality-gate/history/PERSONAL-CONTINUITY-016-chat-controls-rejected.zip": "10f19d653c28722e6cdeb9d76c950cb78b444a1f1a3dc19a4873d917d70bbe72",
+        ".code-quality-gate/tasks/PERSONAL-CONTINUITY-016.json": "b9fdbfea6ef5fada11c0c66f544fef5b4dc6f1c8850efcf3b33f00e4f5f7d4b4",
+        ".importlinter": "dbe30e5e76cf5a7c1c2377d8ea87502421d2eb93c175711447bab2baee6f1eca",
+        "quality.config.json": "c89a549f5a553bf83e1e5c4259c46f2cbcfcf63620daad98b98f72c3091da1db",
+        "tests/agent/test_personal_continuity.py": "060b739dc0f6f6496c01bd280d5e634240dd3f86ae97b5178c0d201b5ec9def3",
+        "tests/agent/test_service.py": "7534755f6d0b99f3571dcf1aa0861e63c00d5ab423c64544248ed7369b4391fc",
+        "tests/support.py": "8f8b8249170d8d68674e2ea28eaf1aa1edac8df894091c7747932c998ec335c0",
+        "tools/quality/checks.py": "6fa2eb95acb56139a72eb7f32b87c7672b64e2ebadd25d2c34d435a2b7392353",
+        "tools/quality/junit_report.py": "082cff7fb89c4f5cac8d71a198185f857b5d2501f7a59f74905cf4bf22b48c8b"
+      },
+      "code": {
+        "docs/architecture/README.md": "ee4e3360f957919f3d62a80fc734b92a7aad973c3e0f93be4d4ab4dd9000f8aa",
+        "docs/architecture/RUNTIME.md": "886dd09df78ef930a6ff658f7f80640aaaf0a2e67d1f0b68de3388630508c785",
+        "docs/development/ROADMAP.md": "a5374a6535fbc25a7ca7ed30c9397400969db3d0778ab3f17e887949f6fd173f",
+        "docs/guides/QUICKSTART.md": "9c03fae0c87352a5e76af5cc598430aefe344600881b74b50e3e4ba21cc2a659",
+        "skills/private-chat/SKILL.md": "8a6cb85ec0477b1d27653c803b7c0a62238860a7ae4d4add9b2004b4c62d3f55",
+        "src/qqbot/agent/memory/continuity.py": "30d8adec9ce2745129787c796eef759e205a5a7cc23f1d84ec4ddd5285f91b8d",
+        "src/qqbot/agent/service.py": "6197db41e917dd81382b411cc122a2a4a0664c33f7705bc370f119c5e122b144",
+        "src/qqbot/bootstrap/app.py": "a7aa0f0a90ae74430cc9314ca11aafcedab8bf4818a429c924b23401b95afb59",
+        "src/qqbot/contracts/ports.py": "2462553e07bb58d6d3fed228ec3f0741ec58e5000d5aff0ae0ada0c294eec203",
+        "src/qqbot/infrastructure/storage/database.py": "e8470f1c4e30df18e3748037b01f925228bc85aab25728a025ba0075b76b5a6e",
+        "src/qqbot/infrastructure/storage/personal_memory.py": "a734845896ebb1865333296f86f5189c4e23dbffd5d8befd4c697d22b81ca102"
+      }
+    },
+    "report": ".quality/code-quality-gate/PERSONAL-CONTINUITY-016/red-d28abfcc-4c15-4311-bc23-229042bf75c4.md"
+  },
+  "green": {
+    "time": "2026-10-16T06:25:10.319Z",
+    "snapshot": {
+      "contract": "1fab9d6f7249a05e68a477536122c45d6c76264ec7507bf4d612c1bb6d3adf8f",
+      "protected": {
+        ".code-quality-gate/TEST_MIGRATION.json": "6bf16c4632fdb9e2612965790d090afbfcd891b69c24b2514760c120e2c326b1",
+        ".code-quality-gate/ci-setup.sh": "8c6636d8a04487aa9d8c623fce23aaab751bec431c25aa8a402a841532a8a69f",
+        ".code-quality-gate/history/PERSONAL-CONTINUITY-016-chat-controls-rejected.zip": "10f19d653c28722e6cdeb9d76c950cb78b444a1f1a3dc19a4873d917d70bbe72",
+        ".code-quality-gate/tasks/PERSONAL-CONTINUITY-016.json": "b9fdbfea6ef5fada11c0c66f544fef5b4dc6f1c8850efcf3b33f00e4f5f7d4b4",
+        ".importlinter": "dbe30e5e76cf5a7c1c2377d8ea87502421d2eb93c175711447bab2baee6f1eca",
+        "quality.config.json": "c89a549f5a553bf83e1e5c4259c46f2cbcfcf63620daad98b98f72c3091da1db",
+        "tests/agent/test_personal_continuity.py": "060b739dc0f6f6496c01bd280d5e634240dd3f86ae97b5178c0d201b5ec9def3",
+        "tests/agent/test_service.py": "7534755f6d0b99f3571dcf1aa0861e63c00d5ab423c64544248ed7369b4391fc",
+        "tests/support.py": "8f8b8249170d8d68674e2ea28eaf1aa1edac8df894091c7747932c998ec335c0",
+        "tools/quality/checks.py": "6fa2eb95acb56139a72eb7f32b87c7672b64e2ebadd25d2c34d435a2b7392353",
+        "tools/quality/junit_report.py": "082cff7fb89c4f5cac8d71a198185f857b5d2501f7a59f74905cf4bf22b48c8b"
+      },
+      "code": {
+        "docs/architecture/README.md": "a807f14a46799dfa33d0005aa439b437d66ee3dbe9020c033620759a2317e621",
+        "docs/architecture/RUNTIME.md": "b8d41d039c86f72744d76fefa3a7b50a291e4341e589167ec471a93ca4163b69",
+        "docs/development/ROADMAP.md": "eb2b36a82dbb50421c0de77d35c04f8db0026f869418ebc35658a1a38fda8bb4",
+        "docs/guides/QUICKSTART.md": "660f62f2066dccd1bce7365de19bbc410bdacf3d0671b82d9861759aff8d9597",
+        "skills/private-chat/SKILL.md": "fa7761d0013b50481333688792a50f91aed98d52b9cee9423afb4d1c8c8f0039",
+        "src/qqbot/agent/memory/continuity.py": "a52cf217e7fe2ff335cf411a75ff5b00468ed757c95cd57a0c24948ac822e038",
+        "src/qqbot/agent/service.py": "e113a2b8d5a8ee6079f8dc16bfd8224aa382411919758a8e7e3e0672e478bd1c",
+        "src/qqbot/bootstrap/app.py": "c1f6217a93f8e1dde26c416c77df26ad0d83b6742cab583a07fd73c98740e774",
+        "src/qqbot/contracts/ports.py": "210381c80888b81b0cf7e6dd339d5100edac1d0b73505c8b9f90e54347bbe23d",
+        "src/qqbot/infrastructure/storage/database.py": "e8470f1c4e30df18e3748037b01f925228bc85aab25728a025ba0075b76b5a6e",
+        "src/qqbot/infrastructure/storage/personal_memory.py": "a734845896ebb1865333296f86f5189c4e23dbffd5d8befd4c697d22b81ca102"
+      }
+    },
+    "report": ".quality/code-quality-gate/PERSONAL-CONTINUITY-016/green-49bae1d0-e248-41c1-abf4-c47b6d29b9d8.md"
+  }
+}
