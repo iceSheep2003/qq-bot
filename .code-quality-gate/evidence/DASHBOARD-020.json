@@ -1,7 +1,7 @@
 {
   "version": 1,
   "id": "DASHBOARD-020",
-  "attempts": 4,
+  "attempts": 5,
   "red": {
     "time": "2026-10-16T07:16:56.376Z",
     "snapshot": {
@@ -35,7 +35,7 @@
     "report": ".quality/code-quality-gate/DASHBOARD-020/red-6fdd9f34-6524-456c-89f6-2daa9d3e5a2e.md"
   },
   "green": {
-    "time": "2026-10-16T13:30:49.654Z",
+    "time": "2026-10-16T17:51:22.356Z",
     "snapshot": {
       "contract": "8a1023f328acbfaf0e0adebfaec5056a99126bead3fcf4e471493afafdc9a851",
       "protected": {
@@ -61,9 +61,9 @@
         "src/qqbot/interfaces/webui/static/advanced.html": "82dcc0bb614497f78122eb0ffd5b52bfbf9b7ea7cd9b2d25431c95ebfa09bbb9",
         "src/qqbot/interfaces/webui/static/dashboard.css": "6965b1eb904f8c02e6dfa542e15d4ccb6a2dd350ab8d6daa1bf6d95a691c83fb",
         "src/qqbot/interfaces/webui/static/dashboard.js": "26743a885c36c16a469ace359197643529d2f0121bce1f8b0785975e92e7902f",
-        "src/qqbot/interfaces/webui/static/index.html": "82dcc0bb614497f78122eb0ffd5b52bfbf9b7ea7cd9b2d25431c95ebfa09bbb9"
+        "src/qqbot/interfaces/webui/static/index.html": "f27397157a268350ee1fc1893b09c30f2da8da68c55afdd8cdde929700efbf93"
       }
     },
-    "report": ".quality/code-quality-gate/DASHBOARD-020/green-5c2e3bc5-0218-4de0-b38f-1d49238b6bf2.md"
+    "report": ".quality/code-quality-gate/DASHBOARD-020/green-d8ce88da-c781-4be2-8530-a0946b69b0eb.md"
   }
 }
