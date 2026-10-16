@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import time
+import json
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
@@ -42,6 +43,31 @@ class LegacyWikiSynchronizer:
         self._last_source_version: str | None = None
         self._last_published_at: int | None = None
         self._pending_since: int | None = None
+        self._state_path = self._root / ".wiki-sync-state.json"
+        self._load_state()
+
+    def _load_state(self) -> None:
+        try:
+            state = json.loads(self._state_path.read_text(encoding="utf-8"))
+            self._last_source_version = state.get("source_version") or None
+            published_at = state.get("published_at")
+            self._last_published_at = int(published_at) if published_at is not None else None
+        except (OSError, ValueError, TypeError):
+            return
+
+    def _save_state(self) -> None:
+        self._root.mkdir(parents=True, exist_ok=True)
+        temporary = self._state_path.with_suffix(".tmp")
+        temporary.write_text(
+            json.dumps(
+                {"source_version": self._last_source_version, "published_at": self._last_published_at},
+                ensure_ascii=False,
+                sort_keys=True,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        temporary.replace(self._state_path)
 
     def refresh(self, *, force: bool = False) -> WikiSyncReport:
         now = int(self._clock())
@@ -75,5 +101,6 @@ class LegacyWikiSynchronizer:
         self._last_source_version = source_version
         self._last_published_at = now
         self._pending_since = None
+        self._save_state()
         return WikiSyncReport(True, True, source_version, migration)
 

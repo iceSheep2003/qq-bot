@@ -93,3 +93,13 @@ def test_sync_check_interval_avoids_scanning_legacy_store_every_turn(tmp_path):
     now[0] = 161
     sync.refresh()
     assert calls[0] == 2
+
+
+def test_sync_persists_published_source_version_across_restarts(tmp_path):
+    snapshot = {"memories": [{"id": i, "scope": "group:1", "user_id": "_group_", "content": f"事实{i}", "status": "active", "created_at": i, "updated_at": i, "confidence": 0.8} for i in range(1, 9)], "topics": [], "slang": []}
+    first = LegacyWikiSynchronizer(lambda: snapshot, tmp_path)
+    assert first.refresh().published is True
+
+    second = LegacyWikiSynchronizer(lambda: snapshot, tmp_path)
+
+    assert second.refresh().published is False
