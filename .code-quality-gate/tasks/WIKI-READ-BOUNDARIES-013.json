@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "id": "WIKI-READ-BOUNDARIES-013",
+  "title": "Enforce Wiki private ownership and request budgets",
+  "requirements": [
+    "Never expose another private subject page or preview through a mismatched scope or page identity.",
+    "Cached selected reads honor each requested limit, including zero."
+  ],
+  "testFiles": [
+    "tests/agent/test_wiki_read_boundaries.py"
+  ],
+  "codeFiles": [
+    "src/qqbot/agent/memory/wiki/reader.py",
+    "src/qqbot/agent/memory/wiki/cache.py"
+  ],
+  "testChecks": [
+    "wiki-read-boundaries"
+  ],
+  "protectedFiles": [
+    "tools/quality/checks.py",
+    "tools/quality/junit_report.py",
+    ".importlinter",
+    ".code-quality-gate/ci-setup.sh"
+  ],
+  "maxAttempts": 12
+}

@@ -18,7 +18,7 @@ from typing import Any
 
 
 WikiLoader = Callable[[str, str, str], Any]
-CacheKey = tuple[str, str, str, str, str]
+CacheKey = tuple[str, str, str, str, str, int | None]
 
 
 def _query_fingerprint(query: str) -> str:
@@ -82,6 +82,7 @@ class WikiContextCache:
         loader: WikiLoader,
         *,
         read_mode: str = "selected",
+        selection_limit: int | None = None,
     ) -> Any:
         """Return cached context or load the relevant Wiki fragments.
 
@@ -100,6 +101,7 @@ class WikiContextCache:
             _query_fingerprint(query),
             str(wiki_version),
             str(read_mode),
+            selection_limit,
         )
         now = self._clock()
         entry = self._entries.get(key)

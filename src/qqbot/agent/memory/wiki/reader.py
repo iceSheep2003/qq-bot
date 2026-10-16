@@ -74,6 +74,7 @@ class WikiReader:
     ) -> dict:
         if mode not in {"preview", "selected", "full"}:
             raise ValueError(f"unknown Wiki read mode: {mode}")
+        limit = max(0, int(limit))
         pages = self._pages_for(scope, subject)
         version = published_version([page.version for page in pages])
         return self.cache.get_or_load(
@@ -83,12 +84,17 @@ class WikiReader:
             version,
             lambda _scope, _subject, _query: self._compile(pages, _query, mode, limit),
             read_mode=mode,
+            selection_limit=limit if mode == "selected" else None,
         )
 
     def _pages_for(self, scope: str, subject: str) -> list[WikiPage]:
         if scope.startswith("private:"):
+            if scope != f"private:{subject}":
+                return []
             page = self._pages.get(f"private/{subject}")
-            return [page] if page is not None and page.scope == "private" else []
+            return [page] if (
+                page is not None and page.scope == "private" and page.entity_id == subject
+            ) else []
         if not scope.startswith("group:"):
             return []
         group_id = scope.split(":", 1)[1]

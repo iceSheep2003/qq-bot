@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "id": "WIKI-READ-BOUNDARIES-013",
+  "attempts": 1,
+  "red": {
+    "time": "2026-10-16T05:58:01.292Z",
+    "snapshot": {
+      "contract": "31605806c29f065589d4277fdd5b345378dba8e3bd4913d50c1eaa8000b880b4",
+      "protected": {
+        ".code-quality-gate/ci-setup.sh": "8c6636d8a04487aa9d8c623fce23aaab751bec431c25aa8a402a841532a8a69f",
+        ".code-quality-gate/tasks/WIKI-READ-BOUNDARIES-013.json": "9968251250a95fa92e076efa615bf612c756eb346a32ff893fd4b3e08dbea3be",
+        ".importlinter": "dbe30e5e76cf5a7c1c2377d8ea87502421d2eb93c175711447bab2baee6f1eca",
+        "quality.config.json": "ebba2cbdc84bee4b2fb3bf545da9bb1f00b0cc30072f888f4efb35fc7b21aa4d",
+        "tests/agent/test_wiki_read_boundaries.py": "d371705665a12233e8f287edfc0c3b85b5eb1fed17a50c5358550287164b310a",
+        "tools/quality/checks.py": "6fa2eb95acb56139a72eb7f32b87c7672b64e2ebadd25d2c34d435a2b7392353",
+        "tools/quality/junit_report.py": "082cff7fb89c4f5cac8d71a198185f857b5d2501f7a59f74905cf4bf22b48c8b"
+      },
+      "code": {
+        "src/qqbot/agent/memory/wiki/cache.py": "718b4b6894fdecee1cdee88613c6404e29f02ed6cf30f673e42cfc6a306b6815",
+        "src/qqbot/agent/memory/wiki/reader.py": "2b90aa848e383447a0f6a1518d51b864b86337414bb939c75e95a815ed6db8fb"
+      }
+    },
+    "report": ".quality/code-quality-gate/WIKI-READ-BOUNDARIES-013/red-0d20e10e-96a5-448e-ac8e-9c41fb260e71.md"
+  },
+  "green": {
+    "time": "2026-10-16T05:59:04.195Z",
+    "snapshot": {
+      "contract": "31605806c29f065589d4277fdd5b345378dba8e3bd4913d50c1eaa8000b880b4",
+      "protected": {
+        ".code-quality-gate/ci-setup.sh": "8c6636d8a04487aa9d8c623fce23aaab751bec431c25aa8a402a841532a8a69f",
+        ".code-quality-gate/tasks/WIKI-READ-BOUNDARIES-013.json": "9968251250a95fa92e076efa615bf612c756eb346a32ff893fd4b3e08dbea3be",
+        ".importlinter": "dbe30e5e76cf5a7c1c2377d8ea87502421d2eb93c175711447bab2baee6f1eca",
+        "quality.config.json": "ebba2cbdc84bee4b2fb3bf545da9bb1f00b0cc30072f888f4efb35fc7b21aa4d",
+        "tests/agent/test_wiki_read_boundaries.py": "d371705665a12233e8f287edfc0c3b85b5eb1fed17a50c5358550287164b310a",
+        "tools/quality/checks.py": "6fa2eb95acb56139a72eb7f32b87c7672b64e2ebadd25d2c34d435a2b7392353",
+        "tools/quality/junit_report.py": "082cff7fb89c4f5cac8d71a198185f857b5d2501f7a59f74905cf4bf22b48c8b"
+      },
+      "code": {
+        "src/qqbot/agent/memory/wiki/cache.py": "fd7528e529ac25491882c4968efe0869d831392dce87301c9e2c501b09c0dc91",
+        "src/qqbot/agent/memory/wiki/reader.py": "4940ff009fb80146c80c7938c4ea189106c1c812346b9e33037acd6ec65cbc88"
+      }
+    },
+    "report": ".quality/code-quality-gate/WIKI-READ-BOUNDARIES-013/green-00b7cca0-4812-4ecd-a902-8857cf49012a.md"
+  }
+}

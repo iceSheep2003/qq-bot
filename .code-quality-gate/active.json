@@ -1,4 +1,4 @@
 {
-  "manifest": ".code-quality-gate/tasks/EMBEDDING-RETIREMENT-012.json",
+  "manifest": ".code-quality-gate/tasks/WIKI-READ-BOUNDARIES-013.json",
   "config": "quality.config.json"
 }

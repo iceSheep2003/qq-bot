@@ -598,6 +598,37 @@
             "min": 4
           }
         ]
+      },
+      {
+        "id": "wiki-read-boundaries",
+        "title": "Wiki private ownership and cached selection budgets",
+        "command": [
+          ".venv/bin/python",
+          "-m",
+          "pytest",
+          "tests/agent/test_wiki_read_boundaries.py",
+          "-q",
+          "--junitxml=.quality/wiki-read-boundaries.xml"
+        ],
+        "report": ".quality/wiki-read-boundaries.xml",
+        "format": "junit",
+        "metrics": [
+          {
+            "name": "Cases",
+            "path": "tests",
+            "min": 7
+          },
+          {
+            "name": "Success rate",
+            "path": "successRate",
+            "equals": 100
+          },
+          {
+            "name": "Skipped",
+            "path": "skipped",
+            "equals": 0
+          }
+        ]
       }
     ]
   }
