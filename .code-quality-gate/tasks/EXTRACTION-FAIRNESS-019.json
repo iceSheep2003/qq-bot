@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "id": "EXTRACTION-FAIRNESS-019",
+  "title": "Apply per-scope cost budget to memory extraction",
+  "requirements": [
+    "Default background extraction admits at most two jobs per conversation scope per rolling minute in addition to existing single-flight and shared concurrency protections.",
+    "Admission budget is independent across groups and private users, recovers after the window, and is charged for failed provider work without charging ineligible or already-pending requests.",
+    "Keep existing extraction cursor, message-count triggers, compaction, cancellation and shutdown behavior; document remaining live validation separately from completed local development."
+  ],
+  "testFiles": [
+    "tests/agent/test_extraction_fairness.py"
+  ],
+  "codeFiles": [
+    "src/qqbot/agent/conversation/maintenance.py",
+    "src/qqbot/agent/fairness.py",
+    "docs/architecture/RUNTIME.md",
+    "docs/development/ROADMAP.md",
+    "docs/guides/ROLLOUT.md",
+    "docs/README.md"
+  ],
+  "testChecks": [
+    "extraction-fairness"
+  ],
+  "protectedFiles": [
+    "tools/quality/checks.py",
+    "tools/quality/junit_report.py",
+    ".importlinter",
+    ".code-quality-gate/ci-setup.sh",
+    "tests/agent/test_conversation_maintenance.py"
+  ],
+  "maxAttempts": 12
+}

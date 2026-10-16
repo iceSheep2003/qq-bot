@@ -784,6 +784,37 @@
             "equals": 0
           }
         ]
+      },
+      {
+        "id": "extraction-fairness",
+        "title": "Bound per-scope background extraction cost fairly",
+        "command": [
+          ".venv/bin/python",
+          "-m",
+          "pytest",
+          "tests/agent/test_extraction_fairness.py",
+          "-q",
+          "--junitxml=.quality/extraction-fairness.xml"
+        ],
+        "report": ".quality/extraction-fairness.xml",
+        "format": "junit",
+        "metrics": [
+          {
+            "name": "Cases",
+            "path": "tests",
+            "min": 4
+          },
+          {
+            "name": "Success rate",
+            "path": "successRate",
+            "equals": 100
+          },
+          {
+            "name": "Skipped",
+            "path": "skipped",
+            "equals": 0
+          }
+        ]
       }
     ]
   }

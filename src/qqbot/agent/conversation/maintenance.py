@@ -24,6 +24,7 @@ class ConversationMaintenance:
         extract_every: int,
         compactor: ConversationCompactionPort | None = None,
         extraction_concurrency: int = 2,
+        extraction_budget: ScopeWorkBudget | None = None,
         compaction_budget: ScopeWorkBudget | None = None,
         logger: logging.Logger | None = None,
     ) -> None:
@@ -34,6 +35,7 @@ class ConversationMaintenance:
         self._extract_every = extract_every
         self._compactor = compactor
         self._extract_slots = asyncio.Semaphore(extraction_concurrency)
+        self._extraction_budget = extraction_budget if extraction_budget is not None else ScopeWorkBudget(max_per_scope=2)
         self._compaction_budget = (
             compaction_budget if compaction_budget is not None else ScopeWorkBudget(max_per_scope=2)
         )
@@ -49,6 +51,8 @@ class ConversationMaintenance:
             return False
         count = self._message_count(scope)
         if count <= 0 or count % self._extract_every:
+            return False
+        if not self._extraction_budget.admit(scope):
             return False
         self._start(self._extractions, scope, self._extract(scope))
         return True

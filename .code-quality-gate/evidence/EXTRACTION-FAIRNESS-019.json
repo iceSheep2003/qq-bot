@@ -1,0 +1,55 @@
+{
+  "version": 1,
+  "id": "EXTRACTION-FAIRNESS-019",
+  "attempts": 1,
+  "red": {
+    "time": "2026-10-16T06:40:15.143Z",
+    "snapshot": {
+      "contract": "e5410692aa3fbb74ba18bb7cb5f352dca5eaffb70f7fe40c72f1e2bc06c05544",
+      "protected": {
+        ".code-quality-gate/ci-setup.sh": "8c6636d8a04487aa9d8c623fce23aaab751bec431c25aa8a402a841532a8a69f",
+        ".code-quality-gate/tasks/EXTRACTION-FAIRNESS-019.json": "0d5cbc03925827c6c6a3dd3e1bbf1d954a39d71c8a3bc7c5316638ce7148171f",
+        ".importlinter": "dbe30e5e76cf5a7c1c2377d8ea87502421d2eb93c175711447bab2baee6f1eca",
+        "quality.config.json": "da1dcba6638f4922aab624daac1928d247369d580fad42712294e4e6c4b3ef8b",
+        "tests/agent/test_conversation_maintenance.py": "1922a07f534258f035dd247475dd633d692b687abe864dad775df3f4d1b1c88a",
+        "tests/agent/test_extraction_fairness.py": "e620d273d7bccc7b9c3baf657ac492c11adf0701cea7ba3e62f710ad60c98704",
+        "tools/quality/checks.py": "6fa2eb95acb56139a72eb7f32b87c7672b64e2ebadd25d2c34d435a2b7392353",
+        "tools/quality/junit_report.py": "082cff7fb89c4f5cac8d71a198185f857b5d2501f7a59f74905cf4bf22b48c8b"
+      },
+      "code": {
+        "docs/README.md": "34687cd53db1d6735643e0c5c9798598d7c722fed3cb2fee3b4fed0fefa7cffc",
+        "docs/architecture/RUNTIME.md": "89ec1b9c373b05e0e9575ea1072bdc29fe88e60ad062633a2568d3df689fc822",
+        "docs/development/ROADMAP.md": "eb2b36a82dbb50421c0de77d35c04f8db0026f869418ebc35658a1a38fda8bb4",
+        "docs/guides/ROLLOUT.md": null,
+        "src/qqbot/agent/conversation/maintenance.py": "79d194c823d1d05b723ecd16130cf9d533d9298cfca1a18566580d83f125b9e6",
+        "src/qqbot/agent/fairness.py": "5eb3235a8d43fd7a6f0ac0229540c0aadf46ff3e7b0ccdb6426ae92defafe8e5"
+      }
+    },
+    "report": ".quality/code-quality-gate/EXTRACTION-FAIRNESS-019/red-32174273-74c7-49d7-a4c9-3061a1be4351.md"
+  },
+  "green": {
+    "time": "2026-10-16T06:42:29.323Z",
+    "snapshot": {
+      "contract": "e5410692aa3fbb74ba18bb7cb5f352dca5eaffb70f7fe40c72f1e2bc06c05544",
+      "protected": {
+        ".code-quality-gate/ci-setup.sh": "8c6636d8a04487aa9d8c623fce23aaab751bec431c25aa8a402a841532a8a69f",
+        ".code-quality-gate/tasks/EXTRACTION-FAIRNESS-019.json": "0d5cbc03925827c6c6a3dd3e1bbf1d954a39d71c8a3bc7c5316638ce7148171f",
+        ".importlinter": "dbe30e5e76cf5a7c1c2377d8ea87502421d2eb93c175711447bab2baee6f1eca",
+        "quality.config.json": "da1dcba6638f4922aab624daac1928d247369d580fad42712294e4e6c4b3ef8b",
+        "tests/agent/test_conversation_maintenance.py": "1922a07f534258f035dd247475dd633d692b687abe864dad775df3f4d1b1c88a",
+        "tests/agent/test_extraction_fairness.py": "e620d273d7bccc7b9c3baf657ac492c11adf0701cea7ba3e62f710ad60c98704",
+        "tools/quality/checks.py": "6fa2eb95acb56139a72eb7f32b87c7672b64e2ebadd25d2c34d435a2b7392353",
+        "tools/quality/junit_report.py": "082cff7fb89c4f5cac8d71a198185f857b5d2501f7a59f74905cf4bf22b48c8b"
+      },
+      "code": {
+        "docs/README.md": "17fe1a1f5db10bd446a5f51bc289325290abd822d8196e899eacde1a9f416ce2",
+        "docs/architecture/RUNTIME.md": "a8832ab412365fe26b09d5e1bafbdd6755508ff502350b4e675387e5ba918df6",
+        "docs/development/ROADMAP.md": "ed79f717b033cec061d19c8448614fde34433baced8e40e79965b54f4e3bb76f",
+        "docs/guides/ROLLOUT.md": "6822d17aa52d0f6e45f72a8a5bf4cc68927b2b3e63e349bac758e91da4870cd0",
+        "src/qqbot/agent/conversation/maintenance.py": "65f2778a8797e282fec1b15667e0f869669599d09f93538d3fea77bd24c707b2",
+        "src/qqbot/agent/fairness.py": "5eb3235a8d43fd7a6f0ac0229540c0aadf46ff3e7b0ccdb6426ae92defafe8e5"
+      }
+    },
+    "report": ".quality/code-quality-gate/EXTRACTION-FAIRNESS-019/green-85fb5503-c753-4104-8f43-f5b9184d7c72.md"
+  }
+}

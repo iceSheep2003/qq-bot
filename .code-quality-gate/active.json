@@ -1,4 +1,4 @@
 {
-  "manifest": ".code-quality-gate/tasks/WIKI-SEMANTIC-DELTA-018.json",
+  "manifest": ".code-quality-gate/tasks/EXTRACTION-FAIRNESS-019.json",
   "config": "quality.config.json"
 }
