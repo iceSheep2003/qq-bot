@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "id": "PRIVATE-CHAT-QUOTA-015",
+  "title": "Bound daily private conversation participants",
+  "requirements": [
+    "Default 10 distinct private users per local calendar day, configurable 0..1000; the same user does not consume additional participant slots.",
+    "Persist daily admissions through restart; atomically enforce cap and reset by configured timezone day.",
+    "Deny excess or failed admission before ledger ingestion, perception, guard, reply and memory extraction; group chat and disabled private admission keep existing boundaries.",
+    "Compose persistent quota in BotApp and expose configuration in env example and management UI."
+  ],
+  "testFiles": [
+    "tests/agent/test_private_chat_admission.py"
+  ],
+  "codeFiles": [
+    "src/qqbot/infrastructure/storage/private_chat.py",
+    "src/qqbot/infrastructure/storage/database.py",
+    "src/qqbot/agent/service.py",
+    "src/qqbot/contracts/ports.py",
+    "src/qqbot/bootstrap/config.py",
+    "src/qqbot/bootstrap/app.py",
+    "src/qqbot/interfaces/webui/schema.py",
+    ".env.example",
+    "tests/bootstrap/test_config.py",
+    "docs/guides/QUICKSTART.md",
+    "src/qqbot/interfaces/webui/docs/GUIDE.md"
+  ],
+  "testChecks": [
+    "private-chat-admission"
+  ],
+  "protectedFiles": [
+    "tests/agent/test_service.py",
+    "tests/support.py",
+    "tools/quality/checks.py",
+    "tools/quality/junit_report.py",
+    ".importlinter",
+    ".code-quality-gate/ci-setup.sh",
+    ".code-quality-gate/TEST_MIGRATION.json"
+  ],
+  "maxAttempts": 12
+}

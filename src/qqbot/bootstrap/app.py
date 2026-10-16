@@ -81,6 +81,7 @@ from qqbot.infrastructure.storage.relationships import RelationshipsStore
 from qqbot.actions.tools.registry import built_in_tools
 from qqbot.agent.cognition.routes import configured_scene_routes
 from qqbot.infrastructure.storage.wiki_runtime import configured_wiki_reader
+from qqbot.infrastructure.storage.private_chat import PrivateChatQuota
 
 log = logging.getLogger(__name__)
 
@@ -224,9 +225,11 @@ class BotApp:
         # validation and dispatch follow whatever they declare.
         handlers = build_registry(config)
         scheduler = Scheduler(jobs, config.timezone, handlers.actions())
-        scheduler.sync_config(
-            config.schedules_path, config.group_allowlist, handlers.suggested_jobs()
-        )
+        # A private-only deployment has no scheduled group destinations.
+        if config.group_allowlist or config.schedules_path.exists():
+            scheduler.sync_config(
+                config.schedules_path, config.group_allowlist, handlers.suggested_jobs()
+            )
         policy = BotPolicy(
             conversation=ConversationPolicy(
                 allowed_groups=config.group_allowlist,
@@ -279,6 +282,7 @@ class BotApp:
             observation_workers=config.observer_workers,
             observation_dedupe=config.observer_dedupe,
             observation_store=ObservationOutbox(database),
+            private_admission=PrivateChatQuota(database, daily_limit=config.private_daily_user_limit),
         )
         # Last in, first out: the service drains the observation queue on the
         # way down, and those observers write to the database.
@@ -365,9 +369,10 @@ def main() -> None:
             scheduler = Scheduler(
                 JobsStore(database), config.timezone, handlers.actions()
             )
-            scheduler.sync_config(
-                config.schedules_path, config.group_allowlist, handlers.suggested_jobs()
-            )
+            if config.group_allowlist or config.schedules_path.exists():
+                scheduler.sync_config(
+                    config.schedules_path, config.group_allowlist, handlers.suggested_jobs()
+                )
             jobs = [
                 job
                 for group_id in sorted(config.group_allowlist)

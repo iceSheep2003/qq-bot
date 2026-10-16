@@ -660,6 +660,37 @@
             "equals": 0
           }
         ]
+      },
+      {
+        "id": "private-chat-admission",
+        "title": "Persistent private distinct-user limit before model and memory work",
+        "command": [
+          ".venv/bin/python",
+          "-m",
+          "pytest",
+          "tests/agent/test_private_chat_admission.py",
+          "-q",
+          "--junitxml=.quality/private-chat-admission.xml"
+        ],
+        "report": ".quality/private-chat-admission.xml",
+        "format": "junit",
+        "metrics": [
+          {
+            "name": "Cases",
+            "path": "tests",
+            "min": 7
+          },
+          {
+            "name": "Success rate",
+            "path": "successRate",
+            "equals": 100
+          },
+          {
+            "name": "Skipped",
+            "path": "skipped",
+            "equals": 0
+          }
+        ]
       }
     ]
   }

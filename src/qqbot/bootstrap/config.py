@@ -90,6 +90,7 @@ class Config:
     # from_env; validated so a .env written for a newer build is refused rather
     # than half-understood.
     config_version: int = CONFIG_VERSION
+    private_daily_user_limit: int = 10
 
     # --- validation ------------------------------------------------------
 
@@ -135,6 +136,8 @@ class Config:
 
     def _check_consistency(self) -> None:
         """Rules that must hold for any deployment, including ``--check``."""
+        if not 0 <= self.private_daily_user_limit <= 1000:
+            raise ConfigError("BOT_PRIVATE_DAILY_USER_LIMIT must be between 0 and 1000")
         if not 1 <= self.config_version <= CONFIG_VERSION:
             raise ConfigError(
                 f"config version {self.config_version} is not supported by this "
@@ -227,6 +230,7 @@ class Config:
             db_path=Path(os.getenv("BOT_DB_PATH") or "./data/qqbot.sqlite3"),
             group_allowlist=ids("BOT_GROUP_ALLOWLIST"),
             private_enabled=os.getenv("BOT_PRIVATE_ENABLED", "false").lower() == "true",
+            private_daily_user_limit=int(os.getenv("BOT_PRIVATE_DAILY_USER_LIMIT", "10")),
             memory_extract_every=max(2, integer("BOT_MEMORY_EXTRACT_EVERY", 8)),
             affection_auto_enabled=os.getenv(
                 "BOT_AFFECTION_AUTO_ENABLED", "true"

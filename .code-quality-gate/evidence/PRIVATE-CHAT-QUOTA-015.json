@@ -1,0 +1,69 @@
+{
+  "version": 1,
+  "id": "PRIVATE-CHAT-QUOTA-015",
+  "attempts": 1,
+  "red": {
+    "time": "2026-10-16T06:10:59.764Z",
+    "snapshot": {
+      "contract": "1e7fc6a0b99d311002a54ee5514662285cc22c068023126dac9af0592c6f95f2",
+      "protected": {
+        ".code-quality-gate/TEST_MIGRATION.json": "6bf16c4632fdb9e2612965790d090afbfcd891b69c24b2514760c120e2c326b1",
+        ".code-quality-gate/ci-setup.sh": "8c6636d8a04487aa9d8c623fce23aaab751bec431c25aa8a402a841532a8a69f",
+        ".code-quality-gate/tasks/PRIVATE-CHAT-QUOTA-015.json": "caf4dbd133d3fc0ca73ac7619fa8ef6cf082f8063f069cb9000742bf8472a4fb",
+        ".importlinter": "dbe30e5e76cf5a7c1c2377d8ea87502421d2eb93c175711447bab2baee6f1eca",
+        "quality.config.json": "d4d6bd1be5990a05597eaa7e84773a06560004e81e2dbe537668c50690b0fee2",
+        "tests/agent/test_private_chat_admission.py": "5714b0a1dc35afd118fc5fd982300a7b94cc042fa943e1587a3b0ecff93f0ee8",
+        "tests/agent/test_service.py": "7534755f6d0b99f3571dcf1aa0861e63c00d5ab423c64544248ed7369b4391fc",
+        "tests/support.py": "8f8b8249170d8d68674e2ea28eaf1aa1edac8df894091c7747932c998ec335c0",
+        "tools/quality/checks.py": "6fa2eb95acb56139a72eb7f32b87c7672b64e2ebadd25d2c34d435a2b7392353",
+        "tools/quality/junit_report.py": "082cff7fb89c4f5cac8d71a198185f857b5d2501f7a59f74905cf4bf22b48c8b"
+      },
+      "code": {
+        ".env.example": "7e105498603291d41ba26263ac97b8f001706f660bc8c2e290828a107845861a",
+        "docs/guides/QUICKSTART.md": "d4f436d03aca705c60dffb5fb2898ce9cfdb9a7baae90ea7b9d8968bb3fd59eb",
+        "src/qqbot/agent/service.py": "f6990e341c58cc98fc146b61d8c8cf33aa41d462c38f317b69636e60eb2a33ac",
+        "src/qqbot/bootstrap/app.py": "789d1cdecb95b82135c4f0304c91b05b0e93f4faf831d50554d858c3f61df2ee",
+        "src/qqbot/bootstrap/config.py": "c94bc2e561af30bbf2ddc097dff503c60755f06a210a51b0c06034f7e7647b57",
+        "src/qqbot/contracts/ports.py": "fc9cb4ea02cb05258d2790dce01c09bb4e17fa155b693ac32d4c630cd0ce836c",
+        "src/qqbot/infrastructure/storage/database.py": "07da7d98da8304c0ab72057e8ea58802b1796d97efc8d7eb50519fef88836192",
+        "src/qqbot/infrastructure/storage/private_chat.py": "f43f96ffab642a6dd7a889b8747c0458c2e0acf33803570cec29f512735ef465",
+        "src/qqbot/interfaces/webui/docs/GUIDE.md": "64c692ac8760c25606c30747fd1b46cb2260d4054fe4cfb5b241917f59d15176",
+        "src/qqbot/interfaces/webui/schema.py": "60aa62872367520009addc420b3617c11415fcd4f5f8f25a67aaec7ba23ddf40",
+        "tests/bootstrap/test_config.py": "255278dd12790a147a863184c669d6bbf25242b3f4cb9406564c86b60f701948"
+      }
+    },
+    "report": ".quality/code-quality-gate/PRIVATE-CHAT-QUOTA-015/red-5c1c71f1-f469-4ac0-8ec5-4014a52f990c.md"
+  },
+  "green": {
+    "time": "2026-10-16T06:13:21.161Z",
+    "snapshot": {
+      "contract": "1e7fc6a0b99d311002a54ee5514662285cc22c068023126dac9af0592c6f95f2",
+      "protected": {
+        ".code-quality-gate/TEST_MIGRATION.json": "6bf16c4632fdb9e2612965790d090afbfcd891b69c24b2514760c120e2c326b1",
+        ".code-quality-gate/ci-setup.sh": "8c6636d8a04487aa9d8c623fce23aaab751bec431c25aa8a402a841532a8a69f",
+        ".code-quality-gate/tasks/PRIVATE-CHAT-QUOTA-015.json": "caf4dbd133d3fc0ca73ac7619fa8ef6cf082f8063f069cb9000742bf8472a4fb",
+        ".importlinter": "dbe30e5e76cf5a7c1c2377d8ea87502421d2eb93c175711447bab2baee6f1eca",
+        "quality.config.json": "d4d6bd1be5990a05597eaa7e84773a06560004e81e2dbe537668c50690b0fee2",
+        "tests/agent/test_private_chat_admission.py": "5714b0a1dc35afd118fc5fd982300a7b94cc042fa943e1587a3b0ecff93f0ee8",
+        "tests/agent/test_service.py": "7534755f6d0b99f3571dcf1aa0861e63c00d5ab423c64544248ed7369b4391fc",
+        "tests/support.py": "8f8b8249170d8d68674e2ea28eaf1aa1edac8df894091c7747932c998ec335c0",
+        "tools/quality/checks.py": "6fa2eb95acb56139a72eb7f32b87c7672b64e2ebadd25d2c34d435a2b7392353",
+        "tools/quality/junit_report.py": "082cff7fb89c4f5cac8d71a198185f857b5d2501f7a59f74905cf4bf22b48c8b"
+      },
+      "code": {
+        ".env.example": "07cf26f9d1830d01259c403a1c17e410c691d84430f4a514c9bead93a7d8db74",
+        "docs/guides/QUICKSTART.md": "fe1d1c22276b76e6e4b303baa45a032607c16349f6bb71594d0f9f8204672fee",
+        "src/qqbot/agent/service.py": "e113a2b8d5a8ee6079f8dc16bfd8224aa382411919758a8e7e3e0672e478bd1c",
+        "src/qqbot/bootstrap/app.py": "6cfe58fd3ecd5f18b76aa096497915a841e803efc85c53cb307c00429581d596",
+        "src/qqbot/bootstrap/config.py": "2d68c4563006dc7320a853290ff785b69df7bdfe871a94bade1da7b37ff0a217",
+        "src/qqbot/contracts/ports.py": "cf8c87dd865a5654bf49ff032610c6cfece089babe29178120532b9622675982",
+        "src/qqbot/infrastructure/storage/database.py": "9dc0941e4543bcb15a6910bfbdad2a1682957f661888901fab3601356ac02c17",
+        "src/qqbot/infrastructure/storage/private_chat.py": "e36821f5c8069db500476ded5f439391e84e90954475e11de18e5e83fa83af50",
+        "src/qqbot/interfaces/webui/docs/GUIDE.md": "c7667ad7b01c7da620c424d67567b26b4c2f5ab8fd35afb8225eb2e779a705c3",
+        "src/qqbot/interfaces/webui/schema.py": "3c9e90e021cc1282bd9274de1038282752bff413492f4c4b8fd2a72d6625e2de",
+        "tests/bootstrap/test_config.py": "d372f25187349c3312b3470ab4895a202dd55b988a88b6fe7263e34da9c93e94"
+      }
+    },
+    "report": ".quality/code-quality-gate/PRIVATE-CHAT-QUOTA-015/green-82332ed1-608f-424d-bc26-f54b222319cb.md"
+  }
+}

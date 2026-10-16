@@ -44,6 +44,7 @@ from qqbot.contracts.ports import (
     MessageSender,
     PeopleRepository,
     PromptSessionRepository,
+    PrivateChatAdmission,
     ReplyDecisionPolicy,
     ReplyDelivery,
     ReplyObserver,
@@ -98,12 +99,14 @@ class ConversationService:
         observation_store: ObservationRepository | None = None,
         inbound_media: InboundMediaPort | None = None,
         restore_last_reply: bool = True,
+        private_admission: PrivateChatAdmission | None = None,
     ):
         self.agent, self.conversations, self.activity = agent, conversations, activity
         self.people = people
         self.sender, self.policy = sender, policy
         self.media = media
         self.inbound_media = inbound_media
+        self.private_admission = private_admission
         self.reply_planner = reply_planner or DefaultReplyPlanner()
         self.reply_dispatcher = reply_dispatcher or ReplyDispatcher(sender, media)
         self.delivery = ConversationDelivery(
@@ -306,6 +309,13 @@ class ConversationService:
         )
         if not text:
             return False
+        if not event.group_id and self.private_admission is not None:
+            try:
+                if not self.private_admission.admit(event.user_id, self.local_today().isoformat()):
+                    return False
+            except Exception:
+                log.exception("Private admission failed; refusing model and memory work")
+                return False
         add_event = getattr(self.conversations, "add_event", None)
         inserted = (
             add_event(event)

@@ -29,6 +29,7 @@ def migration_modules() -> list:
         "ontology",
         "operations",
         "persona_review",
+        "private_chat",
         "prompt_sessions",
         "relationships",
         "slang",

@@ -34,6 +34,12 @@ class ReplyResult(Protocol):
     text: str
 
 
+class PrivateChatAdmission(Protocol):
+    """Reserve a daily participant slot before storing or modelling a message."""
+
+    def admit(self, user_id: str, day: str) -> bool: ...
+
+
 class ReplyPlanner(Protocol):
     async def plan(self, draft: Any, event: MessageEvent | None = None) -> Any: ...
 

@@ -47,6 +47,7 @@ SETTINGS = (
     S("BOT_ONEBOT_TOKEN", "connection", "OneBot Token", "password", secret=True),
     S("BOT_GROUP_ALLOWLIST", "connection", "群白名单", help="多个群号用英文逗号分隔"),
     S("BOT_PRIVATE_ENABLED", "connection", "允许私聊", "boolean"),
+    S("BOT_PRIVATE_DAILY_USER_LIMIT", "connection", "每日私聊人数上限", "number", minimum=0, maximum=1000, help="按配置时区每天重置，重启保留计数；同一人重复聊天只占一个名额，0 禁止私聊准入。人数上限不限制每人的消息条数。"),
 
     S("BOT_REPLY_POLICY_ENABLED", "conversation", "启用读空气策略", "boolean"),
     S("BOT_REPLY_POLICY_MODE", "conversation", "回复模式", "select", options=("mention_only", "room")),
