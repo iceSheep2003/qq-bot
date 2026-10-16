@@ -8,10 +8,6 @@
 
 [项目结构](docs/architecture/README.md) · [快速开始](#快速开始) · [使用文档](#使用文档) · [开发指南](CONTRIBUTING.md) · [反馈问题](https://github.com/iceSheep2003/qq-bot/issues)
 
-<p align="center">
-  <img src="memes/ip/zinxtick-present-sheet.png" alt="Kinna：蓝发、黑卫衣，拿着一张清单" width="306" />
-</p>
-
 ## 项目简介
 
 Kinna 侧重 QQ 群里的日常聊天：参与多人话题、接梗、发表情，以及根据与群友的关系调整互动方式。项目自带 Kinna 人设，也支持修改角色和说话风格。
@@ -39,8 +35,8 @@ NapCat 负责 QQ 登录和消息收发，Bot 负责对话、记忆和行为规�
 [项目结构与依赖规则](docs/architecture/README.md)、[文档索引](docs/README.md)和
 [开发约定](CONTRIBUTING.md)。VS Code 可直接打开根目录的 `Kinna bot.code-workspace`。
 
-默认对话使用 LLM；群聊和私聊可分别配置可选认知通道。跨场景记忆授权、
-新认知图谱及私聊定时任务仍属于后续开发范围。
+默认对话使用 LLM；群聊和私聊可分别配置可选认知通道。跨场景记忆授权和新认知图谱
+仍属于后续开发范围；私聊定时任务不在产品范围内。
 
 ## 功能概览
 
@@ -168,6 +164,6 @@ Skill 描述已有能力如何使用，任务定义选择已有动作与执行�
 
 ## 来源与许可
 
-第三方表情图片需单独取得，仓库保留分类映射和来源说明；Kinna 素材随源码提供。项目整体许可证尚未指定，第三方内容按各自许可使用，详见 [第三方说明](THIRD_PARTY_NOTICES.md)。
+第三方表情图片需单独取得，仓库保留分类映射和来源说明。项目整体许可证尚未指定，第三方内容按各自许可使用，详见 [第三方说明](THIRD_PARTY_NOTICES.md)。
 
 相关项目：[NapCatQQ](https://github.com/NapNeko/NapCatQQ) · [AstrBot](https://github.com/AstrBotDevs/AstrBot) · [狗头军师](https://github.com/shengjidaguai-china/goutoujunshi) · [AstrBot 表情图包](https://github.com/anka-afk/astrbot-meme-pack-official-01)

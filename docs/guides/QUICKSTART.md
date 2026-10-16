@@ -116,7 +116,7 @@ BOT_REPLY_POLICY_MODE=room
 
 ### 表情包
 
-项目自带 Kinna 素材，映射在 `memes/catalog.json`。启用 `memes` 后，只有可读取且通过校验的素材才会进入可用目录。第三方图包需要单独取得，来源与恢复步骤见 [第三方说明](../../THIRD_PARTY_NOTICES.md)。
+默认表情包映射在 `memes/catalog.json`。启用 `memes` 后，只有可读取且通过校验的素材才会进入可用目录。第三方图包需要单独取得，来源与恢复步骤见 [第三方说明](../../THIRD_PARTY_NOTICES.md)。
 
 `BOT_MEDIA_FOLLOWUP_MEME_PROBABILITY` 控制文字后的表情补发概率，示例为 `0.40`；它是符合条件时的概率，不是所有消息必须达到的发送占比。
 
