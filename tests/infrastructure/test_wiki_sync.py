@@ -39,3 +39,19 @@ def test_sync_can_be_forced_for_manual_correction(tmp_path):
     report = sync.refresh(force=True)
 
     assert report.published is True
+
+
+def test_deferred_change_publishes_when_time_window_expires(tmp_path):
+    now = [100]
+    snapshot = {"memories": [{"id": 1, "scope": "group:1", "user_id": "_group_", "content": "事实", "status": "active", "created_at": 1, "updated_at": 1, "confidence": 0.8}], "topics": [], "slang": []}
+    sync = LegacyWikiSynchronizer(
+        lambda: snapshot,
+        tmp_path,
+        policy=WikiUpdatePolicy(min_interval_seconds=600, max_pending_entries=8),
+        clock=lambda: now[0],
+    )
+
+    assert sync.refresh().published is False
+    now[0] = 700
+
+    assert sync.refresh().published is True

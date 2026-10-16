@@ -25,6 +25,7 @@ class WikiUpdatePolicy:
         *,
         now: int,
         last_published_at: int | None,
+        pending_since: int | None = None,
         pending_entries: int,
         force: bool = False,
     ) -> bool:
@@ -32,9 +33,12 @@ class WikiUpdatePolicy:
             return True
         if pending_entries >= self.max_pending_entries:
             return True
-        if pending_entries <= 0 or last_published_at is None:
+        if pending_entries <= 0:
             return False
-        return now - last_published_at >= self.min_interval_seconds
+        anchor = last_published_at if last_published_at is not None else pending_since
+        if anchor is None:
+            return False
+        return now - anchor >= self.min_interval_seconds
 
 
 def published_version(value: Any) -> str:

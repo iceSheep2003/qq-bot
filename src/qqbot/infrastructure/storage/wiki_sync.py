@@ -38,17 +38,22 @@ class LegacyWikiSynchronizer:
         self._clock = clock
         self._last_source_version: str | None = None
         self._last_published_at: int | None = None
+        self._pending_since: int | None = None
 
     def refresh(self, *, force: bool = False) -> WikiSyncReport:
         rows = self._load()
         source_version = published_version(rows)
         changed = source_version != self._last_source_version
-        if not changed:
+        now = int(self._clock())
+        if changed and self._pending_since is None:
+            self._pending_since = now
+        if not changed and self._pending_since is None:
             return WikiSyncReport(False, False, source_version)
         pending = len(rows.get("memories", ()))
         should_publish = self._policy.should_publish(
-            now=int(self._clock()),
+            now=now,
             last_published_at=self._last_published_at,
+            pending_since=self._pending_since,
             pending_entries=pending,
             force=force,
         )
@@ -56,6 +61,7 @@ class LegacyWikiSynchronizer:
             return WikiSyncReport(True, False, source_version)
         migration = self._migration.run(rows, self._root, write=True)
         self._last_source_version = source_version
-        self._last_published_at = int(self._clock())
+        self._last_published_at = now
+        self._pending_since = None
         return WikiSyncReport(True, True, source_version, migration)
 

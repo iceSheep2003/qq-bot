@@ -1532,9 +1532,10 @@
   },
   "tests/infrastructure/test_wiki_sync.py": {
     "tests": [
+      "test_deferred_change_publishes_when_time_window_expires",
       "test_sync_batches_changed_legacy_rows_before_writing",
       "test_sync_can_be_forced_for_manual_correction"
     ],
-    "assertions": 6
+    "assertions": 8
   }
 }
