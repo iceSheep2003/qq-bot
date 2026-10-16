@@ -7,7 +7,7 @@ let original = {};
 const glyphs = {
   connection: "⌁", conversation: "◌", personality: "✦", proactive: "◴",
   moderation: "◇", media: "▣", system: "⚙", memory: "◎", schedules: "◷",
-  experiments: "⌬", guide: "?",
+  experiments: "⌬", guide: "?", dashboard: "▤",
 };
 
 let memoryView = { tab: "overview", scope: "", after: "", previous: [], query: "", status: "" };
@@ -929,7 +929,38 @@ async function renderExperiments(tab = experimentView.tab) {
   }
 }
 
+
+async function renderDashboard(tab = "overview") {
+  document.querySelectorAll(".nav-item").forEach((item) => item.classList.toggle("active", item.dataset.target === "dashboard"));
+  $(".search").classList.add("hidden"); $("#save").classList.add("hidden");
+  history.replaceState(null, "", `#dashboard${tab === "overview" ? "" : `/${tab}`}`);
+  const content = $("#content"); content.innerHTML = `<section class="memory-workspace loading-state">正在读取运行看板…</section>`;
+  try {
+    const overview = (await api("/api/dashboard/overview?hours=24")).data;
+    const tabs = [["overview", "运行总览"], ["traces", "消息 Trace"], ["wiki", "Wiki 图谱"]];
+    const tabsHtml = tabs.map(([id, label]) => `<button class="memory-tab ${tab === id ? "active" : ""}" data-dashboard-tab="${id}">${label}</button>`).join("");
+    let body = `<div class="metric-grid"><article class="metric-card"><span>接收消息</span><strong>${overview.turns ?? 0}</strong><small>已回复 ${overview.replies ?? 0} · 异常 ${overview.errors ?? 0}</small></article><article class="metric-card"><span>模型 Token</span><strong>${(overview.prompt_tokens ?? 0) + (overview.completion_tokens ?? 0)}</strong><small>输入 ${overview.prompt_tokens ?? 0} / 输出 ${overview.completion_tokens ?? 0}</small></article><article class="metric-card"><span>前缀缓存命中率</span><strong>${typeof overview.cache_hit_ratio === "number" ? `${(overview.cache_hit_ratio * 100).toFixed(1)}%` : "未知"}</strong><small>已报告 ${overview.cache_known_calls ?? 0} 次 · 未知 ${overview.cache_unknown_calls ?? 0} 次</small></article><article class="metric-card"><span>端到端耗时 P95</span><strong>${overview.latency_p95_ms == null ? "未知" : `${overview.latency_p95_ms} ms`}</strong><small>包含不回复消息</small></article></div>`;
+    if (tab === "overview") {
+      const rows = (await api("/api/dashboard/traces?hours=24&limit=8")).data.items || [];
+      body += `<article class="data-panel"><div class="panel-title"><h3>最近消息</h3><p>每条记录包含准入、技能、模型调用和发送结果</p></div><div class="table-scroll"><table><thead><tr><th>时间</th><th>会话</th><th>结果</th><th>模型调用</th><th>耗时</th></tr></thead><tbody>${rows.map((row) => `<tr><td>${escapeHtml(formatTime(row.created_at))}</td><td>${escapeHtml(row.scope)}</td><td>${statusBadge(row.outcome)}</td><td>${row.steps.filter((step) => step.stage === "model").length}</td><td>${row.duration_ms ?? "—"} ms</td></tr>`).join("") || `<tr><td colspan="5">${emptyState("暂无运行记录", "新版本处理消息后，从这里开始显示。")}</td></tr>`}</tbody></table></div></article>`;
+    } else if (tab === "traces") {
+      const rows = (await api("/api/dashboard/traces?hours=24&limit=60")).data.items || [];
+      body += `<article class="data-panel"><div class="panel-title"><h3>消息 Trace</h3><p>这是程序运行证据，不包含模型内部思考或完整提示词。</p></div><div class="trace-list">${rows.map((row) => `<details class="trace-row"><summary><b>${escapeHtml(row.scope)}</b> · ${escapeHtml(formatTime(row.created_at))} · ${statusBadge(row.outcome)} <span>${row.duration_ms ?? "—"} ms</span></summary><ol>${row.steps.map((step) => `<li><b>${escapeHtml(step.stage)}</b> <span>${escapeHtml(JSON.stringify(Object.fromEntries(Object.entries(step).filter(([key]) => !["stage", "at_ms"].includes(key)))))} </span></li>`).join("")}</ol></details>`).join("") || emptyState("暂无消息 Trace", "Trace 从当前版本启动后开始采集。")}</div></article>`;
+    } else {
+      const graph = (await api("/api/dashboard/wiki?limit=200")).data;
+      body += `<article class="data-panel"><div class="panel-title"><h3>Wiki 实体关联</h3><p>${graph.available ? "只显示 Markdown 发布页的显式链接，不用相似度伪造边。" : "Wiki 读取器尚未装配，图谱保持未启用。"}</p></div>${graph.nodes?.length ? `<div class="wiki-node-list">${graph.nodes.map((node) => `<button class="memory-tab" data-wiki-id="${escapeHtml(node.id)}">${escapeHtml(node.title)} <small>${escapeHtml(node.kind)}</small></button>`).join("")}</div><p class="muted">${graph.nodes.length} 个实体 · ${graph.links.length} 条链接 · ${graph.dangling_links || 0} 条链接目标不在当前视图</p>` : emptyState(graph.available ? "暂无 Wiki 实体" : "Wiki 未启用", "装配 Wiki 读取器并发布 Markdown 后，这里会显示真实实体链接。")}</article>`;
+    }
+    content.innerHTML = `<section class="memory-workspace"><div class="memory-toolbar"><div><p class="eyebrow">OBSERVABILITY</p><h2>运行看板</h2><p class="muted">实际程序记录 · 缺失指标保持未知</p></div></div><div class="memory-tabs">${tabsHtml}</div><div class="memory-body">${body}</div></section>`;
+    document.querySelectorAll("[data-dashboard-tab]").forEach((button) => { button.onclick = () => renderDashboard(button.dataset.dashboardTab); });
+  } catch (error) { content.innerHTML = emptyState("运行数据暂不可用", error.message); }
+}
+
 function activateSection(id) {
+  if (id === "dashboard") {
+    renderDashboard();
+    $("#search").value = "";
+    return;
+  }
   if (id === "memory") {
     renderMemory();
     $("#search").value = "";
@@ -969,7 +1000,7 @@ function render(data) {
   original = {};
   Object.entries(data.values).forEach(([key, value]) => { original[key] = value.value; });
   const modules = data.sections.map((section) => `<button class="nav-item" data-target="${section.id}"><span class="nav-glyph">${glyphs[section.id] || "·"}</span><span>${escapeHtml(section.label)}</span></button>`).join("");
-  $("#nav").innerHTML = `${modules}<div class="nav-divider"></div><button class="nav-item" data-target="memory"><span class="nav-glyph">${glyphs.memory}</span><span>记忆中心</span></button><button class="nav-item" data-target="schedules"><span class="nav-glyph">${glyphs.schedules}</span><span>任务中心</span></button><button class="nav-item" data-target="experiments"><span class="nav-glyph">${glyphs.experiments}</span><span>实验看板</span></button><button class="nav-item" data-target="guide"><span class="nav-glyph">${glyphs.guide}</span><span>使用指南</span></button>`;
+  $("#nav").innerHTML = `${modules}<div class="nav-divider"></div><button class="nav-item" data-target="dashboard"><span class="nav-glyph">${glyphs.dashboard}</span><span>运行看板</span></button><div class="nav-divider"></div><button class="nav-item" data-target="memory"><span class="nav-glyph">${glyphs.memory}</span><span>记忆中心</span></button><button class="nav-item" data-target="schedules"><span class="nav-glyph">${glyphs.schedules}</span><span>任务中心</span></button><button class="nav-item" data-target="experiments"><span class="nav-glyph">${glyphs.experiments}</span><span>实验看板</span></button><button class="nav-item" data-target="guide"><span class="nav-glyph">${glyphs.guide}</span><span>使用指南</span></button>`;
   document.querySelectorAll(".nav-item").forEach((button) => {
     button.onclick = () => activateSection(button.dataset.target);
   });

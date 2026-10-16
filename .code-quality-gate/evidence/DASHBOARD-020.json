@@ -1,0 +1,69 @@
+{
+  "version": 1,
+  "id": "DASHBOARD-020",
+  "attempts": 4,
+  "red": {
+    "time": "2026-10-16T07:16:56.376Z",
+    "snapshot": {
+      "contract": "8a1023f328acbfaf0e0adebfaec5056a99126bead3fcf4e471493afafdc9a851",
+      "protected": {
+        ".code-quality-gate/ci-setup.sh": "8c6636d8a04487aa9d8c623fce23aaab751bec431c25aa8a402a841532a8a69f",
+        ".code-quality-gate/tasks/DASHBOARD-020.json": "fc6d62508bf6d3662e6c8942f2da3e9d7bae90f157f1fc924e5890f8cb022d7c",
+        ".importlinter": "dbe30e5e76cf5a7c1c2377d8ea87502421d2eb93c175711447bab2baee6f1eca",
+        "quality.config.json": "b962a0c4288f600007482c4da46a13c5eb78b51dda6f68b7aa87fba9adc39ede",
+        "tests/interfaces/test_dashboard.py": "5cf880a5653715feff2b3bb84f4209f386fbf8f15f25797cb6789c20f3cd50db",
+        "tools/quality/checks.py": "6fa2eb95acb56139a72eb7f32b87c7672b64e2ebadd25d2c34d435a2b7392353",
+        "tools/quality/junit_report.py": "082cff7fb89c4f5cac8d71a198185f857b5d2501f7a59f74905cf4bf22b48c8b"
+      },
+      "code": {
+        "src/qqbot/agent/orchestrator.py": "b696744db9adf986d436e051b3cf8902260eb5d0fc48aca4bad9c3774f86e907",
+        "src/qqbot/agent/service.py": "e113a2b8d5a8ee6079f8dc16bfd8224aa382411919758a8e7e3e0672e478bd1c",
+        "src/qqbot/bootstrap/app.py": "c1f6217a93f8e1dde26c416c77df26ad0d83b6742cab583a07fd73c98740e774",
+        "src/qqbot/contracts/telemetry.py": "6a8ce804d4f022557aac8fd35db4e0e80e5d1b202e1f2c2a77bb9344c946d40b",
+        "src/qqbot/infrastructure/adapters/model.py": "fb697be799eabd1e76c1ef4378d35fe70a82d6a3780fc060054e70ac77dadd86",
+        "src/qqbot/infrastructure/storage/database.py": "e8470f1c4e30df18e3748037b01f925228bc85aab25728a025ba0075b76b5a6e",
+        "src/qqbot/infrastructure/storage/traces.py": "2ee0456163b1ad427db08d43a77acd4b82d88193040a2c53c7ac9f2bb554acd8",
+        "src/qqbot/interfaces/webui/dashboard.py": "ebe0cf890e66ee44a50af09b9eaac771dbb74700c0ab6317b699b96537779d6d",
+        "src/qqbot/interfaces/webui/docs/GUIDE.md": "c7667ad7b01c7da620c424d67567b26b4c2f5ab8fd35afb8225eb2e779a705c3",
+        "src/qqbot/interfaces/webui/server.py": "aea567d487dbcf7aea9037334fd3f54f999258cde2df33f608cf2b5e33a29ff5",
+        "src/qqbot/interfaces/webui/static/advanced.html": null,
+        "src/qqbot/interfaces/webui/static/dashboard.css": null,
+        "src/qqbot/interfaces/webui/static/dashboard.js": null,
+        "src/qqbot/interfaces/webui/static/index.html": "3b86db3114b4beeaf940f5327af720076399a35cdaf4749bf24e02fb5b085683"
+      }
+    },
+    "report": ".quality/code-quality-gate/DASHBOARD-020/red-6fdd9f34-6524-456c-89f6-2daa9d3e5a2e.md"
+  },
+  "green": {
+    "time": "2026-10-16T13:30:49.654Z",
+    "snapshot": {
+      "contract": "8a1023f328acbfaf0e0adebfaec5056a99126bead3fcf4e471493afafdc9a851",
+      "protected": {
+        ".code-quality-gate/ci-setup.sh": "8c6636d8a04487aa9d8c623fce23aaab751bec431c25aa8a402a841532a8a69f",
+        ".code-quality-gate/tasks/DASHBOARD-020.json": "fc6d62508bf6d3662e6c8942f2da3e9d7bae90f157f1fc924e5890f8cb022d7c",
+        ".importlinter": "dbe30e5e76cf5a7c1c2377d8ea87502421d2eb93c175711447bab2baee6f1eca",
+        "quality.config.json": "b962a0c4288f600007482c4da46a13c5eb78b51dda6f68b7aa87fba9adc39ede",
+        "tests/interfaces/test_dashboard.py": "5cf880a5653715feff2b3bb84f4209f386fbf8f15f25797cb6789c20f3cd50db",
+        "tools/quality/checks.py": "6fa2eb95acb56139a72eb7f32b87c7672b64e2ebadd25d2c34d435a2b7392353",
+        "tools/quality/junit_report.py": "082cff7fb89c4f5cac8d71a198185f857b5d2501f7a59f74905cf4bf22b48c8b"
+      },
+      "code": {
+        "src/qqbot/agent/orchestrator.py": "ff3c171c8c23b8a649ff99a354a4f3ce893979bdbb8dc17de4df7db159e455c6",
+        "src/qqbot/agent/service.py": "765b815c61a15bc4fbf59a5596d59aa89373e5b42256855860b50df9d30eefca",
+        "src/qqbot/bootstrap/app.py": "5c0730452724e85e012362285c9a34c5879bef41c18c9f405fb51535b5712377",
+        "src/qqbot/contracts/telemetry.py": "11d77e4547ee05abbffb33c21e0881f7a42d781aa2a6d1fd16ce5815b5d1c6bd",
+        "src/qqbot/infrastructure/adapters/model.py": "7e2f77cf914df75a9d388a3f0eb721ee0c2618259a590d65cf38246daf5365a9",
+        "src/qqbot/infrastructure/storage/database.py": "4b2a1b433ac1c5f63a11d47d1ee418812e990f32277c24f8d0a38b0063bc1555",
+        "src/qqbot/infrastructure/storage/traces.py": "0620249f951d7579ab33feb216c6d8dfb997cbb4d8414fc5eed31d4dbd20536c",
+        "src/qqbot/interfaces/webui/dashboard.py": "edf49a6d111271c5d95dcb951460071e0b5fe5fcff365c88ad976e709ce533d4",
+        "src/qqbot/interfaces/webui/docs/GUIDE.md": "103682fd8fdcc7735e9600ba582bd3694ba2236691c9756b9f64c9220cb64fe1",
+        "src/qqbot/interfaces/webui/server.py": "206d24d6e55184da014658ae19526bfe429d1db46775332cd701a4516e65960c",
+        "src/qqbot/interfaces/webui/static/advanced.html": "82dcc0bb614497f78122eb0ffd5b52bfbf9b7ea7cd9b2d25431c95ebfa09bbb9",
+        "src/qqbot/interfaces/webui/static/dashboard.css": "6965b1eb904f8c02e6dfa542e15d4ccb6a2dd350ab8d6daa1bf6d95a691c83fb",
+        "src/qqbot/interfaces/webui/static/dashboard.js": "26743a885c36c16a469ace359197643529d2f0121bce1f8b0785975e92e7902f",
+        "src/qqbot/interfaces/webui/static/index.html": "82dcc0bb614497f78122eb0ffd5b52bfbf9b7ea7cd9b2d25431c95ebfa09bbb9"
+      }
+    },
+    "report": ".quality/code-quality-gate/DASHBOARD-020/green-5c2e3bc5-0218-4de0-b38f-1d49238b6bf2.md"
+  }
+}

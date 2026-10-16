@@ -36,6 +36,7 @@ def migration_modules() -> list:
         "slang",
         "style",
         "topic_observations",
+        "traces",
     )
     return [import_module(f"{__package__}.{name}") for name in names]
 

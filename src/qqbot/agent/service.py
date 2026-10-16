@@ -24,6 +24,7 @@ from dataclasses import replace
 from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
+from qqbot.contracts.telemetry import TraceSink, trace_turn, record
 from qqbot.contracts import models
 from qqbot.contracts.models import MessageEvent
 from qqbot.agent.conversation.channels import ChannelPolicy
@@ -100,7 +101,9 @@ class ConversationService:
         inbound_media: InboundMediaPort | None = None,
         restore_last_reply: bool = True,
         private_admission: PrivateChatAdmission | None = None,
+        trace_sink: TraceSink | None = None,
     ):
+        self.trace_sink = trace_sink
         self.agent, self.conversations, self.activity = agent, conversations, activity
         self.people = people
         self.sender, self.policy = sender, policy
@@ -199,20 +202,29 @@ class ConversationService:
 
     async def handle_message(self, event: MessageEvent) -> None:
         """Full inbound path: ingest, decide, execute. Entry point for app.py."""
-        if not await self.ingest(event):
-            return
-        if self.inbound_media is not None:
-            event = await self.inbound_media.prepare(event)
-        if await self.maybe_light_interaction(event):
-            return
-        await self.maybe_react(event)
-        if not await self.decide_reply(event):
-            return
-        guarded_event = await self.apply_turn_guard(event)
-        if guarded_event is None:
-            return
-        event = guarded_event
-        await self.execute_turn(event)
+        with trace_turn(event, self.trace_sink):
+            admitted = await self.ingest(event)
+            record("ingest", allowed=admitted)
+            if not admitted:
+                record("ingest", outcome="filtered")
+                return
+            if self.inbound_media is not None:
+                event = await self.inbound_media.prepare(event)
+                record("media", outcome="prepared")
+            if await self.maybe_light_interaction(event):
+                record("interaction", outcome="light_interaction")
+                return
+            await self.maybe_react(event)
+            admitted = await self.decide_reply(event)
+            record("admission", allowed=admitted, outcome="admitted" if admitted else "skipped")
+            if not admitted:
+                return
+            guarded_event = await self.apply_turn_guard(event)
+            record("guard", allowed=guarded_event is not None)
+            if guarded_event is None:
+                record("guard", outcome="guarded")
+                return
+            await self.execute_turn(guarded_event)
 
     async def maybe_react(self, event: MessageEvent) -> bool:
         """Best-effort lightweight presence; never controls text admission."""
@@ -381,11 +393,13 @@ class ConversationService:
         async with self.scope_lock(event.scope):
             try:
                 reply = await self.agent.reply(event)
-            except Exception:
+            except Exception as error:
+                record("generation", outcome="error", error_kind=type(error).__name__)
                 log.exception("Model call failed")
                 return None
             draft = getattr(reply, "draft", None) or parse_reply_draft(reply.text)
             if not draft.text and not draft.channels:
+                record("generation", outcome="empty")
                 return None
             planning_event = event
             if self.conversation_intelligence is not None and event.group_id:
@@ -404,6 +418,7 @@ class ConversationService:
             # one. This protects both normal read-the-room replies and
             # proactive turns from accidentally parroting a member.
             if event.group_id and self._is_unrequested_echo(event, plan.semantic_text):
+                record("delivery", outcome="echo_suppressed")
                 log.info("Suppressing unrequested model echo event=%s", event.event_id)
                 return None
             delivered = await self.delivery.deliver(
@@ -414,7 +429,9 @@ class ConversationService:
                 event=event,
             )
             if not delivered.sent:
+                record("delivery", outcome="delivery_failed")
                 return None
+            record("delivery", outcome="sent")
             clean = delivered.transcript
             self.delivery.record_transcript(event, clean)
             commit = getattr(self.agent, "commit_delivered_reply", None)
@@ -422,9 +439,9 @@ class ConversationService:
                 commit(reply, event, clean)
             self.delivery.observe_assistant(event, clean, f"reply:{event.event_id}")
             self.last_reply[event.scope] = time.time()
-            record = getattr(self.reply_policy, "record_delivery", None)
-            if callable(record):
-                record(event, clean)
+            delivery_hook = getattr(self.reply_policy, "record_delivery", None)
+            if callable(delivery_hook):
+                delivery_hook(event, clean)
             self.dispatch_post_reply(event, clean, draft)
             self.maintenance.after_reply(event)
             return clean

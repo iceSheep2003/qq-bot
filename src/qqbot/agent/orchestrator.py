@@ -7,6 +7,7 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
+from qqbot.contracts.telemetry import record
 from qqbot.contracts.models import MessageEvent
 from qqbot.agent.conversation.channels import channel_for
 from qqbot.agent.skills.audience import scoped_skills
@@ -299,6 +300,10 @@ class Agent:
         selected = skills.select(
             event.text + (" 群聊" if event.group_id else ""), proactive=proactive
         )
+        record("context", skills=[getattr(item, "name", str(type(item).__name__)) for item in selected],
+               memory_count=len(memories.get("items", [])) if isinstance(memories, dict) else len(memories),
+               wiki_pages=wiki_context.get("pages", []),
+               wiki_mode=read_mode_for_query(memory_query) if wiki_context else "unused")
         # One selection pass yields both the contributions and their authority,
         # so the trust note can never mention something the model was not
         # given. Calling collect() and trust_map() separately would run every
@@ -354,6 +359,7 @@ class Agent:
                 )
                 decision = None
             if decision is not None:
+                record("route", route=decision.source)
                 # The block carries its own authority, so the prompt can state
                 # whether this is advice or a binding stance rather than
                 # leaving the model to infer it from the key it arrived under.
@@ -478,6 +484,7 @@ class Agent:
             messages.append(choice)
             for call in calls:
                 name = call.get("function", {}).get("name", "")
+                record("tool", tool=name, outcome="running")
                 try:
                     args = json.loads(call.get("function", {}).get("arguments") or "{}")
                     acall = getattr(self.tools, "acall", None)
@@ -488,6 +495,7 @@ class Agent:
                     )
                 except (ValueError, TypeError, json.JSONDecodeError) as exc:
                     output = f"tool error: {exc}"
+                record("tool", tool=name, outcome="completed")
                 messages.append(
                     {
                         "role": "tool",

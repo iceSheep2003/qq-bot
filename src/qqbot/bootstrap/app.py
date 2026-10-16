@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from qqbot.infrastructure.storage.traces import TraceStore
+
 import argparse
 import asyncio
 import json
@@ -291,6 +293,7 @@ class BotApp:
             observation_workers=config.observer_workers,
             observation_dedupe=config.observer_dedupe,
             observation_store=ObservationOutbox(database),
+            trace_sink=TraceStore(database),
             private_admission=PrivateChatQuota(database, daily_limit=config.private_daily_user_limit),
         )
         # Last in, first out: the service drains the observation queue on the

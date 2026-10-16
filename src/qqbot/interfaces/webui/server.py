@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, unquote, urlsplit
 
+from qqbot.interfaces.webui.dashboard import DashboardQuery
 from qqbot.interfaces.webui.config import WebUIConfig
 from qqbot.interfaces.webui.envfile import EnvConfigStore
 from qqbot.interfaces.webui.experiments import ExperimentConsoleQuery
@@ -36,6 +37,7 @@ class WebUIServer:
         self.memory_query: MemoryConsoleQuery | None = None
         self.persona_queue: PersonaQueueQuery | None = None
         self.schedule_management = None
+        self.dashboard = None
         # Offline experiment reports. Unlike the projections above this needs no
         # composed runtime: it reads a JSON file an operator produced, so it is
         # available even on a console whose bot is not running.
@@ -48,6 +50,8 @@ class WebUIServer:
     def bind_runtime(self, service) -> None:
         """Bind the console's projections after the composition root exists."""
         self.memory_query = MemoryConsoleQuery(service)
+        reader = getattr(service.agent, "wiki_reader", None)
+        self.dashboard = DashboardQuery(getattr(service, "trace_sink", None), getattr(reader, "_store", None))
         self.persona_queue = PersonaQueueQuery(
             service.conversations.db, self.config.persona_path
         )
@@ -192,6 +196,15 @@ class WebUIServer:
                 if path == "/app.js":
                     self._asset("app.js", "text/javascript; charset=utf-8")
                     return
+                dashboard_assets = {
+                    "/dashboard.js": ("dashboard.js", "text/javascript; charset=utf-8"),
+                    "/dashboard.css": ("dashboard.css", "text/css; charset=utf-8"),
+                    "/advanced": ("advanced.html", "text/html; charset=utf-8"),
+                    "/kinna-avatar.png": ("kinna-avatar.png", "image/png"),
+                }
+                if path in dashboard_assets:
+                    self._asset(*dashboard_assets[path])
+                    return
                 if path == "/kinna.png":
                     self._asset("kinna.png", "image/png")
                     return
@@ -201,7 +214,46 @@ class WebUIServer:
                 if not self._authorized():
                     self._json(HTTPStatus.UNAUTHORIZED, {"error": "登录密钥无效"})
                     return
-                if path == "/api/config":
+                if path.startswith("/api/dashboard/"):
+                    dashboard = owner.dashboard
+                    if dashboard is None or dashboard.traces is None:
+                        self._json(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "运行数据未接入。请随 Bot 启动控制台。"})
+                        return
+                    try:
+                        scope = str(query.get("scope", [""])[0]).strip() or None
+                        hours = int(query.get("hours", ["24"])[0])
+                        if not 1 <= hours <= 168:
+                            raise ValueError("hours 必须在 1–168 之间")
+                        if path == "/api/dashboard/overview":
+                            data = dashboard.traces.overview(scope=scope, hours=hours)
+                            data["runtime_bound"] = True
+                            data["wiki_available"] = dashboard.wiki_store is not None
+                        elif path == "/api/dashboard/traces":
+                            cursor = query.get("before", [None])[0]
+                            data = dashboard.traces.list(scope=scope, hours=hours,
+                                limit=int(query.get("limit", ["50"])[0]),
+                                before=int(cursor) if cursor else None)
+                        elif path.startswith("/api/dashboard/traces/"):
+                            data = dashboard.traces.detail(int(path.rsplit("/", 1)[1]))
+                        elif path == "/api/dashboard/wiki":
+                            data = dashboard.wiki_graph(scope, int(query.get("limit", ["200"])[0]))
+                        elif path == "/api/dashboard/wiki-page":
+                            data = dashboard.wiki_page(str(query.get("id", [""])[0]))
+                        else:
+                            self._json(HTTPStatus.NOT_FOUND, {"error": "not found"})
+                            return
+                        if data is None:
+                            self._json(HTTPStatus.NOT_FOUND, {"error": "记录不存在"})
+                            return
+                    except (ValueError, OverflowError):
+                        self._json(HTTPStatus.BAD_REQUEST, {"error": "筛选参数无效"})
+                        return
+                    except Exception:
+                        log.exception("Dashboard query failed")
+                        self._json(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": "读取运行数据失败，请检查本地运行日志。"})
+                        return
+                    self._json(HTTPStatus.OK, {"data": data})
+                elif path == "/api/config":
                     self._json(
                         HTTPStatus.OK,
                         {

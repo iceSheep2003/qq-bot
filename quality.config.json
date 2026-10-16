@@ -815,6 +815,37 @@
             "equals": 0
           }
         ]
+      },
+      {
+        "id": "dashboard",
+        "title": "Persistent operator dashboard acceptance",
+        "command": [
+          ".venv/bin/python",
+          "-m",
+          "pytest",
+          "tests/interfaces/test_dashboard.py",
+          "-q",
+          "--junitxml=.quality/dashboard.xml"
+        ],
+        "report": ".quality/dashboard.xml",
+        "format": "junit",
+        "metrics": [
+          {
+            "name": "Dashboard cases",
+            "path": "tests",
+            "min": 18
+          },
+          {
+            "name": "Success rate",
+            "path": "successRate",
+            "equals": 100
+          },
+          {
+            "name": "Skipped",
+            "path": "skipped",
+            "equals": 0
+          }
+        ]
       }
     ]
   }

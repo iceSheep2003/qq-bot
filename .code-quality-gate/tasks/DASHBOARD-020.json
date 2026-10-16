@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "id": "DASHBOARD-020",
+  "title": "Operational dashboard with persistent traces and Wiki graph",
+  "requirements": [
+    "Persist bounded per-message operational traces without prompts or secrets; isolate concurrent and background tasks.",
+    "Measure all model calls and provider-reported cache usage with explicit unknown values and weighted aggregation.",
+    "Authenticated read-only APIs provide scoped traces, bounded Wiki graph and safe entity detail.",
+    "Dashboard-first responsive UI exposes important controls and preserves advanced maintenance access."
+  ],
+  "testFiles": [
+    "tests/interfaces/test_dashboard.py"
+  ],
+  "codeFiles": [
+    "src/qqbot/contracts/telemetry.py",
+    "src/qqbot/infrastructure/storage/traces.py",
+    "src/qqbot/interfaces/webui/dashboard.py",
+    "src/qqbot/agent/service.py",
+    "src/qqbot/agent/orchestrator.py",
+    "src/qqbot/infrastructure/adapters/model.py",
+    "src/qqbot/infrastructure/storage/database.py",
+    "src/qqbot/bootstrap/app.py",
+    "src/qqbot/interfaces/webui/server.py",
+    "src/qqbot/interfaces/webui/static/index.html",
+    "src/qqbot/interfaces/webui/static/dashboard.js",
+    "src/qqbot/interfaces/webui/static/dashboard.css",
+    "src/qqbot/interfaces/webui/static/advanced.html",
+    "src/qqbot/interfaces/webui/docs/GUIDE.md"
+  ],
+  "testChecks": [
+    "dashboard"
+  ],
+  "protectedFiles": [
+    "tools/quality/checks.py",
+    "tools/quality/junit_report.py",
+    ".importlinter",
+    ".code-quality-gate/ci-setup.sh"
+  ],
+  "maxAttempts": 12
+}

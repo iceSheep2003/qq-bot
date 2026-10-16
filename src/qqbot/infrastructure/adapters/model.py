@@ -36,6 +36,7 @@ from enum import Enum
 
 import httpx
 
+from qqbot.contracts.telemetry import record
 from qqbot.contracts.models import normalize_reasoning_effort
 from qqbot.infrastructure.adapters.schema_projection import model_tool_projection
 
@@ -598,8 +599,26 @@ class ModelClient:
         observers.  Limiting here, rather than in a group handler, prevents
         several groups plus maintenance jobs from overwhelming one provider.
         """
-        async with self._concurrency:
-            return await self._complete(messages, tools, temperature=temperature)
+        queued = time.monotonic()
+        try:
+            async with self._concurrency:
+                started = time.monotonic()
+                result = await self._complete(messages, tools, temperature=temperature)
+                # This task owns the just-completed result, never a shared last-call metric.
+                usage = result.get("usage") or {}
+                record("model", model=self.model,
+                       queue_ms=round((started-queued)*1000, 2),
+                       duration_ms=round((time.monotonic()-started)*1000, 2),
+                       prefix_hash=prefix_fingerprint(messages, model_tool_projection(tools)).prefix_hash,
+                       tools_offered=len(tools or ()),
+                       **{key: usage.get(key, UNKNOWN) for key in
+                          ("prompt_tokens", "completion_tokens", "cached_tokens", "cache_write_tokens")})
+                return result
+        except Exception as error:
+            record("model", model=self.model, error_kind=type(error).__name__,
+                   duration_ms=round((time.monotonic()-queued)*1000, 2),
+                   attempts=getattr(error, "attempts", 1))
+            raise
 
     async def _complete(
         self,
@@ -700,6 +719,7 @@ class ModelClient:
                     tools_hash=fingerprint.tools_hash,
                 )
             )
+            record("model_attempts", attempts=attempt)
             data["usage"] = usage
             log.info(
                 "model call ok model=%s attempts=%d prompt_tokens=%s cached_tokens=%s"
