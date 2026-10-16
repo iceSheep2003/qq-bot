@@ -107,6 +107,7 @@ Wiki 候选可以即时落盘，但发布版按批次更新：默认 8 条候选
 - 可选 Wiki runtime 已完成：`BOT_WIKI_ENABLED=false` 时不读取、不创建缓存、不改变 Agent；线上当前没有该开关，保持关闭。
 - 运行中刷新已完成：Wiki Markdown 发生新增、修改或删除时，FileBackedWikiReader 会在下一次读取前重新加载，版本变化会自动切换缓存键。
 - full 读取已完成：Agent 只在明确的完整资料/记忆回顾请求下读取完整页面，普通消息仍只取相关条目。
+- 可选旧记忆同步已完成：只有 `BOT_WIKI_ENABLED=true` 且 `BOT_WIKI_SYNC_LEGACY=true` 时才打开旧库只读同步；默认关闭，线上没有这两个开关。
 - Reader/Writer 已接入本地可选 runtime；线上旧版 `qunbot` 仍保持原有长期记忆和黑话路径。
 - 旧数据投影、Markdown 快照恢复和运行中刷新已经完成；是否替换线上读取路径仍需单独授权和真实环境验证。
 

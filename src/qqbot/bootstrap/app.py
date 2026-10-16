@@ -207,7 +207,7 @@ class BotApp:
             history_message_limit=config.conversation_window_messages,
             live_scene_seconds=config.conversation_window_seconds,
             continuity_ttl_seconds=config.conversation_snapshot_ttl_seconds,
-            wiki_reader=configured_wiki_reader(),
+            wiki_reader=configured_wiki_reader(config.db_path),
         )
         gateway = OneBotGateway(
             config.onebot_host,

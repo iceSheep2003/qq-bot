@@ -1525,8 +1525,16 @@
     "tests": [
       "test_enabled_runtime_refreshes_after_markdown_snapshot_changes",
       "test_enabled_wiki_runtime_reads_published_markdown",
+      "test_file_backed_reader_runs_optional_synchronizer_before_read",
       "test_wiki_runtime_is_off_by_default"
     ],
-    "assertions": 5
+    "assertions": 6
+  },
+  "tests/infrastructure/test_wiki_sync.py": {
+    "tests": [
+      "test_sync_batches_changed_legacy_rows_before_writing",
+      "test_sync_can_be_forced_for_manual_correction"
+    ],
+    "assertions": 6
   }
 }

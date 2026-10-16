@@ -1,0 +1,61 @@
+"""Optional, batched publication of accepted legacy memory into Wiki files."""
+
+from __future__ import annotations
+
+import time
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any, Callable
+
+from qqbot.agent.memory.wiki.migration import WikiMigration, WikiMigrationReport
+from qqbot.agent.memory.wiki.update_policy import WikiUpdatePolicy, published_version
+
+
+@dataclass(frozen=True)
+class WikiSyncReport:
+    changed: bool
+    published: bool
+    source_version: str
+    migration: WikiMigrationReport | None = None
+
+
+class LegacyWikiSynchronizer:
+    """Refresh Markdown only after the configured publication gate opens."""
+
+    def __init__(
+        self,
+        snapshot_loader: Callable[[], dict[str, Any]],
+        root: Path,
+        *,
+        policy: WikiUpdatePolicy | None = None,
+        migration: WikiMigration | None = None,
+        clock: Callable[[], int] = lambda: int(time.time()),
+    ) -> None:
+        self._load = snapshot_loader
+        self._root = Path(root)
+        self._policy = policy or WikiUpdatePolicy()
+        self._migration = migration or WikiMigration()
+        self._clock = clock
+        self._last_source_version: str | None = None
+        self._last_published_at: int | None = None
+
+    def refresh(self, *, force: bool = False) -> WikiSyncReport:
+        rows = self._load()
+        source_version = published_version(rows)
+        changed = source_version != self._last_source_version
+        if not changed:
+            return WikiSyncReport(False, False, source_version)
+        pending = len(rows.get("memories", ()))
+        should_publish = self._policy.should_publish(
+            now=int(self._clock()),
+            last_published_at=self._last_published_at,
+            pending_entries=pending,
+            force=force,
+        )
+        if not should_publish:
+            return WikiSyncReport(True, False, source_version)
+        migration = self._migration.run(rows, self._root, write=True)
+        self._last_source_version = source_version
+        self._last_published_at = int(self._clock())
+        return WikiSyncReport(True, True, source_version, migration)
+

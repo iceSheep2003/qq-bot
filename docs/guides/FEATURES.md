@@ -78,6 +78,7 @@
 | `BOT_WIKI_ENABLED` | `false` | 是否读取本地 Wiki 快照 |
 | `BOT_WIKI_ROOT` | `./data/wiki` | Markdown Wiki 根目录 |
 | `BOT_WIKI_CONTEXT_TTL_SECONDS` | `300` | 选中 Wiki 上下文的本地缓存 TTL |
+| `BOT_WIKI_SYNC_LEGACY` | `false` | 是否按批量策略从旧记忆只读同步 Wiki |
 
 **四步都存在**：数据模型、提炼去重分离、混合检索、生命周期。
 
