@@ -55,3 +55,23 @@ def test_deferred_change_publishes_when_time_window_expires(tmp_path):
     now[0] = 700
 
     assert sync.refresh().published is True
+
+
+def test_topic_or_slang_change_also_enters_publication_window(tmp_path):
+    now = [100]
+    snapshot = {
+        "memories": [],
+        "topics": [{"scope": "group:1", "canonical_name": "操作系统", "summary": "常聊", "mention_count": 1, "last_seen_at": 1}],
+        "slang": [],
+    }
+    sync = LegacyWikiSynchronizer(
+        lambda: snapshot,
+        tmp_path,
+        policy=WikiUpdatePolicy(min_interval_seconds=600, max_pending_entries=8),
+        clock=lambda: now[0],
+    )
+
+    assert sync.refresh().published is False
+    now[0] = 700
+
+    assert sync.refresh().published is True

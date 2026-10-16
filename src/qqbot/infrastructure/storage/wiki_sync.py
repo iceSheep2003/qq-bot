@@ -49,7 +49,9 @@ class LegacyWikiSynchronizer:
             self._pending_since = now
         if not changed and self._pending_since is None:
             return WikiSyncReport(False, False, source_version)
-        pending = len(rows.get("memories", ()))
+        pending = sum(
+            len(rows.get(name, ())) for name in ("memories", "topics", "slang")
+        )
         should_publish = self._policy.should_publish(
             now=now,
             last_published_at=self._last_published_at,
