@@ -91,8 +91,11 @@ class WikiWriter:
         lines.append("")
         return "\n".join(lines)
 
-    def write(self, root: Path, page: WikiPage) -> Path:
-        relative = PurePosixPath(f"{page.page_id}.md")
+    @staticmethod
+    def _target(root: Path, page_id: str) -> Path:
+        if not isinstance(page_id, str) or not page_id.strip():
+            raise ValueError("Wiki page id must be a nonempty string")
+        relative = PurePosixPath(f"{page_id}.md")
         if relative.is_absolute() or ".." in relative.parts:
             raise ValueError("Wiki page id must stay below the Wiki root")
         root = Path(root)
@@ -102,8 +105,16 @@ class WikiWriter:
             target.relative_to(root_resolved)
         except ValueError as exc:
             raise ValueError("Wiki page path escapes the Wiki root") from exc
+        candidate = root_resolved
+        for part in relative.parts:
+            candidate = candidate / part
+            if candidate.is_symlink():
+                raise ValueError("Managed Wiki paths cannot contain symlinks")
+        return target
+
+    @staticmethod
+    def _write_atomic(target: Path, content: str) -> None:
         target.parent.mkdir(parents=True, exist_ok=True)
-        content = self.render(page)
         with tempfile.NamedTemporaryFile(
             "w", encoding="utf-8", dir=target.parent, prefix=f".{target.name}.", suffix=".tmp", delete=False
         ) as handle:
@@ -115,5 +126,35 @@ class WikiWriter:
             os.replace(temporary, target)
         finally:
             temporary.unlink(missing_ok=True)
+
+    def write(self, root: Path, page: WikiPage) -> Path:
+        target = self._target(root, page.page_id)
+        self._write_atomic(target, self.render(page))
         return target
+
+    def publish(self, root: Path, pages: tuple[WikiPage, ...]) -> int:
+        """Replace only this publisher's tracked pages; leave other files alone."""
+        root = Path(root)
+        manifest = root / ".wiki-managed-pages.json"
+        previous = []
+        if manifest.exists():
+            state = json.loads(manifest.read_text(encoding="utf-8"))
+            if (not isinstance(state, dict) or state.get("version") != 1
+                    or not isinstance(state.get("pages"), list)
+                    or any(not isinstance(item, str) for item in state["pages"])):
+                raise ValueError("Invalid managed Wiki page manifest")
+            previous = state["pages"]
+        current = {page.page_id for page in pages}
+        # Validate the complete replacement before any write or deletion.
+        targets = {identity: self._target(root, identity) for identity in current | set(previous)}
+        if len({targets[page.page_id] for page in pages}) != len(pages):
+            raise ValueError("Duplicate Wiki page paths")
+        for page in pages:
+            self.write(root, page)
+        for identity in set(previous) - current:
+            targets[identity].unlink(missing_ok=True)
+        self._write_atomic(manifest, json.dumps(
+            {"version": 1, "pages": sorted(current)}, ensure_ascii=False, sort_keys=True
+        ) + "\n")
+        return len(pages)
 

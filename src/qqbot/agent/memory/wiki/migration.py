@@ -33,9 +33,7 @@ class WikiMigration:
         )
         written = 0
         if write:
-            for page in pages:
-                self.writer.write(root, page)
-                written += 1
+            written = self.writer.publish(root, pages)
         return WikiMigrationReport(
             pages=len(pages),
             entries=sum(len(page.entries) for page in pages),

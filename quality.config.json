@@ -722,6 +722,37 @@
             "equals": 0
           }
         ]
+      },
+      {
+        "id": "wiki-snapshot-replacement",
+        "title": "Retire owned Wiki pages without deleting manual content",
+        "command": [
+          ".venv/bin/python",
+          "-m",
+          "pytest",
+          "tests/agent/test_wiki_snapshot_replacement.py",
+          "-q",
+          "--junitxml=.quality/wiki-snapshot-replacement.xml"
+        ],
+        "report": ".quality/wiki-snapshot-replacement.xml",
+        "format": "junit",
+        "metrics": [
+          {
+            "name": "Cases",
+            "path": "tests",
+            "min": 8
+          },
+          {
+            "name": "Success rate",
+            "path": "successRate",
+            "equals": 100
+          },
+          {
+            "name": "Skipped",
+            "path": "skipped",
+            "equals": 0
+          }
+        ]
       }
     ]
   }

@@ -29,7 +29,8 @@ class WikiUpdatePolicy:
         pending_entries: int,
         force: bool = False,
     ) -> bool:
-        if force and pending_entries > 0:
+        # An empty replacement is meaningful: it retires the previous snapshot.
+        if force:
             return True
         if pending_entries >= self.max_pending_entries:
             return True

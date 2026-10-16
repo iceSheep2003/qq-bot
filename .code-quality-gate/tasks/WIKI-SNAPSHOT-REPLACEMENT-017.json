@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "id": "WIKI-SNAPSHOT-REPLACEMENT-017",
+  "title": "Replace generated Wiki snapshots without retaining retired pages",
+  "requirements": [
+    "Track the page identities owned by generated Wiki publication across process restarts. Remove obsolete owned pages on a successful replacement, including an empty snapshot.",
+    "Never remove unowned manual documents. Dry-run is read-only, ownership metadata is validated before mutations, and malformed or escaping page identifiers cannot delete external files.",
+    "Failed page writes preserve the prior ownership manifest and old pages. A runtime reader with a warm cache no longer returns retired generated pages after publication."
+  ],
+  "testFiles": [
+    "tests/agent/test_wiki_snapshot_replacement.py"
+  ],
+  "codeFiles": [
+    "src/qqbot/agent/memory/wiki/writer.py",
+    "src/qqbot/agent/memory/wiki/migration.py",
+    "docs/architecture/RUNTIME.md",
+    "src/qqbot/agent/memory/wiki/update_policy.py"
+  ],
+  "testChecks": [
+    "wiki-snapshot-replacement"
+  ],
+  "protectedFiles": [
+    "tools/quality/checks.py",
+    "tools/quality/junit_report.py",
+    ".importlinter",
+    ".code-quality-gate/ci-setup.sh",
+    ".code-quality-gate/history/WIKI-SNAPSHOT-REPLACEMENT-017-initial-scope.zip"
+  ],
+  "maxAttempts": 11
+}
