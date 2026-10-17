@@ -201,3 +201,5 @@ body{background:radial-gradient(circle at 88% 4%,#d9eaff 0,transparent 29%),radi
   border:1px solid rgba(205,222,240,.9);background:#fff}
 .graph-note-avatar img{display:block;width:100%;height:100%;object-fit:cover}
 .graph-note-text{display:grid;gap:3px}
+
+.frequency-list{list-style:none;margin:0;padding:0 20px 15px}.frequency-list li{display:flex;justify-content:space-between;gap:16px;padding:10px 0;border-bottom:1px solid var(--line,#e6eaf0);font-size:13px}.frequency-list li:last-child{border-bottom:0}.frequency-list strong{font-variant-numeric:tabular-nums;color:var(--muted,#6b7280);font-weight:600}.frequency-list .muted{font-weight:400}

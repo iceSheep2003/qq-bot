@@ -846,6 +846,38 @@
             "equals": 0
           }
         ]
+      },
+      {
+        "id": "dashboard-observability",
+        "title": "Dashboard skill and tool frequency observability",
+        "command": [
+          ".venv/bin/python",
+          "-m",
+          "pytest",
+          "tests/interfaces/test_dashboard_observability.py",
+          "tests/interfaces/test_dashboard.py",
+          "-q",
+          "--junitxml=.quality/dashboard-observability.xml"
+        ],
+        "report": ".quality/dashboard-observability.xml",
+        "format": "junit",
+        "metrics": [
+          {
+            "name": "Observability cases",
+            "path": "tests",
+            "min": 21
+          },
+          {
+            "name": "Success rate",
+            "path": "successRate",
+            "equals": 100
+          },
+          {
+            "name": "Skipped",
+            "path": "skipped",
+            "equals": 0
+          }
+        ]
       }
     ]
   }

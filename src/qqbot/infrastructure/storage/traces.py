@@ -68,11 +68,17 @@ class TraceStore(SqliteRepository):
                   "prompt_tokens": 0, "completion_tokens": 0, "cached_tokens": 0,
                   "cache_known_calls": 0, "cache_unknown_calls": 0, "token_unknown_calls": 0,
                   "cache_hit_ratio": None, "latency_p95_ms": None, "hours": hours,
-                  "retention_days": 30, "retention_turns": 50000}
+                  "retention_days": 30, "retention_turns": 50000,
+                  "skill_counts": {}, "tool_counts": {}, "tool_outcomes": {},
+                  "skill_turns": 0, "tool_calls": 0, "skill_scope_counts": {},
+                  "tool_scope_counts": {}}
         denominator = 0
         buckets, scopes, outcomes, models = {}, set(), {}, {}
+        skill_scope_counts, tool_scope_counts = {}, {}
         for trace in traces:
             scopes.add(trace["scope"])
+            skill_scope_counts.setdefault(trace["scope"], {})
+            tool_scope_counts.setdefault(trace["scope"], {})
             outcome = trace["outcome"]
             outcomes[outcome] = outcomes.get(outcome, 0)+1
             result["replies"] += outcome == "sent"
@@ -81,6 +87,25 @@ class TraceStore(SqliteRepository):
             bucket = buckets.setdefault(hour, {"at": hour, "turns": 0, "prompt_tokens": 0, "completion_tokens": 0, "cached_tokens": 0})
             bucket["turns"] += 1
             for step in trace["steps"]:
+                if step["stage"] == "context":
+                    skills = step.get("skills") or []
+                    if skills:
+                        result["skill_turns"] += 1
+                    for name in skills:
+                        if not name:
+                            continue
+                        result["skill_counts"][name] = result["skill_counts"].get(name, 0) + 1
+                        skill_scope_counts[trace["scope"]][name] = skill_scope_counts[trace["scope"]].get(name, 0) + 1
+                    continue
+                if step["stage"] == "tool":
+                    result["tool_calls"] += 1
+                    name = step.get("tool")
+                    if name:
+                        result["tool_counts"][name] = result["tool_counts"].get(name, 0) + 1
+                        tool_scope_counts[trace["scope"]][name] = tool_scope_counts[trace["scope"]].get(name, 0) + 1
+                    tool_outcome = step.get("outcome", "unknown") or "unknown"
+                    result["tool_outcomes"][tool_outcome] = result["tool_outcomes"].get(tool_outcome, 0) + 1
+                    continue
                 if step["stage"] != "model":
                     continue
                 result["model_calls"] += 1
@@ -107,4 +132,5 @@ class TraceStore(SqliteRepository):
         if durations:
             result["latency_p95_ms"] = durations[max(0, math.ceil(len(durations)*.95)-1)]
         return {**result, "timeline": sorted(buckets.values(), key=lambda x:x["at"]),
-                "scopes": sorted(scopes), "outcomes": outcomes, "models": models}
+                "scopes": sorted(scopes), "outcomes": outcomes, "models": models,
+                "skill_scope_counts": skill_scope_counts, "tool_scope_counts": tool_scope_counts}

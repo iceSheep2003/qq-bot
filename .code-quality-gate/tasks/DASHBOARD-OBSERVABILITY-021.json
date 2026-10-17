@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "id": "DASHBOARD-OBSERVABILITY-021",
+  "title": "Expose skill and tool frequency in the operator dashboard",
+  "requirements": [
+    "Aggregate actual selected Skill names and tool calls from bounded traces, including repeated selections, outcomes and scope breakdowns.",
+    "Keep empty and unknown values explicit and preserve authenticated, bounded dashboard queries.",
+    "Render the frequency and failure information in the existing Kinna WebUI without replacing its shell."
+  ],
+  "testFiles": [
+    "tests/interfaces/test_dashboard_observability.py",
+    "tests/interfaces/test_dashboard.py"
+  ],
+  "codeFiles": [
+    "src/qqbot/infrastructure/storage/traces.py",
+    "src/qqbot/interfaces/webui/static/app.js",
+    "src/qqbot/interfaces/webui/static/dashboard.js",
+    "src/qqbot/interfaces/webui/docs/GUIDE.md"
+  ],
+  "testChecks": [
+    "dashboard-observability"
+  ],
+  "protectedFiles": [
+    "tools/quality/checks.py",
+    "tools/quality/junit_report.py",
+    ".importlinter",
+    ".code-quality-gate/ci-setup.sh"
+  ],
+  "maxAttempts": 12
+}

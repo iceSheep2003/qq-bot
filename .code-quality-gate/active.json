@@ -1,4 +1,4 @@
 {
-  "manifest": ".code-quality-gate/tasks/DASHBOARD-020.json",
+  "manifest": ".code-quality-gate/tasks/DASHBOARD-OBSERVABILITY-021.json",
   "config": "quality.config.json"
 }
