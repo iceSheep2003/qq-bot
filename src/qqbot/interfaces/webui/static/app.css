@@ -205,3 +205,16 @@ body{background:radial-gradient(circle at 88% 4%,#d9eaff 0,transparent 29%),radi
 .frequency-list{list-style:none;margin:0;padding:0 20px 15px}.frequency-list li{display:flex;justify-content:space-between;gap:16px;padding:10px 0;border-bottom:1px solid var(--line,#e6eaf0);font-size:13px}.frequency-list li:last-child{border-bottom:0}.frequency-list strong{font-variant-numeric:tabular-nums;color:var(--muted,#6b7280);font-weight:600}.frequency-list .muted{font-weight:400}
 
 .database-query form{padding:20px}.database-query textarea{width:100%;resize:vertical;box-sizing:border-box;border:1px solid var(--line,#e6eaf0);border-radius:6px;padding:12px;font:12px/1.6 ui-monospace,SFMono-Regular,monospace;background:var(--surface,#fff);color:inherit}.database-query-actions{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-top:12px;font-size:12px}.database-query-actions input{width:80px}.database-query-result{padding:0 20px 18px}.database-count{padding:0 20px}.db-table-list{display:flex;flex-wrap:wrap;gap:8px}
+
+/* Taste UI polish: the original workbench stays intact, while controls and
+   dense operational data gain explicit states instead of decorative noise. */
+.button:active,.nav-item:active,.memory-tab:active,.icon-button:active{transform:translateY(1px) scale(.98)}
+button,input,select,textarea,a{touch-action:manipulation}
+.button:focus-visible,.nav-item:focus-visible,.memory-tab:focus-visible,.icon-button:focus-visible,
+input:focus-visible,select:focus-visible,textarea:focus-visible,a:focus-visible{outline:3px solid rgba(23,105,224,.34);outline-offset:2px}
+.table-scroll{overflow:auto;max-width:100%;border:1px solid #dce7f2;border-radius:11px;background:#fff}
+.table-scroll table{width:100%;min-width:620px;border-collapse:separate;border-spacing:0;font-variant-numeric:tabular-nums}
+.table-scroll thead th{position:sticky;top:0;z-index:1;padding:10px 12px;border-bottom:1px solid #cbddef;color:#50677f;background:#f5f9fd;font-size:10px;font-weight:800;text-align:left;white-space:nowrap}
+.table-scroll tbody td{padding:10px 12px;border-bottom:1px solid #eef3f8;color:#294866;font-size:11px;vertical-align:top}
+.table-scroll tbody tr:last-child td{border-bottom:0}.table-scroll tbody tr:hover td{background:#f7fbff}
+@media(max-width:700px){.table-scroll{border-radius:9px}.table-scroll table{min-width:540px}.table-scroll thead th,.table-scroll tbody td{padding:9px 10px}}

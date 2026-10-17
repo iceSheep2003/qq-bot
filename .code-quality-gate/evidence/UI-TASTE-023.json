@@ -1,0 +1,47 @@
+{
+  "version": 1,
+  "id": "UI-TASTE-023",
+  "attempts": 2,
+  "red": {
+    "time": "2026-10-17T19:50:50.169Z",
+    "snapshot": {
+      "contract": "6dcafc3d41517269a8a2e138a881a4366a91c9fcdf45d978a69eaf7263341df7",
+      "protected": {
+        ".code-quality-gate/ci-setup.sh": "8c6636d8a04487aa9d8c623fce23aaab751bec431c25aa8a402a841532a8a69f",
+        ".code-quality-gate/tasks/UI-TASTE-023.json": "8286276d8a789711b388d4da0a9a44101fc3592ee8fe58ed7d85cd877fe6d901",
+        ".importlinter": "dbe30e5e76cf5a7c1c2377d8ea87502421d2eb93c175711447bab2baee6f1eca",
+        "quality.config.json": "cd58bf444ff55d17385c229ba88e3c2b7362a242d5e0d45a413be66825d9c76e",
+        "tests/interfaces/test_dashboard.py": "5cf880a5653715feff2b3bb84f4209f386fbf8f15f25797cb6789c20f3cd50db",
+        "tests/interfaces/test_ui_taste.py": "94c0e347a0396155373a754300dc788bf0007f9dc1086955ea33489a4c0c4307",
+        "tools/quality/checks.py": "6fa2eb95acb56139a72eb7f32b87c7672b64e2ebadd25d2c34d435a2b7392353",
+        "tools/quality/junit_report.py": "082cff7fb89c4f5cac8d71a198185f857b5d2501f7a59f74905cf4bf22b48c8b"
+      },
+      "code": {
+        "src/qqbot/interfaces/webui/static/app.css": "86aa642df87d3a92b394e16443d279a4a6b9eb801ae814a9bc47f9dc8bddbd6f",
+        "src/qqbot/interfaces/webui/static/index.html": "f27397157a268350ee1fc1893b09c30f2da8da68c55afdd8cdde929700efbf93"
+      }
+    },
+    "report": ".quality/code-quality-gate/UI-TASTE-023/red-86ee75f4-e76a-42f5-9d4c-7e62f84be88c.md"
+  },
+  "green": {
+    "time": "2026-10-17T19:55:52.152Z",
+    "snapshot": {
+      "contract": "6dcafc3d41517269a8a2e138a881a4366a91c9fcdf45d978a69eaf7263341df7",
+      "protected": {
+        ".code-quality-gate/ci-setup.sh": "8c6636d8a04487aa9d8c623fce23aaab751bec431c25aa8a402a841532a8a69f",
+        ".code-quality-gate/tasks/UI-TASTE-023.json": "8286276d8a789711b388d4da0a9a44101fc3592ee8fe58ed7d85cd877fe6d901",
+        ".importlinter": "dbe30e5e76cf5a7c1c2377d8ea87502421d2eb93c175711447bab2baee6f1eca",
+        "quality.config.json": "cd58bf444ff55d17385c229ba88e3c2b7362a242d5e0d45a413be66825d9c76e",
+        "tests/interfaces/test_dashboard.py": "5cf880a5653715feff2b3bb84f4209f386fbf8f15f25797cb6789c20f3cd50db",
+        "tests/interfaces/test_ui_taste.py": "94c0e347a0396155373a754300dc788bf0007f9dc1086955ea33489a4c0c4307",
+        "tools/quality/checks.py": "6fa2eb95acb56139a72eb7f32b87c7672b64e2ebadd25d2c34d435a2b7392353",
+        "tools/quality/junit_report.py": "082cff7fb89c4f5cac8d71a198185f857b5d2501f7a59f74905cf4bf22b48c8b"
+      },
+      "code": {
+        "src/qqbot/interfaces/webui/static/app.css": "ee94cfd0709ce09e8ffb1b5ff4e0bd4b7f5f79ed59cf7b8a75debe77be634322",
+        "src/qqbot/interfaces/webui/static/index.html": "f27397157a268350ee1fc1893b09c30f2da8da68c55afdd8cdde929700efbf93"
+      }
+    },
+    "report": ".quality/code-quality-gate/UI-TASTE-023/green-c5fed214-7191-4fb4-afd2-707234d1f061.md"
+  }
+}

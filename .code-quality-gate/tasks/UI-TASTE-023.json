@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "id": "UI-TASTE-023",
+  "title": "Polish the original Kinna WebUI with local Taste UI rules",
+  "requirements": [
+    "Preserve the existing Kinna workbench shell, visual identity and data density while making interaction states more deliberate.",
+    "Add tactile keyboard, focus, reduced-motion and narrow-screen behavior without introducing a new frontend stack.",
+    "Improve dense operational data surfaces with stable tables, tabular numerals and real-data empty/error states."
+  ],
+  "testFiles": [
+    "tests/interfaces/test_ui_taste.py",
+    "tests/interfaces/test_dashboard.py"
+  ],
+  "codeFiles": [
+    "src/qqbot/interfaces/webui/static/app.css",
+    "src/qqbot/interfaces/webui/static/index.html"
+  ],
+  "testChecks": [
+    "ui-taste"
+  ],
+  "protectedFiles": [
+    "tools/quality/checks.py",
+    "tools/quality/junit_report.py",
+    ".importlinter",
+    ".code-quality-gate/ci-setup.sh"
+  ],
+  "maxAttempts": 12
+}
