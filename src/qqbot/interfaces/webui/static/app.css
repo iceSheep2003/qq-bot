@@ -203,3 +203,5 @@ body{background:radial-gradient(circle at 88% 4%,#d9eaff 0,transparent 29%),radi
 .graph-note-text{display:grid;gap:3px}
 
 .frequency-list{list-style:none;margin:0;padding:0 20px 15px}.frequency-list li{display:flex;justify-content:space-between;gap:16px;padding:10px 0;border-bottom:1px solid var(--line,#e6eaf0);font-size:13px}.frequency-list li:last-child{border-bottom:0}.frequency-list strong{font-variant-numeric:tabular-nums;color:var(--muted,#6b7280);font-weight:600}.frequency-list .muted{font-weight:400}
+
+.database-query form{padding:20px}.database-query textarea{width:100%;resize:vertical;box-sizing:border-box;border:1px solid var(--line,#e6eaf0);border-radius:6px;padding:12px;font:12px/1.6 ui-monospace,SFMono-Regular,monospace;background:var(--surface,#fff);color:inherit}.database-query-actions{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-top:12px;font-size:12px}.database-query-actions input{width:80px}.database-query-result{padding:0 20px 18px}.database-count{padding:0 20px}.db-table-list{display:flex;flex-wrap:wrap;gap:8px}

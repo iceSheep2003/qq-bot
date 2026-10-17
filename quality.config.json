@@ -878,6 +878,37 @@
             "equals": 0
           }
         ]
+      },
+      {
+        "id": "database-console",
+        "title": "Authenticated read-only SQL management projection",
+        "command": [
+          ".venv/bin/python",
+          "-m",
+          "pytest",
+          "tests/interfaces/test_database_console.py",
+          "-q",
+          "--junitxml=.quality/database-console.xml"
+        ],
+        "report": ".quality/database-console.xml",
+        "format": "junit",
+        "metrics": [
+          {
+            "name": "Database cases",
+            "path": "tests",
+            "min": 4
+          },
+          {
+            "name": "Success rate",
+            "path": "successRate",
+            "equals": 100
+          },
+          {
+            "name": "Skipped",
+            "path": "skipped",
+            "equals": 0
+          }
+        ]
       }
     ]
   }

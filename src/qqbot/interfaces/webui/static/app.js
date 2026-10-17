@@ -7,7 +7,7 @@ let original = {};
 const glyphs = {
   connection: "⌁", conversation: "◌", personality: "✦", proactive: "◴",
   moderation: "◇", media: "▣", system: "⚙", memory: "◎", schedules: "◷",
-  experiments: "⌬", guide: "?", dashboard: "▤",
+  experiments: "⌬", guide: "?", dashboard: "▤", database: "▥",
 };
 
 let memoryView = { tab: "overview", scope: "", after: "", previous: [], query: "", status: "" };
@@ -960,7 +960,36 @@ async function renderDashboard(tab = "overview") {
   } catch (error) { content.innerHTML = emptyState("运行数据暂不可用", error.message); }
 }
 
+
+function databaseResultTable(result) {
+  if (!result || !result.columns?.length) return emptyState("没有查询结果", "SELECT 没有返回列或记录。");
+  const header = result.columns.map((column) => `<th>${escapeHtml(column)}</th>`).join("");
+  const rows = result.rows.map((row) => `<tr>${row.map((value) => `<td class="mono">${escapeHtml(value === null ? "NULL" : String(value))}</td>`).join("")}</tr>`).join("");
+  return `<div class="table-scroll"><table><thead><tr>${header}</tr></thead><tbody>${rows || `<tr><td colspan="${result.columns.length}">没有记录</td></tr>`}</tbody></table></div><p class="muted database-count">${result.total === undefined ? `${result.rows.length} 行` : `共 ${result.total} 行`}${result.truncated ? " · 已按上限截断" : ""}</p>`;
+}
+
+async function renderDatabase(table = "") {
+  document.querySelectorAll(".nav-item").forEach((item) => item.classList.toggle("active", item.dataset.target === "database"));
+  $(".search").classList.add("hidden"); $("#save").classList.add("hidden"); history.replaceState(null, "", "#database");
+  const content = $("#content"); content.innerHTML = `<section class="memory-workspace loading-state">正在读取 SQLite 结构…</section>`;
+  try {
+    const schema = (await api("/api/database/schema")).data;
+    const selected = table || schema.tables?.[0]?.name || "";
+    const selectedMeta = schema.tables?.find((item) => item.name === selected);
+    const tabs = (schema.tables || []).map((item) => `<button class="memory-tab ${item.name === selected ? "active" : ""}" data-db-table="${escapeHtml(item.name)}">${escapeHtml(item.name)} <small>${item.row_count}</small></button>`).join("");
+    let rows = selected ? (await api(`/api/database/tables/${encodeURIComponent(selected)}?limit=100`)).data : null;
+    content.innerHTML = `<section class="memory-workspace"><div class="memory-toolbar"><div><p class="eyebrow">SQLITE / OWNER READ MODEL</p><h2>数据存储</h2><p class="muted">真实 SQLite 结构与只读查询；写操作继续通过任务、配置和审核业务界面完成。</p></div><span class="data-badge">${schema.tables?.length || 0} 张表</span></div><div class="memory-tabs">${tabs || `<span class="muted">没有可展示的业务表</span>`}</div><div class="memory-body"><div class="overview-grid"><article class="data-panel"><div class="panel-title"><h3>${escapeHtml(selected || "未选择表")}</h3><p>${selectedMeta ? `${selectedMeta.columns.length} 个字段 · ${selectedMeta.row_count} 行` : "选择一张表查看实际数据"}</p></div>${rows ? databaseResultTable(rows) : emptyState("没有可展示的表", "数据库尚未创建业务表。")}</article><article class="data-panel database-query"><div class="panel-title"><h3>只读 SQL</h3><p>仅允许单条 SELECT，最多返回 200 行。</p></div><form id="database-query-form"><textarea name="sql" rows="7" placeholder="SELECT scope, COUNT(*) AS count FROM messages GROUP BY scope ORDER BY count DESC"></textarea><div class="database-query-actions"><label>上限 <input name="limit" type="number" min="1" max="200" value="100"></label><button class="button primary" type="submit">执行查询</button></div></form><div id="database-query-result"></div></article></div></div></section>`;
+    document.querySelectorAll("[data-db-table]").forEach((button) => { button.onclick = () => renderDatabase(button.dataset.dbTable); });
+    $("#database-query-form").onsubmit = async (event) => { event.preventDefault(); const form = event.currentTarget; const result = $("#database-query-result"); result.textContent = "查询中…"; try { const payload = Object.fromEntries(new FormData(form)); payload.limit = Number(payload.limit); result.innerHTML = databaseResultTable((await api("/api/database/query", { method: "POST", body: JSON.stringify(payload) })).data); } catch (error) { result.innerHTML = `<p class="error">${escapeHtml(error.message)}</p>`; } };
+  } catch (error) { content.innerHTML = `<section class="memory-workspace">${emptyState("数据库页面加载失败", error.message || "数据库服务尚未就绪")}</section>`; }
+}
+
 function activateSection(id) {
+  if (id === "database") {
+    renderDatabase();
+    $("#search").value = "";
+    return;
+  }
   if (id === "dashboard") {
     renderDashboard();
     $("#search").value = "";
@@ -1005,7 +1034,7 @@ function render(data) {
   original = {};
   Object.entries(data.values).forEach(([key, value]) => { original[key] = value.value; });
   const modules = data.sections.map((section) => `<button class="nav-item" data-target="${section.id}"><span class="nav-glyph">${glyphs[section.id] || "·"}</span><span>${escapeHtml(section.label)}</span></button>`).join("");
-  $("#nav").innerHTML = `${modules}<div class="nav-divider"></div><button class="nav-item" data-target="dashboard"><span class="nav-glyph">${glyphs.dashboard}</span><span>运行看板</span></button><div class="nav-divider"></div><button class="nav-item" data-target="memory"><span class="nav-glyph">${glyphs.memory}</span><span>记忆中心</span></button><button class="nav-item" data-target="schedules"><span class="nav-glyph">${glyphs.schedules}</span><span>任务中心</span></button><button class="nav-item" data-target="experiments"><span class="nav-glyph">${glyphs.experiments}</span><span>实验看板</span></button><button class="nav-item" data-target="guide"><span class="nav-glyph">${glyphs.guide}</span><span>使用指南</span></button>`;
+  $("#nav").innerHTML = `${modules}<div class="nav-divider"></div><button class="nav-item" data-target="database"><span class="nav-glyph">${glyphs.database}</span><span>数据存储</span></button><button class="nav-item" data-target="dashboard"><span class="nav-glyph">${glyphs.dashboard}</span><span>运行看板</span></button><div class="nav-divider"></div><button class="nav-item" data-target="memory"><span class="nav-glyph">${glyphs.memory}</span><span>记忆中心</span></button><button class="nav-item" data-target="schedules"><span class="nav-glyph">${glyphs.schedules}</span><span>任务中心</span></button><button class="nav-item" data-target="experiments"><span class="nav-glyph">${glyphs.experiments}</span><span>实验看板</span></button><button class="nav-item" data-target="guide"><span class="nav-glyph">${glyphs.guide}</span><span>使用指南</span></button>`;
   document.querySelectorAll(".nav-item").forEach((button) => {
     button.onclick = () => activateSection(button.dataset.target);
   });

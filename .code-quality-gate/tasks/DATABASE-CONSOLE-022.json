@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "id": "DATABASE-CONSOLE-022",
+  "title": "Add real SQL data management and improve task operations",
+  "requirements": [
+    "Expose authenticated, bounded, read-only SQL schema and query projections backed by the running SQLite database.",
+    "Reject writes, multiple statements, unsafe identifiers and out-of-range limits without mutating the database.",
+    "Connect the original WebUI to real database and schedule endpoints while preserving its visual shell and clear empty/error states.",
+    "Apply the Tasteful UI principles of product fit, information hierarchy, restraint and real-data verification to the added workbench surfaces."
+  ],
+  "testFiles": [
+    "tests/interfaces/test_database_console.py",
+    "tests/interfaces/test_dashboard.py",
+    "tests/interfaces/test_webui.py"
+  ],
+  "codeFiles": [
+    "src/qqbot/interfaces/webui/database_query.py",
+    "src/qqbot/interfaces/webui/server.py",
+    "src/qqbot/interfaces/webui/static/app.js",
+    "src/qqbot/interfaces/webui/static/app.css",
+    "src/qqbot/interfaces/webui/static/index.html",
+    "src/qqbot/interfaces/webui/docs/GUIDE.md"
+  ],
+  "testChecks": [
+    "database-console"
+  ],
+  "protectedFiles": [
+    "tools/quality/checks.py",
+    "tools/quality/junit_report.py",
+    ".importlinter",
+    ".code-quality-gate/ci-setup.sh"
+  ],
+  "maxAttempts": 12
+}

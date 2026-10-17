@@ -1,4 +1,4 @@
 {
-  "manifest": ".code-quality-gate/tasks/DASHBOARD-OBSERVABILITY-021.json",
+  "manifest": ".code-quality-gate/tasks/DATABASE-CONSOLE-022.json",
   "config": "quality.config.json"
 }

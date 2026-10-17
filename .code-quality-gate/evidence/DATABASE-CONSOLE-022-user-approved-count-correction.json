@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "id": "DATABASE-CONSOLE-022",
+  "attempts": 1,
+  "red": {
+    "time": "2026-10-17T19:04:17.565Z",
+    "snapshot": {
+      "contract": "cb94a4a5418362f0d524c51c646682c5597967dc7d6bef31e38f48e53cd914c3",
+      "protected": {
+        ".code-quality-gate/ci-setup.sh": "8c6636d8a04487aa9d8c623fce23aaab751bec431c25aa8a402a841532a8a69f",
+        ".code-quality-gate/tasks/DATABASE-CONSOLE-022.json": "53bf16138cf0d11331a1ac0b6eba2934560e9ecf81de3d5b12c35c6015299d14",
+        ".importlinter": "dbe30e5e76cf5a7c1c2377d8ea87502421d2eb93c175711447bab2baee6f1eca",
+        "quality.config.json": "b8e42a42d4d0872a59c0387df3c358a2c249a4e8f37aad084ed67a2385a737a0",
+        "tests/interfaces/test_dashboard.py": "5cf880a5653715feff2b3bb84f4209f386fbf8f15f25797cb6789c20f3cd50db",
+        "tests/interfaces/test_database_console.py": "5145e4991d7cab4a0a35fa8f481a0582660bf4aacab6c3c0ed80819c80dc08af",
+        "tests/interfaces/test_webui.py": "6c2ddc6d4cd42d5f1eaac700b0bd1ee24fb10093b22655b5f8bac5cfae32eead",
+        "tools/quality/checks.py": "6fa2eb95acb56139a72eb7f32b87c7672b64e2ebadd25d2c34d435a2b7392353",
+        "tools/quality/junit_report.py": "082cff7fb89c4f5cac8d71a198185f857b5d2501f7a59f74905cf4bf22b48c8b"
+      },
+      "code": {
+        "src/qqbot/interfaces/webui/database_query.py": "8c312d22cf4f6896a4a25c32dab4adf5aaafa97a157be15652361ada615c3432",
+        "src/qqbot/interfaces/webui/docs/GUIDE.md": "8efa44a323252d23f1df8e371d222ceff55f2d75580fcebe228f68de6d4cf529",
+        "src/qqbot/interfaces/webui/server.py": "206d24d6e55184da014658ae19526bfe429d1db46775332cd701a4516e65960c",
+        "src/qqbot/interfaces/webui/static/app.css": "c575df83f84c3383686772a1bbc46ecfd468a1ebc8b26ac35ebb4d7c6b8561ea",
+        "src/qqbot/interfaces/webui/static/app.js": "0bc9d515e807563433d8d85dfe8150a0cb86415a3af829823b525eed60a46680",
+        "src/qqbot/interfaces/webui/static/index.html": "f27397157a268350ee1fc1893b09c30f2da8da68c55afdd8cdde929700efbf93"
+      }
+    },
+    "report": ".quality/code-quality-gate/DATABASE-CONSOLE-022/red-eec8e3fd-092a-456c-afc8-e634677351fe.md"
+  }
+}

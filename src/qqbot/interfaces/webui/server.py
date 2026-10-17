@@ -13,6 +13,7 @@ from typing import Any
 from urllib.parse import parse_qs, unquote, urlsplit
 
 from qqbot.interfaces.webui.dashboard import DashboardQuery
+from qqbot.interfaces.webui.database_query import DatabaseConsoleQuery
 from qqbot.interfaces.webui.config import WebUIConfig
 from qqbot.interfaces.webui.envfile import EnvConfigStore
 from qqbot.interfaces.webui.experiments import ExperimentConsoleQuery
@@ -38,6 +39,7 @@ class WebUIServer:
         self.persona_queue: PersonaQueueQuery | None = None
         self.schedule_management = None
         self.dashboard = None
+        self.database_query = None
         # Offline experiment reports. Unlike the projections above this needs no
         # composed runtime: it reads a JSON file an operator produced, so it is
         # available even on a console whose bot is not running.
@@ -50,6 +52,7 @@ class WebUIServer:
     def bind_runtime(self, service) -> None:
         """Bind the console's projections after the composition root exists."""
         self.memory_query = MemoryConsoleQuery(service)
+        self.database_query = DatabaseConsoleQuery(getattr(service.conversations, "database", service.conversations.db))
         reader = getattr(service.agent, "wiki_reader", None)
         self.dashboard = DashboardQuery(getattr(service, "trace_sink", None), getattr(reader, "_store", None))
         self.persona_queue = PersonaQueueQuery(
@@ -214,7 +217,32 @@ class WebUIServer:
                 if not self._authorized():
                     self._json(HTTPStatus.UNAUTHORIZED, {"error": "登录密钥无效"})
                     return
-                if path.startswith("/api/dashboard/"):
+                if path.startswith("/api/database/"):
+                    database = owner.database_query
+                    if database is None:
+                        self._json(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "数据库服务尚未就绪"})
+                        return
+                    try:
+                        if path == "/api/database/schema":
+                            data = database.schema()
+                        elif path.startswith("/api/database/tables/"):
+                            table = unquote(path.rsplit("/", 1)[1])
+                            data = database.rows(table, limit=int(query.get("limit", ["100"])[0]))
+                        elif path == "/api/database/query":
+                            # Query text is sent as URL-safe JSON only for GET previews; writes are impossible in this port.
+                            data = database.execute(str(query.get("sql", [""])[0]), limit=int(query.get("limit", ["100"])[0]))
+                        else:
+                            self._json(HTTPStatus.NOT_FOUND, {"error": "not found"})
+                            return
+                    except (ValueError, OverflowError) as error:
+                        self._json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
+                        return
+                    except Exception:
+                        log.exception("Database console query failed")
+                        self._json(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": "读取数据库失败"})
+                        return
+                    self._json(HTTPStatus.OK, {"data": data})
+                elif path.startswith("/api/dashboard/"):
                     dashboard = owner.dashboard
                     if dashboard is None or dashboard.traces is None:
                         self._json(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "运行数据未接入。请随 Bot 启动控制台。"})
@@ -485,6 +513,18 @@ class WebUIServer:
                     return
                 if not self._authorized():
                     self._json(HTTPStatus.UNAUTHORIZED, {"error": "登录密钥无效"})
+                    return
+                if path == "/api/database/query":
+                    database = owner.database_query
+                    if database is None:
+                        self._json(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "数据库服务尚未就绪"})
+                        return
+                    try:
+                        data = database.execute(str(body.get("sql", "")), limit=int(body.get("limit", 100)))
+                    except (ValueError, OverflowError) as error:
+                        self._json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
+                        return
+                    self._json(HTTPStatus.OK, {"data": data})
                     return
                 if path.startswith("/api/review/persona/"):
                     queue = owner.persona_queue
