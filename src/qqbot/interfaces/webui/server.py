@@ -20,6 +20,7 @@ from qqbot.interfaces.webui.experiments import ExperimentConsoleQuery
 from qqbot.interfaces.webui.review_queue import ReviewFileEditor, ReviewFormatError
 from qqbot.interfaces.webui.schema import SECTIONS, SETTINGS
 from qqbot.interfaces.webui.memory_query import MemoryConsoleQuery
+from qqbot.interfaces.webui.skill_query import SkillConsoleQuery
 from qqbot.interfaces.webui.persona_review import PersonaQueueQuery
 
 log = logging.getLogger(__name__)
@@ -40,6 +41,7 @@ class WebUIServer:
         self.schedule_management = None
         self.dashboard = None
         self.database_query = None
+        self.skills_query = None
         # Offline experiment reports. Unlike the projections above this needs no
         # composed runtime: it reads a JSON file an operator produced, so it is
         # available even on a console whose bot is not running.
@@ -53,6 +55,7 @@ class WebUIServer:
         """Bind the console's projections after the composition root exists."""
         self.memory_query = MemoryConsoleQuery(service)
         self.database_query = DatabaseConsoleQuery(getattr(service.conversations, "database", service.conversations.db))
+        self.skills_query = SkillConsoleQuery(service.agent.skills)
         reader = getattr(service.agent, "wiki_reader", None)
         self.dashboard = DashboardQuery(getattr(service, "trace_sink", None), getattr(reader, "_store", None))
         self.persona_queue = PersonaQueueQuery(
@@ -217,7 +220,34 @@ class WebUIServer:
                 if not self._authorized():
                     self._json(HTTPStatus.UNAUTHORIZED, {"error": "登录密钥无效"})
                     return
-                if path.startswith("/api/database/"):
+                if path == "/api/skills":
+                    if owner.skills_query is None:
+                        self._json(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "Skill 服务尚未就绪"})
+                        return
+                    usage = {}
+                    if owner.dashboard is not None and owner.dashboard.traces is not None:
+                        usage = owner.dashboard.traces.overview(hours=168).get("skill_counts", {})
+                    self._json(HTTPStatus.OK, {"data": owner.skills_query.catalog(usage)})
+                elif path == "/api/wiki/overview":
+                    if owner.dashboard is None:
+                        self._json(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "Wiki 服务尚未就绪"})
+                        return
+                    try:
+                        data = owner.dashboard.wiki_catalog(str(query.get("scope", [""])[0]).strip() or None, int(query.get("limit", ["200"])[0]))
+                    except (ValueError, OverflowError) as error:
+                        self._json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
+                        return
+                    self._json(HTTPStatus.OK, {"data": data})
+                elif path.startswith("/api/wiki/pages/"):
+                    if owner.dashboard is None:
+                        self._json(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "Wiki 服务尚未就绪"})
+                        return
+                    data = owner.dashboard.wiki_page(unquote(path.rsplit("/", 1)[1]))
+                    if data is None:
+                        self._json(HTTPStatus.NOT_FOUND, {"error": "Wiki 页面不存在或未启用"})
+                        return
+                    self._json(HTTPStatus.OK, {"data": data})
+                elif path.startswith("/api/database/"):
                     database = owner.database_query
                     if database is None:
                         self._json(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "数据库服务尚未就绪"})

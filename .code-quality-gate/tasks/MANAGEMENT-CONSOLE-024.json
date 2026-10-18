@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "id": "MANAGEMENT-CONSOLE-024",
+  "title": "Add Skill and LM Wiki management workbench views",
+  "requirements": [
+    "Authenticated WebUI views expose actual runtime Skill catalog metadata, audience scope, unavailable declarations and bounded usage counts.",
+    "Authenticated WebUI views expose actual published Wiki Markdown entities, scope filters, versions, facts, topics, slang and links without inventing pages.",
+    "Preserve the existing Kinna workbench shell and connect views to the already-bound runtime and read-only projections."
+  ],
+  "testFiles": [
+    "tests/interfaces/test_management_console.py",
+    "tests/interfaces/test_dashboard.py"
+  ],
+  "codeFiles": [
+    "src/qqbot/interfaces/webui/skill_query.py",
+    "src/qqbot/interfaces/webui/dashboard.py",
+    "src/qqbot/interfaces/webui/server.py",
+    "src/qqbot/interfaces/webui/static/app.js",
+    "src/qqbot/interfaces/webui/static/app.css"
+  ],
+  "testChecks": [
+    "management-console"
+  ],
+  "protectedFiles": [
+    "tools/quality/checks.py",
+    "tools/quality/junit_report.py",
+    ".importlinter",
+    ".code-quality-gate/ci-setup.sh"
+  ],
+  "maxAttempts": 12
+}

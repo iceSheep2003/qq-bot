@@ -7,7 +7,7 @@ let original = {};
 const glyphs = {
   connection: "⌁", conversation: "◌", personality: "✦", proactive: "◴",
   moderation: "◇", media: "▣", system: "⚙", memory: "◎", schedules: "◷",
-  experiments: "⌬", guide: "?", dashboard: "▤", database: "▥",
+  experiments: "⌬", guide: "?", dashboard: "▤", database: "▥", skills: "✧", wikiadmin: "▤",
 };
 
 let memoryView = { tab: "overview", scope: "", after: "", previous: [], query: "", status: "" };
@@ -930,6 +930,31 @@ async function renderExperiments(tab = experimentView.tab) {
 }
 
 
+
+async function renderSkills() {
+  document.querySelectorAll(".nav-item").forEach((item) => item.classList.toggle("active", item.dataset.target === "skills"));
+  $(".search").classList.add("hidden"); $("#save").classList.add("hidden"); history.replaceState(null, "", "#skills");
+  const content = $("#content"); content.innerHTML = `<section class="memory-workspace loading-state">正在读取 Skill catalog…</section>`;
+  try {
+    const {data} = await api("/api/skills");
+    const rows = data.skills || [];
+    content.innerHTML = `<section class="memory-workspace"><div class="memory-toolbar"><div><p class="eyebrow">SKILL CATALOG / OWNER VIEW</p><h2>Skill 管理</h2><p class="muted">实际装配的 Skill、作用域和触发条件；调用次数来自最近 7 天真实 Trace。</p></div><span class="data-badge">${data.total} 个已装配</span></div><div class="memory-body"><div class="overview-grid"><article class="data-panel"><div class="panel-title"><h3>Skill 目录</h3><p>群聊和私聊 Skill 由 audience 隔离，聊天用户没有管理入口。</p></div><div class="skill-list">${rows.map((row) => `<details class="skill-item"><summary><span><b>${escapeHtml(row.name)}</b><small>${escapeHtml(row.description)}</small></span><strong>${row.calls} 次</strong></summary><div class="skill-detail"><p><b>作用域：</b>${row.audiences.map(escapeHtml).join("、") || "未声明"}　<b>优先级：</b>${row.priority}　<b>常驻：</b>${row.always_on ? "是" : "否"}</p><p><b>触发词：</b>${row.triggers.map(escapeHtml).join("、") || "无"}</p><p><b>正文：</b>${escapeHtml(row.body_preview || "（无预览）")}</p></div></details>`).join("") || emptyState("没有已装配 Skill", "请检查 Bot 的扩展和 Skill 目录。")}</div></article><article class="data-panel"><div class="panel-title"><h3>运行边界</h3><p>管理信息来自代码装配结果，不从聊天内容推断。</p></div><dl class="fact-grid"><div><dt>已装配</dt><dd>${data.total}</dd></div><div><dt>最近 7 天调用</dt><dd>${rows.reduce((sum, row) => sum + row.calls, 0)}</dd></div><div><dt>群聊 Skill</dt><dd>${rows.filter((row) => row.audiences.includes("group")).length}</dd></div><div><dt>私聊 Skill</dt><dd>${rows.filter((row) => row.audiences.includes("private")).length}</dd></div></dl>${data.unavailable?.length ? `<p class="inline-error">不可用声明：${data.unavailable.map(escapeHtml).join("、")}</p>` : `<p class="muted">当前没有因能力缺失而不可用的 Skill。</p>`}</article></div></div></section>`;
+  } catch (error) { content.innerHTML = `<section class="memory-workspace">${emptyState("Skill 管理不可用", error.message)}</section>`; }
+}
+
+async function renderWikiAdmin(scope = "") {
+  document.querySelectorAll(".nav-item").forEach((item) => item.classList.toggle("active", item.dataset.target === "wiki-admin"));
+  $(".search").classList.add("hidden"); $("#save").classList.add("hidden"); history.replaceState(null, "", "#wiki-admin");
+  const content = $("#content"); content.innerHTML = `<section class="memory-workspace loading-state">正在读取 LM Wiki Markdown…</section>`;
+  try {
+    const {data} = await api(`/api/wiki/overview?limit=200${scope ? `&scope=${encodeURIComponent(scope)}` : ""}`);
+    let selected = null;
+    const renderPage = (page) => { selected = page; const detail = $("#wiki-admin-detail"); if (!detail) return; detail.innerHTML = page ? `<h3>${escapeHtml(page.title)}</h3><p class="muted">${escapeHtml(page.page_id)} · ${escapeHtml(page.version || "无版本")}</p><p>${escapeHtml(page.summary || "暂无摘要")}</p><div class="wiki-facts">${(page.entries || []).slice(0, 30).map((entry) => `<article><b>${escapeHtml(entry.claim)}</b><small>${entry.observed_at ? formatTime(entry.observed_at) : "时间未记录"} · 置信度 ${entry.confidence ?? "未知"}</small></article>`).join("") || `<p class="muted">暂无已发布事实。</p>`}</div><h4>主题 / 黑话 / 链接</h4><p class="muted">${(page.topics || []).length} 个主题 · ${(page.slang || []).length} 条黑话 · ${(page.links || []).length} 条出链 · ${(page.backlinks || []).length} 条反向链接</p>` : emptyState("选择一个 Wiki 页面", "右侧会显示实际 Markdown 提炼出的实体内容。"); };
+    content.innerHTML = `<section class="memory-workspace"><div class="memory-toolbar"><div><p class="eyebrow">LM WIKI / MARKDOWN ENTITIES</p><h2>Wiki 管理</h2><p class="muted">管理已提炼发布的群、人物和私聊实体，不重新构造图谱。</p></div><span class="data-badge">${data.available ? `${data.total} 个页面` : "未启用"}</span></div><div class="memory-body"><div class="wiki-admin-layout"><article class="data-panel"><div class="panel-title"><h3>已发布页面</h3><p>按实体页面倒序浏览，页面内容来自 Markdown 发布目录。</p></div><div class="wiki-page-list">${data.pages.map((page) => `<button data-wiki-page="${escapeHtml(page.page_id)}"><span><b>${escapeHtml(page.title)}</b><small>${escapeHtml(page.scope)} · ${page.facts} 事实 · ${page.topics} 主题 · ${page.slang} 黑话</small></span><strong>${escapeHtml(page.version || "—")}</strong></button>`).join("") || emptyState(data.available ? "暂无 Wiki 页面" : "Wiki 未启用", "启用 Wiki 并完成一次提炼发布后，页面会出现在这里。")}</div></article><article class="data-panel" id="wiki-admin-detail">${data.pages.length ? emptyState("选择一个 Wiki 页面", "右侧会显示实际 Markdown 提炼出的实体内容。") : ""}</article></div></div></section>`;
+    document.querySelectorAll("[data-wiki-page]").forEach((button) => { button.onclick = async () => { document.querySelectorAll("[data-wiki-page]").forEach((item) => item.classList.remove("active")); button.classList.add("active"); try { renderPage((await api(`/api/wiki/pages/${encodeURIComponent(button.dataset.wikiPage)}`)).data); } catch (error) { $("#wiki-admin-detail").innerHTML = `<p class="error">${escapeHtml(error.message)}</p>`; } }; });
+  } catch (error) { content.innerHTML = `<section class="memory-workspace">${emptyState("Wiki 管理不可用", error.message)}</section>`; }
+}
+
 async function renderDashboard(tab = "overview") {
   document.querySelectorAll(".nav-item").forEach((item) => item.classList.toggle("active", item.dataset.target === "dashboard"));
   $(".search").classList.add("hidden"); $("#save").classList.add("hidden");
@@ -985,6 +1010,16 @@ async function renderDatabase(table = "") {
 }
 
 function activateSection(id) {
+  if (id === "wiki-admin") {
+    renderWikiAdmin();
+    $("#search").value = "";
+    return;
+  }
+  if (id === "skills") {
+    renderSkills();
+    $("#search").value = "";
+    return;
+  }
   if (id === "database") {
     renderDatabase();
     $("#search").value = "";
@@ -1034,7 +1069,7 @@ function render(data) {
   original = {};
   Object.entries(data.values).forEach(([key, value]) => { original[key] = value.value; });
   const modules = data.sections.map((section) => `<button class="nav-item" data-target="${section.id}"><span class="nav-glyph">${glyphs[section.id] || "·"}</span><span>${escapeHtml(section.label)}</span></button>`).join("");
-  $("#nav").innerHTML = `${modules}<div class="nav-divider"></div><button class="nav-item" data-target="database"><span class="nav-glyph">${glyphs.database}</span><span>数据存储</span></button><button class="nav-item" data-target="dashboard"><span class="nav-glyph">${glyphs.dashboard}</span><span>运行看板</span></button><div class="nav-divider"></div><button class="nav-item" data-target="memory"><span class="nav-glyph">${glyphs.memory}</span><span>记忆中心</span></button><button class="nav-item" data-target="schedules"><span class="nav-glyph">${glyphs.schedules}</span><span>任务中心</span></button><button class="nav-item" data-target="experiments"><span class="nav-glyph">${glyphs.experiments}</span><span>实验看板</span></button><button class="nav-item" data-target="guide"><span class="nav-glyph">${glyphs.guide}</span><span>使用指南</span></button>`;
+  $("#nav").innerHTML = `${modules}<div class="nav-divider"></div><button class="nav-item" data-target="skills"><span class="nav-glyph">${glyphs.skills}</span><span>Skill 管理</span></button><button class="nav-item" data-target="wiki-admin"><span class="nav-glyph">${glyphs.wikiadmin}</span><span>Wiki 管理</span></button><button class="nav-item" data-target="database"><span class="nav-glyph">${glyphs.database}</span><span>数据存储</span></button><button class="nav-item" data-target="dashboard"><span class="nav-glyph">${glyphs.dashboard}</span><span>运行看板</span></button><div class="nav-divider"></div><button class="nav-item" data-target="memory"><span class="nav-glyph">${glyphs.memory}</span><span>记忆中心</span></button><button class="nav-item" data-target="schedules"><span class="nav-glyph">${glyphs.schedules}</span><span>任务中心</span></button><button class="nav-item" data-target="experiments"><span class="nav-glyph">${glyphs.experiments}</span><span>实验看板</span></button><button class="nav-item" data-target="guide"><span class="nav-glyph">${glyphs.guide}</span><span>使用指南</span></button>`;
   document.querySelectorAll(".nav-item").forEach((button) => {
     button.onclick = () => activateSection(button.dataset.target);
   });

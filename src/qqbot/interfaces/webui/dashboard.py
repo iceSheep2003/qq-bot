@@ -34,6 +34,38 @@ class DashboardQuery:
         ], "links": links[:2000], "total_nodes": total, "truncated": total>limit or len(links)>2000,
                 "dangling_links": dangling}
 
+
+    def wiki_catalog(self, scope=None, limit=200):
+        if not 1 <= int(limit) <= 200:
+            raise ValueError("limit must be between 1 and 200")
+        if self.wiki_store is None:
+            return {"available": False, "pages": [], "total": 0, "scopes": []}
+        pages = self.wiki_store.load()
+        if scope:
+            kind, _, entity = str(scope).partition(":")
+            if kind == "group":
+                prefix = f"groups/{entity}"
+                pages = [page for page in pages if page.page_id == prefix or page.page_id.startswith(prefix + "/")]
+            elif kind == "private":
+                page_id = f"private/{entity}"
+                pages = [page for page in pages if page.page_id == page_id]
+            else:
+                pages = []
+        pages.sort(key=lambda page: (page.scope, page.title, page.page_id))
+        total = len(pages)
+        visible = pages[: int(limit)]
+        rows = []
+        for page in visible:
+            observed = [entry.observed_at for entry in page.entries] + [topic.last_seen_at for topic in page.topics] + [item.last_seen_at for item in page.slang]
+            rows.append({
+                "page_id": page.page_id, "title": page.title, "scope": page.scope,
+                "entity_id": page.entity_id, "summary": page.summary, "version": page.version,
+                "facts": len(page.entries), "topics": len(page.topics), "slang": len(page.slang),
+                "links": len(page.links), "latest_observed_at": max(observed, default=0),
+            })
+        return {"available": True, "pages": rows, "total": total,
+                "scopes": sorted({page.scope for page in pages}), "truncated": total > int(limit)}
+
     def wiki_page(self, page_id):
         if self.wiki_store is None:
             return None

@@ -1,4 +1,4 @@
 {
-  "manifest": ".code-quality-gate/tasks/UI-TASTE-023.json",
+  "manifest": ".code-quality-gate/tasks/MANAGEMENT-CONSOLE-024.json",
   "config": "quality.config.json"
 }

@@ -940,6 +940,37 @@
             "equals": 0
           }
         ]
+      },
+      {
+        "id": "management-console",
+        "title": "Skill and LM Wiki management projections",
+        "command": [
+          ".venv/bin/python",
+          "-m",
+          "pytest",
+          "tests/interfaces/test_management_console.py",
+          "-q",
+          "--junitxml=.quality/management-console.xml"
+        ],
+        "report": ".quality/management-console.xml",
+        "format": "junit",
+        "metrics": [
+          {
+            "name": "Management cases",
+            "path": "tests",
+            "min": 4
+          },
+          {
+            "name": "Success rate",
+            "path": "successRate",
+            "equals": 100
+          },
+          {
+            "name": "Skipped",
+            "path": "skipped",
+            "equals": 0
+          }
+        ]
       }
     ]
   }
