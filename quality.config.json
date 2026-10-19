@@ -971,6 +971,224 @@
             "equals": 0
           }
         ]
+      },
+      {
+        "id": "tools-console",
+        "title": "Tool call projection counts terminal outcomes once",
+        "command": [
+          ".venv/bin/python",
+          "-m",
+          "pytest",
+          "tests/interfaces/test_tools_console.py",
+          "-q",
+          "--junitxml=.quality/tools-console.xml"
+        ],
+        "report": ".quality/tools-console.xml",
+        "format": "junit",
+        "metrics": [
+          {
+            "name": "Tool console cases",
+            "path": "tests",
+            "min": 19
+          },
+          {
+            "name": "Success rate",
+            "path": "successRate",
+            "equals": 100
+          },
+          {
+            "name": "Skipped",
+            "path": "skipped",
+            "equals": 0
+          }
+        ]
+      },
+      {
+        "id": "monitor-console",
+        "title": "Live operations health, alerts and bounded log ring",
+        "command": [
+          ".venv/bin/python",
+          "-m",
+          "pytest",
+          "tests/interfaces/test_monitor_console.py",
+          "-q",
+          "--junitxml=.quality/monitor-console.xml"
+        ],
+        "report": ".quality/monitor-console.xml",
+        "format": "junit",
+        "metrics": [
+          {
+            "name": "Monitor cases",
+            "path": "tests",
+            "min": 31
+          },
+          {
+            "name": "Success rate",
+            "path": "successRate",
+            "equals": 100
+          },
+          {
+            "name": "Skipped",
+            "path": "skipped",
+            "equals": 0
+          }
+        ]
+      },
+      {
+        "id": "route-console",
+        "title": "Behaviour route fallback, artifacts and env switches",
+        "command": [
+          ".venv/bin/python",
+          "-m",
+          "pytest",
+          "tests/interfaces/test_route_console.py",
+          "-q",
+          "--junitxml=.quality/route-console.xml"
+        ],
+        "report": ".quality/route-console.xml",
+        "format": "junit",
+        "metrics": [
+          {
+            "name": "Route console cases",
+            "path": "tests",
+            "min": 23
+          },
+          {
+            "name": "Success rate",
+            "path": "successRate",
+            "equals": 100
+          },
+          {
+            "name": "Skipped",
+            "path": "skipped",
+            "equals": 0
+          }
+        ]
+      },
+      {
+        "id": "console-coverage",
+        "title": "Console projection modules measured line and branch coverage",
+        "command": [
+          ".venv/bin/python",
+          "-m",
+          "tools.quality.checks",
+          "console-coverage"
+        ],
+        "report": ".quality/console-coverage-metrics.json",
+        "format": "json",
+        "metrics": [
+          {
+            "name": "Line coverage",
+            "path": "lineCoverage",
+            "min": 90
+          },
+          {
+            "name": "Branch coverage",
+            "path": "branchCoverage",
+            "min": 80
+          },
+          {
+            "name": "Statements",
+            "path": "statements",
+            "min": 700
+          },
+          {
+            "name": "Branches",
+            "path": "branches",
+            "min": 250
+          }
+        ]
+      },
+      {
+        "id": "skill-admin",
+        "title": "Skill management writes loadable SKILL.md and honest state",
+        "command": [
+          ".venv/bin/python",
+          "-m",
+          "pytest",
+          "tests/interfaces/test_skill_admin.py",
+          "-q",
+          "--junitxml=.quality/skill-admin.xml"
+        ],
+        "report": ".quality/skill-admin.xml",
+        "format": "junit",
+        "metrics": [
+          {
+            "name": "Cases",
+            "path": "tests",
+            "min": 38
+          },
+          {
+            "name": "Success rate",
+            "path": "successRate",
+            "equals": 100
+          },
+          {
+            "name": "Skipped",
+            "path": "skipped",
+            "equals": 0
+          }
+        ]
+      },
+      {
+        "id": "regression-set",
+        "title": "TDD regression set stays green and does not shrink",
+        "command": [
+          ".venv/bin/python",
+          "-m",
+          "tools.quality.fast",
+          "--junit=.quality/regression-set.xml"
+        ],
+        "report": ".quality/regression-set.xml",
+        "format": "junit",
+        "metrics": [
+          {
+            "name": "Cases",
+            "path": "tests",
+            "min": 434
+          },
+          {
+            "name": "Success rate",
+            "path": "successRate",
+            "equals": 100
+          },
+          {
+            "name": "Skipped",
+            "path": "skipped",
+            "equals": 0
+          }
+        ]
+      },
+      {
+        "id": "design-layer",
+        "title": "Console surfaces stay flat, labelled and legible",
+        "command": [
+          ".venv/bin/python",
+          "-m",
+          "pytest",
+          "tests/interfaces/test_design_layer.py",
+          "-q",
+          "--junitxml=.quality/design-layer.xml"
+        ],
+        "report": ".quality/design-layer.xml",
+        "format": "junit",
+        "metrics": [
+          {
+            "name": "Design checks",
+            "path": "tests",
+            "min": 10
+          },
+          {
+            "name": "Success rate",
+            "path": "successRate",
+            "equals": 100
+          },
+          {
+            "name": "Skipped",
+            "path": "skipped",
+            "equals": 0
+          }
+        ]
       }
     ]
   }

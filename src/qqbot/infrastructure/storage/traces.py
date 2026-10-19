@@ -59,6 +59,23 @@ class TraceStore(SqliteRepository):
             row = self.db.execute("SELECT * FROM turn_traces WHERE id=?", (trace_id,)).fetchone()
         return self._row(row) if row else None
 
+    def scan(self, *, scope=None, hours=24, limit=5000):
+        """Newest-first traces for a projection that aggregates every step.
+
+        ``list`` is paginated for the trace viewer; a projection needs a bounded
+        window it can walk once, so the bound is explicit and reported by the
+        caller instead of silently dropping rows.
+        """
+        if not 1 <= limit <= 50000:
+            raise ValueError("limit must be between 1 and 50000")
+        where, params = self._filter(scope, hours)
+        with self.database._transaction_lock:
+            rows = self.db.execute(
+                f"SELECT * FROM turn_traces WHERE {where} ORDER BY id DESC LIMIT ?",
+                (*params, limit),
+            ).fetchall()
+        return [self._row(row) for row in rows]
+
     def overview(self, *, scope=None, hours=24):
         where, params = self._filter(scope, hours)
         with self.database._transaction_lock:

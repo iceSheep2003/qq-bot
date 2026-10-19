@@ -62,6 +62,19 @@ class EnvConfigStore:
             }
         return result
 
+    def secret(self, key: str) -> str:
+        """Raw value of a secret setting, for server-side use only.
+
+        ``read()`` deliberately blanks secrets so the console can never echo
+        them back to a browser. A connectivity probe still needs the real
+        value, so it asks here and never puts the result in a response.
+        """
+        for line in self._lines():
+            match = _LINE.match(line.rstrip("\r\n"))
+            if match and match.group(1) == key:
+                return _decode(match.group(2))
+        return ""
+
     def update(self, changes: dict[str, object]) -> list[str]:
         unknown = sorted(set(changes) - set(BY_KEY))
         if unknown:

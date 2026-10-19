@@ -15,7 +15,14 @@ NEW_FILES = [
     "src/qqbot/agent/skills/audience.py",
     "src/qqbot/agent/cognition/routes.py",
 ]
-CODE_FILES = NEW_FILES + [
+CONSOLE_FILES = [
+    "src/qqbot/interfaces/webui/logbuffer.py",
+    "src/qqbot/interfaces/webui/monitor_query.py",
+    "src/qqbot/interfaces/webui/route_query.py",
+    "src/qqbot/interfaces/webui/skill_admin.py",
+    "src/qqbot/interfaces/webui/tools_query.py",
+]
+CODE_FILES = NEW_FILES + CONSOLE_FILES + [
     'src/qqbot/infrastructure/storage/emotion.py', 'src/qqbot/agent/identity/emotion/system.py', 'src/qqbot/agent/identity/emotion/evaluator.py', 'src/qqbot/agent/identity/emotion/__init__.py', 'src/qqbot/features/mood/composition.py', 'src/qqbot/features/mood/register.py', 'src/qqbot/agent/memory/service.py', 'src/qqbot/bootstrap/app.py', 'src/qqbot/agent/service.py', 'src/qqbot/contracts/models.py', 'src/qqbot/contracts/ports.py', 'src/qqbot/actions/scheduling/registry.py', 'tests/features/test_slang.py', 'tests/features/test_reply_policy.py', 'tests/agent/test_conversation_maintenance.py', 'tests/agent/test_service.py', 'tests/agent/test_observation.py', 'tests/agent/test_core.py', 'tests/agent/test_identity_guard.py', 'tests/agent/test_inbound_media.py', 'tests/agent/test_relationships.py', 'tests/agent/test_delivery_boundary.py', 'tests/agent/test_emotion.py', 'tests/agent/test_memory.py', 'src/qqbot/agent/memory/ranking.py', 'src/qqbot/infrastructure/storage/memory.py', 'src/qqbot/agent/cognition/experience/retrieval.py', 'tests/interfaces/test_webui.py', 'tests/agent/test_embedding_retirement.py',
     'src/qqbot/infrastructure/storage/emotion.py', 'src/qqbot/agent/identity/emotion/system.py', 'src/qqbot/agent/identity/emotion/evaluator.py', 'src/qqbot/agent/identity/emotion/__init__.py', 'src/qqbot/features/mood/composition.py', 'src/qqbot/features/mood/register.py', 'src/qqbot/agent/memory/service.py', 'src/qqbot/bootstrap/app.py', 'src/qqbot/agent/service.py', 'src/qqbot/contracts/models.py', 'src/qqbot/contracts/ports.py', 'src/qqbot/actions/scheduling/registry.py', 'tests/features/test_slang.py', 'tests/features/test_reply_policy.py', 'tests/agent/test_conversation_maintenance.py', 'tests/agent/test_service.py', 'tests/agent/test_observation.py', 'tests/agent/test_core.py', 'tests/agent/test_identity_guard.py', 'tests/agent/test_inbound_media.py', 'tests/agent/test_relationships.py', 'tests/agent/test_delivery_boundary.py', 'tests/agent/test_emotion.py', 'tests/agent/test_memory.py', 'tests/quality/test_core_io_boundaries.py',
     'src/qqbot/bootstrap/runtime.py', 'src/qqbot/bootstrap/app.py', 'src/qqbot/interfaces/qq/router.py', 'src/qqbot/interfaces/qq/__init__.py', 'src/qqbot/features/loader.py', 'tests/features/test_extensions.py', 'tests/bootstrap/test_assembly.py', 'tests/bootstrap/test_runtime_boundaries.py',
@@ -58,7 +65,9 @@ def coverage_report(files=NEW_FILES, prefix="new", metrics_name="coverage-metric
 
 
 def main() -> int:
-    (ROOT / ".quality").mkdir(exist_ok=True)
+    reports = ROOT / ".quality"
+    if not reports.is_dir():
+        reports.mkdir(parents=True, exist_ok=True)
     commands = {
         "acceptance": [sys.executable, "-m", "pytest", "tests/agent/test_scene_refactor.py",
                        "-q", "--junitxml=.quality/acceptance.xml"],
@@ -75,6 +84,8 @@ def main() -> int:
         raise ValueError("One check name is required")
     if sys.argv[1] == "coverage":
         return coverage_report()
+    if sys.argv[1] == "console-coverage":
+        return coverage_report(CONSOLE_FILES, "console", "console-coverage-metrics")
     if sys.argv[1] == "observation-coverage":
         return coverage_report(["src/qqbot/agent/observation.py"], "observation", "observation-coverage-metrics")
     if sys.argv[1] == "maintenance-coverage":

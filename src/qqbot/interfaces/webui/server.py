@@ -21,7 +21,12 @@ from qqbot.interfaces.webui.review_queue import ReviewFileEditor, ReviewFormatEr
 from qqbot.interfaces.webui.schema import SECTIONS, SETTINGS
 from qqbot.interfaces.webui.memory_query import MemoryConsoleQuery
 from qqbot.interfaces.webui.skill_query import SkillConsoleQuery
+from qqbot.interfaces.webui.skill_admin import SkillAdmin
 from qqbot.interfaces.webui.persona_review import PersonaQueueQuery
+from qqbot.interfaces.webui.monitor_query import MonitorQuery
+from qqbot.interfaces.webui.route_query import RouteConsoleQuery
+from qqbot.interfaces.webui.tools_query import ToolConsoleQuery
+from qqbot.interfaces.webui import logbuffer
 
 log = logging.getLogger(__name__)
 MAX_BODY = 64 * 1024
@@ -42,6 +47,28 @@ class WebUIServer:
         self.dashboard = None
         self.database_query = None
         self.skills_query = None
+        self.tools_query = None
+        # Editing a skill is a file write, not a runtime call: the board works
+        # while the bot is down, and only gains the allow-list and live reload
+        # once the catalogue exists.
+        self.skill_admin = SkillAdmin(Path(config.env_path).resolve().parent / "skills")
+        # The routing board edits the same env file the process reads, so it is
+        # available before the runtime is composed: an operator has to be able
+        # to fix a bad model or graph path while the bot is down.
+        self.routes = RouteConsoleQuery(self.store, Path(config.env_path).resolve().parent)
+        # A baseline monitor exists before the runtime is composed: the board
+        # then reports "unknown" sources instead of refusing to load while the
+        # bot is still starting.
+        values = self.store.read()
+        model_name = str(values.get("BOT_MODEL_NAME", {}).get("value") or "")
+        model_base = str(values.get("BOT_MODEL_BASE_URL", {}).get("value") or "")
+        self.logs = logbuffer.install()
+        self.monitor = MonitorQuery(
+            started_at=self.started_at,
+            model_configured=bool(model_name and model_base),
+            model_name=model_name,
+            logs=self.logs,
+        )
         # Offline experiment reports. Unlike the projections above this needs no
         # composed runtime: it reads a JSON file an operator produced, so it is
         # available even on a console whose bot is not running.
@@ -53,17 +80,33 @@ class WebUIServer:
 
     def bind_runtime(self, service) -> None:
         """Bind the console's projections after the composition root exists."""
+        traces = getattr(service, "trace_sink", None)
+        values = self.store.read()
+        model_name = str(values["BOT_MODEL_NAME"]["value"] or "") if "BOT_MODEL_NAME" in values else ""
+        model_base = str(values["BOT_MODEL_BASE_URL"]["value"] or "") if "BOT_MODEL_BASE_URL" in values else ""
         self.memory_query = MemoryConsoleQuery(service)
         self.database_query = DatabaseConsoleQuery(getattr(service.conversations, "database", service.conversations.db))
         self.skills_query = SkillConsoleQuery(service.agent.skills)
+        skills = service.agent.skills
+        self.skill_admin = SkillAdmin(
+            getattr(skills, "root", self.skill_admin.root),
+            catalog=skills,
+        )
+        self.tools_query = ToolConsoleQuery(traces)
+        self.monitor.traces = traces
+        self.monitor.gateway = getattr(service, "gateway", None)
+        self.monitor.model_configured = bool(model_name and model_base)
+        self.monitor.model_name = model_name
         reader = getattr(service.agent, "wiki_reader", None)
-        self.dashboard = DashboardQuery(getattr(service, "trace_sink", None), getattr(reader, "_store", None))
+        self.dashboard = DashboardQuery(traces, getattr(reader, "_store", None))
         self.persona_queue = PersonaQueueQuery(
             service.conversations.db, self.config.persona_path
         )
 
     def bind_schedule_management(self, management) -> None:
         self.schedule_management = management
+        # The scheduler owns the run ledger the monitor reports on.
+        self.monitor.scheduler = getattr(management, "scheduler", None)
 
     async def run(self) -> None:
         if self.schedule_management is not None:
@@ -228,6 +271,21 @@ class WebUIServer:
                     if owner.dashboard is not None and owner.dashboard.traces is not None:
                         usage = owner.dashboard.traces.overview(hours=168).get("skill_counts", {})
                     self._json(HTTPStatus.OK, {"data": owner.skills_query.catalog(usage)})
+                elif path.startswith("/api/skills/admin"):
+                    admin = owner.skill_admin
+                    if admin is None:
+                        self._json(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "Skill 服务尚未就绪"})
+                        return
+                    if owner.dashboard is not None and owner.dashboard.traces is not None:
+                        admin.calls = owner.dashboard.traces.overview(hours=168).get("skill_counts", {})
+                    if path == "/api/skills/admin":
+                        self._json(HTTPStatus.OK, {"data": admin.overview()})
+                        return
+                    detail = admin.detail(unquote(path.rsplit("/", 1)[1]))
+                    if detail is None:
+                        self._json(HTTPStatus.NOT_FOUND, {"error": "Skill 不存在"})
+                        return
+                    self._json(HTTPStatus.OK, {"data": detail})
                 elif path == "/api/wiki/overview":
                     if owner.dashboard is None:
                         self._json(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "Wiki 服务尚未就绪"})
@@ -309,6 +367,78 @@ class WebUIServer:
                     except Exception:
                         log.exception("Dashboard query failed")
                         self._json(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": "读取运行数据失败，请检查本地运行日志。"})
+                        return
+                    self._json(HTTPStatus.OK, {"data": data})
+                elif path.startswith("/api/monitor/"):
+                    monitor = owner.monitor
+                    try:
+                        if path == "/api/monitor/live":
+                            data = monitor.live(int(query.get("minutes", ["15"])[0]))
+                        elif path == "/api/monitor/series":
+                            data = monitor.series(int(query.get("minutes", ["60"])[0]))
+                        elif path == "/api/monitor/alerts":
+                            data = monitor.alerts(int(query.get("minutes", ["15"])[0]))
+                        elif path == "/api/monitor/logs":
+                            data = monitor.tail(
+                                int(query.get("limit", ["20"])[0]),
+                                str(query.get("level", [""])[0]).strip() or None,
+                                str(query.get("q", [""])[0]).strip() or None,
+                                int(query.get("offset", ["0"])[0]),
+                            )
+                        elif path == "/api/monitor/turns":
+                            data = monitor.turns(
+                                int(query.get("limit", ["12"])[0]),
+                                int(query.get("offset", ["0"])[0]),
+                                str(query.get("scope", [""])[0]).strip() or None,
+                            )
+                        elif path == "/api/monitor/scopes":
+                            data = monitor.scopes(int(query.get("hours", ["24"])[0]))
+                        else:
+                            self._json(HTTPStatus.NOT_FOUND, {"error": "not found"})
+                            return
+                    except (ValueError, OverflowError):
+                        self._json(HTTPStatus.BAD_REQUEST, {"error": "监控参数无效"})
+                        return
+                    except Exception:
+                        log.exception("Monitor query failed")
+                        self._json(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": "读取监控数据失败"})
+                        return
+                    self._json(HTTPStatus.OK, {"data": data})
+                elif path.startswith("/api/tools/"):
+                    if owner.tools_query is None:
+                        self._json(
+                            HTTPStatus.SERVICE_UNAVAILABLE,
+                            {"error": "工具数据未接入。请随 Bot 启动控制台。"},
+                        )
+                        return
+                    try:
+                        scope = str(query.get("scope", [""])[0]).strip() or None
+                        hours = int(query.get("hours", ["24"])[0])
+                        if path == "/api/tools/overview":
+                            data = owner.tools_query.overview(scope, hours)
+                        elif path == "/api/tools/calls":
+                            data = owner.tools_query.calls(
+                                scope,
+                                hours,
+                                str(query.get("tool", [""])[0]).strip() or None,
+                                int(query.get("limit", ["15"])[0]),
+                                int(query.get("offset", ["0"])[0]),
+                            )
+                        else:
+                            self._json(HTTPStatus.NOT_FOUND, {"error": "not found"})
+                            return
+                    except (ValueError, OverflowError):
+                        self._json(HTTPStatus.BAD_REQUEST, {"error": "工具筛选参数无效"})
+                        return
+                    self._json(HTTPStatus.OK, {"data": data})
+                elif path in {"/api/routes/overview", "/api/routes/artifacts"}:
+                    try:
+                        if path == "/api/routes/overview":
+                            data = owner.routes.overview()
+                        else:
+                            data = owner.routes.artifacts(int(query.get("limit", ["20"])[0]))
+                    except (ValueError, OverflowError) as error:
+                        self._json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
                         return
                     self._json(HTTPStatus.OK, {"data": data})
                 elif path == "/api/config":
@@ -503,6 +633,12 @@ class WebUIServer:
                             data = manager.overview()
                         elif path == "/api/schedules/jobs":
                             data = manager.jobs()
+                        elif path.startswith("/api/schedules/jobs/"):
+                            try:
+                                data = manager.job(unquote(path.rsplit("/", 1)[1]))
+                            except KeyError:
+                                self._json(HTTPStatus.NOT_FOUND, {"error": "任务不存在"})
+                                return
                         elif path == "/api/schedules/runs":
                             job_raw = str(query.get("job_id", [""])[0]).strip()
                             data = manager.runs(
@@ -616,6 +752,45 @@ class WebUIServer:
                         body,
                     )
                     return
+                if path == "/api/routes/probe":
+                    self._json(HTTPStatus.OK, {"data": owner.routes.probe()})
+                    return
+                if path == "/api/routes/probe-model":
+                    self._json(HTTPStatus.OK, {"data": owner.routes.probe_model()})
+                    return
+                if path.startswith("/api/skills/admin"):
+                    admin = owner.skill_admin
+                    if admin is None:
+                        self._json(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "Skill 服务尚未就绪"})
+                        return
+                    try:
+                        if path == "/api/skills/admin":
+                            self._json(HTTPStatus.CREATED, {"ok": True, "data": admin.create(body)})
+                            return
+                        if path == "/api/skills/admin/import":
+                            result = admin.import_document(body.get("filename"), body.get("content"))
+                            self._json(HTTPStatus.CREATED, {"ok": True, "data": result})
+                            return
+                        parts = [item for item in path.split("/") if item]
+                        name = unquote(parts[3]) if len(parts) >= 4 else ""
+                        if path.endswith("/enabled"):
+                            result = admin.set_enabled(name, bool(body.get("enabled")))
+                            self._json(HTTPStatus.OK, {"ok": True, "data": result})
+                            return
+                        if path.endswith("/archive"):
+                            self._json(HTTPStatus.OK, {"ok": True, "data": admin.archive(name)})
+                            return
+                    except KeyError:
+                        self._json(HTTPStatus.NOT_FOUND, {"error": "Skill 不存在"})
+                        return
+                    except ValueError as error:
+                        self._json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
+                        return
+                    except OSError as error:
+                        self._json(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": f"写入失败：{error}"})
+                        return
+                    self._json(HTTPStatus.NOT_FOUND, {"error": "not found"})
+                    return
                 manager = owner.schedule_management
                 if path == "/api/schedules/jobs":
                     if manager is None:
@@ -678,6 +853,48 @@ class WebUIServer:
                         self._json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
                         return
                     self._json(HTTPStatus.OK, {"ok": True, "data": item})
+                    return
+                if path.startswith("/api/skills/admin/"):
+                    if not self._authorized():
+                        self._json(HTTPStatus.UNAUTHORIZED, {"error": "登录密钥无效"})
+                        return
+                    admin = owner.skill_admin
+                    if admin is None:
+                        self._json(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "Skill 服务尚未就绪"})
+                        return
+                    name = unquote(path.rsplit("/", 1)[1])
+                    try:
+                        body = self._body()
+                        result = admin.save(name, body)
+                    except KeyError:
+                        self._json(HTTPStatus.NOT_FOUND, {"error": "Skill 不存在"})
+                        return
+                    except ValueError as error:
+                        self._json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
+                        return
+                    except OSError as error:
+                        self._json(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": f"写入失败：{error}"})
+                        return
+                    self._json(HTTPStatus.OK, {"ok": True, "data": result})
+                    return
+                if path == "/api/routes":
+                    if not self._authorized():
+                        self._json(HTTPStatus.UNAUTHORIZED, {"error": "登录密钥无效"})
+                        return
+                    try:
+                        body = self._body()
+                        result = owner.routes.apply(body.get("changes"))
+                    except ValueError as error:
+                        self._json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
+                        return
+                    except OSError as error:
+                        self._json(
+                            HTTPStatus.INTERNAL_SERVER_ERROR,
+                            {"error": f"写入配置失败：{error}"},
+                        )
+                        return
+                    owner.restart_required = owner.restart_required or result["restart_required"]
+                    self._json(HTTPStatus.OK, {"ok": True, **result})
                     return
                 if path != "/api/config":
                     self._json(HTTPStatus.NOT_FOUND, {"error": "not found"})

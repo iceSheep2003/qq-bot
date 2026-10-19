@@ -167,6 +167,17 @@ class ScheduleManagementService:
     def runs(self, job_id: int | None = None, limit: int = 100) -> list[dict]:
         return self.scheduler.jobs.list_runs(job_id, limit)
 
+    def job(self, key: str) -> dict[str, Any]:
+        """The stored definition, not the merged scheduler row.
+
+        Editing from ``jobs()`` would drop fields it does not project (prompt,
+        payload) and silently rewrite the task with them empty.
+        """
+        for item in self.files.read():
+            if str(item.get("id")) == key:
+                return dict(item)
+        raise KeyError(key)
+
     def preview(self, kind: str, value: str, count: int = 3) -> list[int]:
         cursor = int(time.time())
         result = []

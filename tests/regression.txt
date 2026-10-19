@@ -1,0 +1,29 @@
+# TDD regression set — run this after every change, not the whole suite.
+#
+# Rule of thumb for what belongs here: a file is in if breaking it would make
+# the bot wrong in production, or if it guards a boundary another file relies
+# on. Everything else (one-off migrations, formatting helpers, historical
+# behaviour) stays in the full suite that the release gate runs.
+#
+# Keep it under ~20 files. A regression set that takes as long as the full
+# suite is not a regression set.
+tests/agent/test_scene_refactor.py
+tests/agent/test_core.py
+tests/agent/test_service.py
+tests/agent/test_private_chat_skill.py
+tests/agent/test_private_chat_admission.py
+tests/agent/test_delivery_boundary.py
+tests/agent/test_observation.py
+tests/features/test_extensions.py
+tests/quality/test_core_io_boundaries.py
+tests/actions/test_kernel_runtime.py
+tests/infrastructure/test_model.py
+tests/bootstrap/test_assembly.py
+tests/interfaces/test_webui.py
+tests/interfaces/test_dashboard.py
+tests/interfaces/test_management_console.py
+tests/interfaces/test_skill_admin.py
+tests/interfaces/test_monitor_console.py
+tests/interfaces/test_tools_console.py
+tests/interfaces/test_route_console.py
+tests/interfaces/test_design_layer.py

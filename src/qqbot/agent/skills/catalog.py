@@ -53,9 +53,81 @@ PROACTIVE_BONUS = 100
 #: keyword; matching it would be the same as matching the whole message.
 MAX_TRIGGER_CHARS = 32
 
+#: Deployer switch, kept beside the skills rather than in the environment so a
+#: skill can be turned off without also turning off the extension that owns it.
+#: Shape: ``{"disabled": ["voice", ...]}``. A missing file means "all enabled".
+STATE_FILE = ".state.json"
+
 _FRONTMATTER = re.compile(r"^---\s*\n(.*?)\n---\s*\n?", re.S)
 _LIST_ITEM = re.compile(r"^\[(.*)\]$")
 _TOKEN = re.compile(r"[0-9a-z]+")
+_TRUTHY = frozenset({"1", "true", "yes", "on"})
+
+
+def read_disabled(root) -> frozenset[str]:
+    """Names the deployer switched off, from ``STATE_FILE``.
+
+    An unreadable or malformed state file must not take the catalogue down: the
+    bot keeps working with every skill enabled, which is the behaviour that
+    existed before this switch did.
+    """
+    path = Path(root) / STATE_FILE
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return frozenset()
+    except (OSError, ValueError) as exc:
+        log.warning("Ignoring unreadable skill state %s: %s", path, exc)
+        return frozenset()
+    values = data.get("disabled") if isinstance(data, dict) else None
+    if not isinstance(values, list):
+        return frozenset()
+    return frozenset(str(item) for item in values if isinstance(item, str))
+
+
+def write_disabled(root, names) -> frozenset[str]:
+    """Persist the disabled set atomically; returns what was written."""
+    path = Path(root) / STATE_FILE
+    normalized = sorted({str(name) for name in names if str(name)})
+    payload = json.dumps({"disabled": normalized}, ensure_ascii=False, indent=2) + "\n"
+    temporary = path.with_name(path.name + ".tmp")
+    temporary.write_text(payload, encoding="utf-8")
+    temporary.replace(path)
+    return frozenset(normalized)
+
+
+def parse_document(raw: str) -> tuple[dict[str, str], str]:
+    """(frontmatter fields, body) or ``ValueError`` with a usable message."""
+    parsed = _split_frontmatter(raw or "")
+    if parsed is None:
+        raise ValueError("SKILL.md 必须以 --- 包围的 frontmatter 开头")
+    return parsed
+
+
+def render_document(
+    *,
+    name: str,
+    description: str,
+    triggers=(),
+    priority: int = 0,
+    audiences=("group",),
+    always_on: bool = False,
+    body: str = "",
+) -> str:
+    """Canonical SKILL.md text, so a console edit round-trips cleanly."""
+    lines = ["---", f"name: {name}", f"description: {description}"]
+    lines.append("triggers: [" + ", ".join(str(item) for item in triggers) + "]")
+    if int(priority):
+        lines.append(f"priority: {int(priority)}")
+    lines.append("audiences: [" + ", ".join(str(item) for item in audiences) + "]")
+    if always_on:
+        lines.append("always_on: true")
+    lines.append("---")
+    return "\n".join(lines) + "\n\n" + (body or "").strip() + "\n"
+
+
+def _truthy(value) -> bool:
+    return str(value or "").strip().casefold() in _TRUTHY
 
 
 def normalize(text: str) -> str:
@@ -245,6 +317,7 @@ class SkillCatalog:
     def reload(self) -> None:
         skills: list[Skill] = []
         by_name: dict[str, Skill] = {}
+        disabled = read_disabled(self.root)
         for path in sorted(self.root.glob("*/SKILL.md")):
             parsed = _split_frontmatter(path.read_text(encoding="utf-8"))
             if parsed is None:
@@ -257,6 +330,9 @@ class SkillCatalog:
                 log.warning("Invalid skill audiences at %s; skipping", path)
                 continue
             name = _unquote(fields.get("name", "")) or path.parent.name
+            if name in disabled:
+                log.info("Skill %s is switched off in %s; skipping", name, STATE_FILE)
+                continue
             if self.enabled_names is not None and name not in self.enabled_names:
                 continue
             description = _unquote(fields.get("description", ""))
@@ -282,6 +358,7 @@ class SkillCatalog:
                 continue
             else:
                 triggers = _parse_triggers(fields.get("triggers", ""))
+                always_on = _truthy(fields.get("always_on"))
             skill = Skill(
                 name=name,
                 description=description,

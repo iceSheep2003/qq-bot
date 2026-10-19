@@ -8,12 +8,13 @@ const glyphs = {
   connection: "⌁", conversation: "◌", personality: "✦", proactive: "◴",
   moderation: "◇", media: "▣", system: "⚙", memory: "◎", schedules: "◷",
   experiments: "⌬", guide: "?", dashboard: "▤", database: "▥", skills: "✧", wikiadmin: "▤",
+  monitor: "◉", tools: "⌘", routing: "⇄",
 };
 
 let memoryView = { tab: "overview", scope: "", after: "", previous: [], query: "", status: "" };
 let memoryRenderEpoch = 0;
 let graphController = null;
-let scheduleView = { tab: "jobs", overview: null, jobs: [] };
+let scheduleView = { tab: "jobs", overview: null, jobs: [], runs: [] };
 
 async function request(path, options = {}) {
   const headers = { "Content-Type": "application/json", ...(options.headers || {}) };
@@ -83,7 +84,7 @@ function formatTime(value) {
 }
 
 function statusBadge(status) {
-  const labels = { active: "有效", candidate: "候选", accepted_as_report: "已接纳的说法", accepted: "已接纳", disputed: "有争议", withdrawn: "已撤回", observed: "已观察", unknown: "未确认", retired: "已停用", archived: "归档", expired: "过期", superseded: "已替代", succeeded: "成功", failed: "失败", running: "进行中", approved: "已审核", rejected: "已拒绝" };
+  const labels = { active: "有效", candidate: "候选", accepted_as_report: "已接纳的说法", accepted: "已接纳", disputed: "有争议", withdrawn: "已撤回", observed: "已观察", unknown: "未确认", retired: "已停用", archived: "归档", expired: "过期", superseded: "已替代", succeeded: "成功", failed: "失败", running: "进行中", approved: "已审核", rejected: "已拒绝", completed: "完成", error: "失败", timeout: "超时" };
   return `<span class="data-badge status-${escapeHtml(status || "unknown")}">${escapeHtml(labels[status] || status || "未知")}</span>`;
 }
 
@@ -108,7 +109,7 @@ function memoryChrome(overview, body) {
   ).join("");
   return `<section class="memory-workspace">
     <div class="memory-toolbar">
-      <div><p class="eyebrow">MEMORY CENTER</p><h2>记忆中心</h2></div>
+      <div><h2>记忆中心</h2></div>
       <label class="scope-picker"><span>会话范围</span><select id="memory-scope">${scopes}</select></label>
     </div>
     <div class="memory-tabs" role="tablist">${tabs.map(([id, label]) => `<button role="tab" class="memory-tab ${memoryView.tab === id ? "active" : ""}" data-memory-tab="${id}">${label}</button>`).join("")}</div>
@@ -550,7 +551,7 @@ function scheduleChrome(body) {
   const tabs = [["jobs", "任务列表"], ["timeline", "时间线"], ["runs", "运行记录"], ["templates", "任务模板"]];
   const overview = scheduleView.overview || {};
   return `<section class="schedule-workspace">
-    <div class="schedule-toolbar"><div><p class="eyebrow">TASK CENTER</p><h2>任务中心</h2></div><button id="schedule-create" class="button primary" type="button">新建任务</button></div>
+    <div class="schedule-toolbar"><div><h2>任务中心</h2></div><button id="schedule-create" class="button primary" type="button">新建任务</button></div>
     <div class="metric-grid schedule-metrics">
       <article class="metric-card"><span>已启用</span><strong>${overview.enabled || 0}</strong><small>当前有效任务</small></article>
       <article class="metric-card"><span>未来 24 小时</span><strong>${overview.next_24h || 0}</strong><small>${escapeHtml(overview.timezone || "")}</small></article>
@@ -562,13 +563,30 @@ function scheduleChrome(body) {
   </section>`;
 }
 
-function renderScheduleJobs(rows) {
+function scheduleStats(runs) {
+  const stats = {};
+  (runs || []).forEach((run) => {
+    const key = run.config_key;
+    if (!key) return;
+    const entry = stats[key] || (stats[key] = { last: null, failed7d: 0, total: 0 });
+    entry.total += 1;
+    if (!entry.last || (run.started_at || 0) > (entry.last.started_at || 0)) entry.last = run;
+    if (run.status === "failed" && (run.started_at || 0) >= Date.now() / 1000 - 604800) entry.failed7d += 1;
+  });
+  return stats;
+}
+
+function renderScheduleJobs(rows, stats = {}) {
   if (!rows.length) return emptyState("还没有定时任务", "点击右上角新建第一个任务。");
-  return `<div class="task-table">${rows.map((job) => `<article class="task-row">
-    <div class="task-main"><div class="record-meta">${scheduleStatus(job)}<span>${escapeHtml(job.source === "config" ? "管理员任务" : "建议模板")}</span><span>${escapeHtml(job.action)}</span></div><h3>${escapeHtml(job.name || job.config_key)}</h3><p>${escapeHtml(scheduleLabel(job))} · 群 ${escapeHtml(job.group_id)}</p></div>
+  return `<div class="task-table">${rows.map((job) => {
+    const stat = stats[job.config_key] || {};
+    const last = stat.last;
+    return `<article class="task-row">
+    <div class="task-main"><div class="record-meta">${scheduleStatus(job)}<span>${escapeHtml(job.source === "config" ? "管理员任务" : "建议模板")}</span><span>${escapeHtml(job.action)}</span>${stat.failed7d ? `<span class="data-badge status-failed">近 7 日失败 ${stat.failed7d}</span>` : ""}</div><h3>${escapeHtml(job.name || job.config_key)}</h3><p>${escapeHtml(scheduleLabel(job))} · 群 ${escapeHtml(job.group_id)}</p><p class="muted">上次执行：${last ? `${formatTime(last.started_at)} · ${last.status === "failed" ? "失败" : last.status === "running" ? "进行中" : "成功"}${last.detail ? ` · ${escapeHtml(String(last.detail).slice(0, 80))}` : ""}` : "还没有运行记录"}</p></div>
     <div class="task-next"><small>下次执行</small><b>${job.enabled ? formatTime(job.next_run) : "—"}</b></div>
-    <div class="task-actions">${job.source === "config" ? `<button data-task-run="${job.id}" class="button subtle">立即执行</button><button data-task-edit="${escapeHtml(job.config_key)}" class="button subtle">编辑</button>` : ""}</div>
-  </article>`).join("")}</div>`;
+    <div class="task-actions">${job.source === "config" ? `<label class="switch task-switch" title="${job.enabled ? "停用" : "启用"}"><input type="checkbox" data-task-toggle="${escapeHtml(job.config_key)}" ${job.enabled ? "checked" : ""}><span></span></label><button data-task-run="${job.id}" class="button subtle">立即执行</button><button data-task-edit="${escapeHtml(job.config_key)}" class="button subtle">编辑</button>` : ""}</div>
+  </article>`;
+  }).join("")}</div>`;
 }
 
 function renderScheduleTimeline(rows) {
@@ -596,8 +614,14 @@ function jobDraft(job = {}) {
   };
 }
 
-function openScheduleEditor(job = null) {
-  const draft = jobDraft(job || {}), editing = Boolean(job && job.config_key);
+async function openScheduleEditor(job = null) {
+  // Editing needs the stored definition: the scheduler row omits prompt and
+  // payload, and writing it back would silently clear them.
+  if (job && job.config_key) {
+    try { job = (await api(`/api/schedules/jobs/${encodeURIComponent(job.config_key)}`)).data; }
+    catch (error) { toast(error.message || "读取任务失败", true); return; }
+  }
+  const draft = jobDraft(job || {}), editing = Boolean(job && job.id);
   const groups = scheduleView.overview.groups || [], actions = scheduleView.overview.actions || [];
   showDetail(editing ? "编辑任务" : "新建任务", `<form id="schedule-form" class="task-form">
     <div class="form-grid"><label><span>任务名称</span><input name="name" value="${escapeHtml(draft.name)}" required></label><label><span>任务 ID</span><input name="id" value="${escapeHtml(draft.id)}" ${editing ? "readonly" : ""} required></label>
@@ -621,16 +645,18 @@ async function renderSchedules(tab = scheduleView.tab) {
   $(".search").classList.add("hidden"); $("#save").classList.add("hidden"); history.replaceState(null, "", "#schedules");
   $("#content").innerHTML = `<section class="schedule-workspace loading-state">正在读取任务数据…</section>`;
   try {
-    const [overview, jobs] = await Promise.all([api("/api/schedules/overview"), api("/api/schedules/jobs")]);
-    scheduleView.overview = overview.data; scheduleView.jobs = jobs.data;
+    const [overview, jobs, runs] = await Promise.all([api("/api/schedules/overview"), api("/api/schedules/jobs"), api("/api/schedules/runs?limit=200")]);
+    scheduleView.overview = overview.data; scheduleView.jobs = jobs.data; scheduleView.runs = runs.data;
+    const stats = scheduleStats(runs.data);
     let payload = jobs.data;
-    if (tab === "runs") payload = (await api("/api/schedules/runs?limit=200")).data;
+    if (tab === "runs") payload = runs.data;
     if (tab === "templates") payload = (await api("/api/schedules/suggestions")).data;
-    const body = tab === "jobs" ? renderScheduleJobs(payload) : tab === "timeline" ? renderScheduleTimeline(payload) : tab === "runs" ? renderScheduleRuns(payload) : renderScheduleTemplates(payload);
+    const body = tab === "jobs" ? renderScheduleJobs(payload, stats) : tab === "timeline" ? renderScheduleTimeline(payload) : tab === "runs" ? renderScheduleRuns(payload) : renderScheduleTemplates(payload);
     $("#content").innerHTML = scheduleChrome(body);
     $("#schedule-create").onclick = () => openScheduleEditor();
     document.querySelectorAll("[data-schedule-tab]").forEach((button) => { button.onclick = () => renderSchedules(button.dataset.scheduleTab); });
     document.querySelectorAll("[data-task-edit]").forEach((button) => { button.onclick = () => openScheduleEditor(scheduleView.jobs.find((item) => item.config_key === button.dataset.taskEdit)); });
+    document.querySelectorAll("[data-task-toggle]").forEach((input) => { input.onchange = async () => { const key = input.dataset.taskToggle; try { const full = (await api(`/api/schedules/jobs/${encodeURIComponent(key)}`)).data; await api(`/api/schedules/jobs/${encodeURIComponent(key)}`, { method: "PUT", body: JSON.stringify({ ...full, enabled: input.checked }) }); toast(input.checked ? "任务已启用" : "任务已停用"); renderSchedules("jobs"); } catch (error) { toast(error.message || "切换失败", true); input.checked = !input.checked; } }; });
     document.querySelectorAll("[data-task-run]").forEach((button) => { button.onclick = async () => { button.disabled = true; try { await api(`/api/schedules/jobs/${button.dataset.taskRun}/run`, { method: "POST", body: "{}" }); toast("任务已提交执行"); setTimeout(() => renderSchedules("runs"), 700); } catch (error) { toast(error.message, true); button.disabled = false; } }; });
     document.querySelectorAll("[data-template-id]").forEach((button) => { button.onclick = async () => { const templates = (await api("/api/schedules/suggestions")).data; const item = templates.find((row) => row.id === button.dataset.templateId); openScheduleEditor(item); }; });
   } catch (error) { $("#content").innerHTML = `<section class="schedule-workspace">${emptyState("任务中心加载失败", error.message || "请稍后重试")}</section>`; }
@@ -861,7 +887,7 @@ function renderExperimentProtocol(protocol) {
     : "";
   return `<section class="exp-protocol">
     <div class="exp-protocol-head">
-      <div><p class="eyebrow">${escapeHtml(protocol.id === "holdout_strategy" ? "PRIMARY PROTOCOL" : "LEGACY REPRODUCTION")}</p><h3>${escapeHtml(protocol.title)}</h3><p class="muted">${escapeHtml(protocol.description)}</p></div>
+      <div><h3>${escapeHtml(protocol.title)}</h3><p class="muted">${escapeHtml(protocol.description)}</p></div>
       <span class="section-count">${escapeHtml(protocol.headline)}</span>
     </div>
     ${split}
@@ -873,7 +899,7 @@ function renderExperimentProtocol(protocol) {
 function renderExperimentMethod(view) {
   const oracle = view.headline?.oracle_value;
   return `<section class="exp-protocol">
-    <div class="exp-protocol-head"><div><p class="eyebrow">HOW TO READ</p><h3>指标说明</h3><p class="muted">这张看板为什么这样设计</p></div></div>
+    <div class="exp-protocol-head"><div><h3>指标说明</h3><p class="muted">这张看板为什么这样设计</p></div></div>
     <ol class="exp-method">
       <li><b>只看第一个协议。</b>第二个协议复现的是旧指标：它的期望标签来自关键词表，兜底桶占了 ${percent(view.protocols[1]?.reference?.value ?? 0)} 以上，本身不是正确性标准。</li>
       <li><b>先看常数预测器。</b>${escapeHtml(view.headline?.reference_label || "")}在留出集上是 ${percent(view.headline?.reference_value)}。这是「不看问题、永远回答同一个策略」的成绩，也是检索必须先超过的线。</li>
@@ -891,7 +917,7 @@ function experimentChrome(view, body) {
   const tabs = [["holdout", "真实留出评估"], ["legacy", "旧指标复现"], ["method", "指标说明"]];
   return `<section class="experiment-workspace">
     <div class="experiment-toolbar">
-      <div><p class="eyebrow">EXPERIMENT LAB</p><h2>实验看板</h2></div>
+      <div><h2>实验看板</h2></div>
       <span class="exp-source mono">${escapeHtml(view.path || "")}</span>
     </div>
     ${view.headline && Object.keys(view.headline).length ? renderExperimentHeadline(view) : ""}
@@ -931,27 +957,339 @@ async function renderExperiments(tab = experimentView.tab) {
 
 
 
+let skillView = { q: "", state: "", selected: "", mode: "edit", rows: [], meta: null, dirty: false };
+
+const SKILL_STATES = {
+  enabled: { label: "启用中", tone: "ok" },
+  disabled: { label: "已停用", tone: "muted" },
+  unavailable: { label: "扩展未启用", tone: "warn" },
+  broken: { label: "有问题", tone: "bad" },
+};
+
+function skillStatePill(row) {
+  const meta = SKILL_STATES[row.state] || SKILL_STATES.broken;
+  const hint = row.reason ? ` title="${escapeHtml(row.reason)}"` : "";
+  return `<span class="state-pill ${meta.tone}"${hint}>${meta.label}</span>`;
+}
+
+function skillTriggerCell(row) {
+  if (!row.triggers.length) return `<span class="muted">${row.always_on ? "常驻，无需触发词" : "无触发词"}</span>`;
+  const shown = row.triggers.slice(0, 2).map((item) => `<span class="trig">${escapeHtml(item)}</span>`).join("");
+  const rest = row.triggers.length > 2 ? `<span class="trig more">+${row.triggers.length - 2}</span>` : "";
+  return `<span class="trig-row">${shown}${rest}</span>`;
+}
+
+function skillRow(row) {
+  const active = row.name === skillView.selected ? " active" : "";
+  const tags = [
+    row.always_on ? `<span class="mini-tag">常驻</span>` : "",
+    row.priority ? `<span class="mini-tag">优先级 ${row.priority}</span>` : "",
+    row.adapter ? `<span class="mini-tag">adapter</span>` : "",
+    row.audiences.length && !(row.audiences.length === 1 && row.audiences[0] === "group")
+      ? `<span class="mini-tag">${row.audiences.map(escapeHtml).join("/")}</span>` : "",
+  ].join("");
+  const search = `${row.name} ${row.description} ${row.triggers.join(" ")}`.toLowerCase();
+  const toggle = row.state === "unavailable" || row.state === "broken"
+    ? `<button class="button subtle mini" type="button" disabled title="${escapeHtml(row.reason)}">—</button>`
+    : `<button class="button subtle mini" type="button" data-skill-toggle="${escapeHtml(row.name)}" data-next="${row.state === "enabled" ? "false" : "true"}">${row.state === "enabled" ? "停用" : "启用"}</button>`;
+  return `<tr class="skill-row${active}" data-skill-row="${escapeHtml(row.name)}" data-skill-search="${escapeHtml(search)}" data-skill-state="${row.state}">
+    <td><div class="skill-name"><b>${escapeHtml(row.name)}</b><small>${escapeHtml(row.description || "（没有描述）")}</small><div class="mini-tags">${tags}</div></div></td>
+    <td>${skillStatePill(row)}</td>
+    <td>${skillTriggerCell(row)}</td>
+    <td class="num">${row.calls}</td>
+    <td>${toggle}</td>
+  </tr>`;
+}
+
+function skillEditor(detail) {
+  const creating = skillView.mode === "create";
+  const row = detail || { name: "", description: "", triggers: [], priority: 0, audiences: ["group"], always_on: false, body: "", state: "enabled", reason: "", issues: [], adapter_config: {}, path: "" };
+  const disabled = !creating && (row.state === "unavailable" || row.state === "broken");
+  const reason = !creating && row.reason
+    ? `<div class="notice-block"><b>为什么现在不生效</b><p>${escapeHtml(row.reason)}</p>${row.issues.length ? `<ul>${row.issues.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>` : ""}</div>`
+    : "";
+  const adapter = row.adapter_config && Object.keys(row.adapter_config).length
+    ? `<div class="notice-block subtle"><b>这个 Skill 由 bot-adapter.json 接管</b><p>运行时只取 ${(row.adapter_config.sections || []).map((name) => `「${escapeHtml(name)}」`).join("、") || "整个文件"}${row.adapter_config.body_file ? `，外加 ${escapeHtml(row.adapter_config.body_file)}` : ""}${row.adapter_config.max_chars ? `，最多 ${row.adapter_config.max_chars} 字` : ""}。改正文时这些小节标题必须保留。</p></div>`
+    : "";
+  const audienceBox = (id, label) => `<label class="check"><input type="checkbox" data-field="audiences" value="${id}" ${row.audiences.includes(id) ? "checked" : ""} ${disabled ? "disabled" : ""}><span>${label}</span></label>`;
+  return `<div class="memory-toolbar"><div><h2>${escapeHtml(row.name || "新建 Skill")}${creating ? "" : ` <span class="state-pill ${(SKILL_STATES[row.state] || SKILL_STATES.broken).tone}">${(SKILL_STATES[row.state] || SKILL_STATES.broken).label}</span>`}</h2><p class="muted">${creating ? "保存后会写入 skills/<名称>/SKILL.md。" : escapeHtml(row.path || "")}</p></div></div>
+    ${reason}${adapter}
+    <div class="editor-grid">
+      <label class="editor-field"><span>名称</span><input data-field="name" value="${escapeHtml(row.name)}" ${creating ? "" : "readonly"} placeholder="小写字母、数字、-"></label>
+      <label class="editor-field wide"><span>描述（模型只看到这一句）</span><input data-field="description" value="${escapeHtml(row.description)}" ${disabled ? "disabled" : ""} placeholder="一句话说明什么时候该用它"></label>
+      <label class="editor-field wide"><span>触发词（逗号分隔）</span><input data-field="triggers" value="${escapeHtml(row.triggers.join(", "))}" ${disabled ? "disabled" : ""} placeholder="群聊, 聊天, @"></label>
+      <label class="editor-field"><span>优先级</span><input data-field="priority" type="number" min="-100" max="100" value="${row.priority}" ${disabled ? "disabled" : ""}></label>
+      <div class="editor-field"><span>作用域</span><div class="check-row">${audienceBox("group", "群聊")}${audienceBox("private", "私聊")}</div></div>
+      <label class="check wide"><input type="checkbox" data-field="always_on" ${row.always_on ? "checked" : ""} ${disabled ? "disabled" : ""}><span>常驻：每轮都注入，不靠触发词</span></label>
+      <label class="editor-field wide"><span>正文（给模型的指令）</span><textarea data-field="body" rows="12" ${disabled ? "disabled" : ""}>${escapeHtml(row.body)}</textarea></label>
+    </div>
+    <div class="editor-actions">
+      <button class="button primary" type="button" id="skill-save" ${disabled ? "disabled" : ""}>${creating ? "创建" : "保存"}</button>
+      <button class="button subtle" type="button" id="skill-cancel">取消</button>
+      ${creating ? "" : `<button class="button subtle" type="button" id="skill-archive">归档（移到 .archive）</button>`}
+      <span class="editor-dirty hidden" id="skill-dirty">未保存</span><span class="editor-error" id="skill-error"></span>
+    </div>
+    ${creating ? "" : `<details class="raw-box"><summary>查看磁盘上的 SKILL.md 原文</summary><pre>${escapeHtml(detail.raw || "")}</pre></details>`}`;
+}
+
+function confirmDiscard() {
+  if (!skillView.dirty) return true;
+  return window.confirm("这个 Skill 还有没保存的修改，确定放弃？");
+}
+
+async function openSkill(name, mode = "edit") {
+  const target = mode === "create" ? "" : name;
+  if (skillView.selected !== target && !confirmDiscard()) return;
+  skillView.dirty = false;
+  skillView.selected = target;
+  skillView.mode = mode;
+  const panel = $("#skill-detail");
+  if (!panel) return;
+  panel.classList.remove("hidden");
+  const layout = panel.closest(".skill-layout");
+  if (layout) layout.classList.add("has-selection");
+  if (mode === "create") {
+    panel.innerHTML = skillEditor(null);
+    bindSkillEditor();
+    return;
+  }
+  panel.innerHTML = `<section class="loading-state">正在读取 ${escapeHtml(name)}…</section>`;
+  try {
+    const { data } = await api(`/api/skills/admin/${encodeURIComponent(name)}`);
+    panel.innerHTML = skillEditor(data);
+    bindSkillEditor();
+    document.querySelectorAll("[data-skill-row]").forEach((row) => row.classList.toggle("active", row.dataset.skillRow === name));
+  } catch (error) {
+    panel.innerHTML = emptyState("读不到这个 Skill", error.message);
+  }
+}
+
+function skillPayload() {
+  const field = (name) => document.querySelector(`[data-field="${name}"]`);
+  const audiences = [...document.querySelectorAll('[data-field="audiences"]:checked')].map((item) => item.value);
+  return {
+    name: (field("name")?.value || "").trim(),
+    description: (field("description")?.value || "").trim(),
+    triggers: (field("triggers")?.value || "").split(/[,，]/).map((item) => item.trim()).filter(Boolean),
+    priority: Number(field("priority")?.value || 0),
+    audiences,
+    always_on: Boolean(field("always_on")?.checked),
+    body: (field("body")?.value || "").trim(),
+  };
+}
+
+function bindSkillEditor() {
+  const panel = $("#skill-detail");
+  const markDirty = () => {
+    skillView.dirty = true;
+    $("#skill-dirty")?.classList.remove("hidden");
+  };
+  panel.querySelectorAll("[data-field]").forEach((field) => {
+    field.addEventListener("input", markDirty);
+    field.addEventListener("change", markDirty);
+  });
+  panel.onkeydown = (event) => {
+    if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") {
+      event.preventDefault();
+      $("#skill-save")?.click();
+    } else if (event.key === "Escape") {
+      event.preventDefault();
+      $("#skill-cancel")?.click();
+    }
+  };
+  const fail = (message) => {
+    const box = $("#skill-error");
+    if (box) box.textContent = message;
+    toast(message, true);
+  };
+  const save = $("#skill-save");
+  if (save) save.onclick = async () => {
+    const payload = skillPayload();
+    const creating = skillView.mode === "create";
+    save.disabled = true;
+    try {
+      const { data } = creating
+        ? await api("/api/skills/admin", { method: "POST", body: JSON.stringify(payload) })
+        : await api(`/api/skills/admin/${encodeURIComponent(skillView.selected)}`, { method: "PUT", body: JSON.stringify(payload) });
+      skillView.dirty = false;
+      toast(creating ? `已创建 ${data.created}` : `已保存 ${data.saved}`);
+      await renderSkills();
+      await openSkill(creating ? data.created : skillView.selected);
+    } catch (error) {
+      fail(error.message);
+    } finally {
+      save.disabled = false;
+    }
+  };
+  const cancel = $("#skill-cancel");
+  if (cancel) cancel.onclick = () => {
+    skillView.mode = "edit";
+    if (skillView.selected) {
+      openSkill(skillView.selected);
+      return;
+    }
+    const panel = $("#skill-detail");
+    panel.classList.add("hidden");
+    panel.closest(".skill-layout")?.classList.remove("has-selection");
+  };
+  const archive = $("#skill-archive");
+  if (archive) archive.onclick = async () => {
+    if (!window.confirm(`归档 ${skillView.selected}？目录会移到 skills/.archive，不会删除。`)) return;
+    try {
+      const { data } = await api(`/api/skills/admin/${encodeURIComponent(skillView.selected)}/archive`, { method: "POST", body: "{}" });
+      toast(`已归档到 ${data.path}`);
+      skillView.selected = "";
+      await renderSkills();
+    } catch (error) {
+      fail(error.message);
+    }
+  };
+}
+
 async function renderSkills() {
   document.querySelectorAll(".nav-item").forEach((item) => item.classList.toggle("active", item.dataset.target === "skills"));
   $(".search").classList.add("hidden"); $("#save").classList.add("hidden"); history.replaceState(null, "", "#skills");
-  const content = $("#content"); content.innerHTML = `<section class="memory-workspace loading-state">正在读取 Skill catalog…</section>`;
+  const content = $("#content");
+  if (!skillView.rows.length) content.innerHTML = `<section class="memory-workspace loading-state">正在读取 skills/ 目录…</section>`;
   try {
-    const {data} = await api("/api/skills");
-    const rows = data.skills || [];
-    content.innerHTML = `<section class="memory-workspace"><div class="memory-toolbar"><div><p class="eyebrow">SKILL CATALOG / OWNER VIEW</p><h2>Skill 管理</h2><p class="muted">实际装配的 Skill、作用域和触发条件；调用次数来自最近 7 天真实 Trace。</p></div><span class="data-badge">${data.total} 个已装配</span></div><div class="memory-body"><div class="overview-grid"><article class="data-panel"><div class="panel-title"><h3>Skill 目录</h3><p>群聊和私聊 Skill 由 audience 隔离，聊天用户没有管理入口。</p></div><div class="skill-list">${rows.map((row) => `<details class="skill-item"><summary><span><b>${escapeHtml(row.name)}</b><small>${escapeHtml(row.description)}</small></span><strong>${row.calls} 次</strong></summary><div class="skill-detail"><p><b>作用域：</b>${row.audiences.map(escapeHtml).join("、") || "未声明"}　<b>优先级：</b>${row.priority}　<b>常驻：</b>${row.always_on ? "是" : "否"}</p><p><b>触发词：</b>${row.triggers.map(escapeHtml).join("、") || "无"}</p><p><b>正文：</b>${escapeHtml(row.body_preview || "（无预览）")}</p></div></details>`).join("") || emptyState("没有已装配 Skill", "请检查 Bot 的扩展和 Skill 目录。")}</div></article><article class="data-panel"><div class="panel-title"><h3>运行边界</h3><p>管理信息来自代码装配结果，不从聊天内容推断。</p></div><dl class="fact-grid"><div><dt>已装配</dt><dd>${data.total}</dd></div><div><dt>最近 7 天调用</dt><dd>${rows.reduce((sum, row) => sum + row.calls, 0)}</dd></div><div><dt>群聊 Skill</dt><dd>${rows.filter((row) => row.audiences.includes("group")).length}</dd></div><div><dt>私聊 Skill</dt><dd>${rows.filter((row) => row.audiences.includes("private")).length}</dd></div></dl>${data.unavailable?.length ? `<p class="inline-error">不可用声明：${data.unavailable.map(escapeHtml).join("、")}</p>` : `<p class="muted">当前没有因能力缺失而不可用的 Skill。</p>`}</article></div></div></section>`;
-  } catch (error) { content.innerHTML = `<section class="memory-workspace">${emptyState("Skill 管理不可用", error.message)}</section>`; }
+    const { data } = await api("/api/skills/admin");
+    skillView.rows = data.skills || [];
+    skillView.meta = data;
+    const chip = (id, label) => `<button class="chip ${skillView.state === id ? "active" : ""}" data-skill-filter="${id}">${label}${id ? ` ${data.counts[id] ?? 0}` : ` ${data.total}`}</button>`;
+    content.innerHTML = `<section class="memory-workspace">
+      <div class="memory-toolbar"><div><h2>Skill 管理</h2><p class="muted">读的是 ${escapeHtml(data.root)}/ 目录本身：装了什么、为什么没生效、谁在常驻。保存后立即重载目录，不用重启。</p></div>
+        <div class="monitor-actions"><span class="data-badge" id="skill-count">${data.total} 个 Skill</span><button class="button subtle" type="button" id="skill-new">新建 Skill</button><button class="button subtle" type="button" id="skill-import">导入 SKILL.md</button><input id="skill-file" type="file" accept=".md,text/markdown,text/plain" hidden></div></div>
+      <div class="filter-row"><input id="skill-search" type="search" placeholder="搜索名称、描述或触发词…" value="${escapeHtml(skillView.q)}">${chip("", "全部")}${chip("enabled", "启用中")}${chip("disabled", "已停用")}${chip("unavailable", "扩展未启用")}${chip("broken", "有问题")}</div>
+      ${data.allow_list_known ? "" : `<p class="inline-error">当前没有绑定运行中的 Bot，无法判断哪些 Skill 被扩展白名单挡住。</p>`}
+      <div class="overview-grid skill-layout${skillView.selected || skillView.mode === "create" ? " has-selection" : ""}">
+        <article class="data-panel"><div class="panel-title"><h3>目录</h3><p>近 7 天调用共 ${data.calls_7d} 次。状态取自磁盘和扩展白名单，不从聊天内容推断。</p></div>
+          <div class="table-scroll"><table class="skill-table"><thead><tr><th>Skill</th><th>状态</th><th>触发</th><th class="num">调用</th><th>操作</th></tr></thead><tbody id="skill-rows">${skillView.rows.map(skillRow).join("") || `<tr><td colspan="5">${emptyState("skills/ 目录是空的", "用「新建 Skill」或「导入 SKILL.md」放进去一个。")}</td></tr>`}</tbody></table></div>
+          ${data.archived.length ? `<p class="muted small">已归档 ${data.archived.length} 个：${data.archived.slice(0, 4).map((item) => escapeHtml(item.name)).join("、")}${data.archived.length > 4 ? "…" : ""}</p>` : ""}
+        </article>
+        <article class="data-panel skill-detail-panel${skillView.selected || skillView.mode === "create" ? "" : " hidden"}" id="skill-detail">${emptyState("选择一个 Skill", "点左边任意一行查看正文、触发词和启停状态。")}</article>
+      </div></section>`;
+    const apply = () => {
+      let visible = 0;
+      document.querySelectorAll("[data-skill-row]").forEach((row) => {
+        const matchesText = !skillView.q || row.dataset.skillSearch.includes(skillView.q.toLowerCase());
+        const matchesState = !skillView.state || row.dataset.skillState === skillView.state;
+        const show = matchesText && matchesState;
+        row.classList.toggle("hidden", !show);
+        if (show) visible += 1;
+      });
+      $("#skill-count").textContent = `${visible} / ${skillView.rows.length} 个 Skill`;
+    };
+    $("#skill-search").oninput = (event) => { skillView.q = event.currentTarget.value.trim(); apply(); };
+    document.querySelectorAll("[data-skill-filter]").forEach((button) => {
+      button.onclick = () => {
+        skillView.state = button.dataset.skillFilter;
+        document.querySelectorAll("[data-skill-filter]").forEach((chip) => chip.classList.toggle("active", chip === button));
+        apply();
+      };
+    });
+    document.querySelectorAll("[data-skill-row]").forEach((row) => {
+      row.onclick = (event) => {
+        if (event.target.closest("[data-skill-toggle]")) return;
+        openSkill(row.dataset.skillRow);
+      };
+    });
+    document.querySelectorAll("[data-skill-toggle]").forEach((button) => {
+      button.onclick = async (event) => {
+        event.stopPropagation();
+        button.disabled = true;
+        try {
+          const { data } = await api(`/api/skills/admin/${encodeURIComponent(button.dataset.skillToggle)}/enabled`, { method: "POST", body: JSON.stringify({ enabled: button.dataset.next === "true" }) });
+          toast(data.runtime_effect);
+          await renderSkills();
+        } catch (error) {
+          toast(error.message, true);
+          button.disabled = false;
+        }
+      };
+    });
+    $("#skill-new").onclick = () => openSkill("", "create");
+    $("#skill-import").onclick = () => $("#skill-file").click();
+    $("#skill-file").onchange = async (event) => {
+      const file = event.currentTarget.files?.[0];
+      if (!file) return;
+      try {
+        const text = await file.text();
+        const { data } = await api("/api/skills/admin/import", { method: "POST", body: JSON.stringify({ filename: file.name, content: text }) });
+        toast(`已导入 ${data.created}`);
+        await renderSkills();
+        await openSkill(data.created);
+      } catch (error) {
+        toast(error.message, true);
+      } finally {
+        event.currentTarget.value = "";
+      }
+    };
+    apply();
+    mountView(content, "skills");
+    if (skillView.selected) openSkill(skillView.selected);
+  } catch (error) {
+    content.innerHTML = `<section class="memory-workspace">${emptyState("Skill 管理不可用", error.message)}</section>`;
+  }
 }
 
-async function renderWikiAdmin(scope = "") {
+let wikiView = { scope: "", q: "" };
+
+function wikiFreshness(seconds) {
+  if (!seconds) return "无时间记录";
+  const age = Math.max(0, Math.round(Date.now() / 1000 - seconds));
+  if (age < 3600) return `${Math.round(age / 60)} 分钟前更新`;
+  if (age < 86400) return `${Math.round(age / 3600)} 小时前更新`;
+  return `${Math.round(age / 86400)} 天前更新`;
+}
+
+async function renderWikiAdmin(scope = wikiView.scope) {
+  wikiView.scope = scope;
   document.querySelectorAll(".nav-item").forEach((item) => item.classList.toggle("active", item.dataset.target === "wiki-admin"));
   $(".search").classList.add("hidden"); $("#save").classList.add("hidden"); history.replaceState(null, "", "#wiki-admin");
   const content = $("#content"); content.innerHTML = `<section class="memory-workspace loading-state">正在读取 LM Wiki Markdown…</section>`;
   try {
     const {data} = await api(`/api/wiki/overview?limit=200${scope ? `&scope=${encodeURIComponent(scope)}` : ""}`);
-    let selected = null;
-    const renderPage = (page) => { selected = page; const detail = $("#wiki-admin-detail"); if (!detail) return; detail.innerHTML = page ? `<h3>${escapeHtml(page.title)}</h3><p class="muted">${escapeHtml(page.page_id)} · ${escapeHtml(page.version || "无版本")}</p><p>${escapeHtml(page.summary || "暂无摘要")}</p><div class="wiki-facts">${(page.entries || []).slice(0, 30).map((entry) => `<article><b>${escapeHtml(entry.claim)}</b><small>${entry.observed_at ? formatTime(entry.observed_at) : "时间未记录"} · 置信度 ${entry.confidence ?? "未知"}</small></article>`).join("") || `<p class="muted">暂无已发布事实。</p>`}</div><h4>主题 / 黑话 / 链接</h4><p class="muted">${(page.topics || []).length} 个主题 · ${(page.slang || []).length} 条黑话 · ${(page.links || []).length} 条出链 · ${(page.backlinks || []).length} 条反向链接</p>` : emptyState("选择一个 Wiki 页面", "右侧会显示实际 Markdown 提炼出的实体内容。"); };
-    content.innerHTML = `<section class="memory-workspace"><div class="memory-toolbar"><div><p class="eyebrow">LM WIKI / MARKDOWN ENTITIES</p><h2>Wiki 管理</h2><p class="muted">管理已提炼发布的群、人物和私聊实体，不重新构造图谱。</p></div><span class="data-badge">${data.available ? `${data.total} 个页面` : "未启用"}</span></div><div class="memory-body"><div class="wiki-admin-layout"><article class="data-panel"><div class="panel-title"><h3>已发布页面</h3><p>按实体页面倒序浏览，页面内容来自 Markdown 发布目录。</p></div><div class="wiki-page-list">${data.pages.map((page) => `<button data-wiki-page="${escapeHtml(page.page_id)}"><span><b>${escapeHtml(page.title)}</b><small>${escapeHtml(page.scope)} · ${page.facts} 事实 · ${page.topics} 主题 · ${page.slang} 黑话</small></span><strong>${escapeHtml(page.version || "—")}</strong></button>`).join("") || emptyState(data.available ? "暂无 Wiki 页面" : "Wiki 未启用", "启用 Wiki 并完成一次提炼发布后，页面会出现在这里。")}</div></article><article class="data-panel" id="wiki-admin-detail">${data.pages.length ? emptyState("选择一个 Wiki 页面", "右侧会显示实际 Markdown 提炼出的实体内容。") : ""}</article></div></div></section>`;
-    document.querySelectorAll("[data-wiki-page]").forEach((button) => { button.onclick = async () => { document.querySelectorAll("[data-wiki-page]").forEach((item) => item.classList.remove("active")); button.classList.add("active"); try { renderPage((await api(`/api/wiki/pages/${encodeURIComponent(button.dataset.wikiPage)}`)).data); } catch (error) { $("#wiki-admin-detail").innerHTML = `<p class="error">${escapeHtml(error.message)}</p>`; } }; });
+    let reason = "";
+    if (!data.available || !data.pages.length) {
+      try {
+        const routes = (await api("/api/routes/overview")).data;
+        reason = data.available
+          ? `Wiki 已启用，但目录 ${routes.wiki.root || "未配置"} ${routes.wiki.root_exists ? "里还没有提炼发布的页面" : "不存在"}。`
+          : `Wiki 当前未启用（BOT_WIKI_ENABLED=${routes.wiki.enabled}）。开启后需要重启 Bot，并完成一次提炼发布。`;
+      } catch (error) { reason = "无法读取 Wiki 开关状态。"; }
+    }
+    const scopes = (data.scopes || []).map((item) => `<button class="chip ${scope === item ? "active" : ""}" data-wiki-scope="${escapeHtml(item)}">${escapeHtml(item)}</button>`).join("");
+    const pages = data.pages.map((page) => `<button data-wiki-page="${escapeHtml(page.page_id)}" data-wiki-search="${escapeHtml(`${page.title} ${page.page_id}`.toLowerCase())}"><span><b>${escapeHtml(page.title)}</b><small>${escapeHtml(page.scope)} · ${page.facts} 事实 · ${page.topics} 主题 · ${page.slang} 黑话 · ${wikiFreshness(page.latest_observed_at)}</small></span><strong>${escapeHtml(page.version || "—")}</strong></button>`).join("");
+    const renderPage = (page) => {
+      const detail = $("#wiki-admin-detail");
+      if (!detail) return;
+      detail.innerHTML = page ? `<h3>${escapeHtml(page.title)}</h3><p class="muted">${escapeHtml(page.page_id)} · ${escapeHtml(page.version || "无版本")} · ${wikiFreshness((page.entries || []).reduce((latest, entry) => Math.max(latest, entry.observed_at || 0), 0))}</p><p>${escapeHtml(page.summary || "暂无摘要")}</p><div class="wiki-facts">${(page.entries || []).slice(0, 30).map((entry) => `<article><b>${escapeHtml(entry.claim)}</b><small>${entry.observed_at ? formatTime(entry.observed_at) : "时间未记录"} · 置信度 ${entry.confidence ?? "未知"}</small></article>`).join("") || `<p class="muted">暂无已发布事实。</p>`}</div><h4>主题 / 黑话 / 链接</h4><p class="muted">${(page.topics || []).length} 个主题 · ${(page.slang || []).length} 条黑话 · ${(page.links || []).length} 条出链 · ${(page.backlinks || []).length} 条反向链接</p>${(page.backlinks || []).length ? `<div class="chip-row">${page.backlinks.map((link) => `<button class="chip" data-wiki-page="${escapeHtml(link.page_id)}">↩ ${escapeHtml(link.title)}</button>`).join("")}</div>` : ""}` : emptyState("选择一个 Wiki 页面", "右侧会显示实际 Markdown 提炼出的实体内容。");
+      bindPageButtons();
+    };
+    const bindPageButtons = () => {
+      document.querySelectorAll("[data-wiki-page]").forEach((button) => {
+        button.onclick = async () => {
+          document.querySelectorAll("[data-wiki-page]").forEach((item) => item.classList.remove("active"));
+          button.classList.add("active");
+          try { renderPage((await api(`/api/wiki/pages/${encodeURIComponent(button.dataset.wikiPage)}`)).data); }
+          catch (error) { $("#wiki-admin-detail").innerHTML = `<p class="error">${escapeHtml(error.message)}</p>`; }
+        };
+      });
+    };
+    content.innerHTML = `<section class="memory-workspace"><div class="memory-toolbar"><div><h2>Wiki 管理</h2><p class="muted">管理已提炼发布的群、人物和私聊实体，不重新构造图谱。</p></div><span class="data-badge">${data.available ? `${data.total} 个页面` : "未启用"}</span></div>
+      <div class="filter-row"><input id="wiki-search" type="search" placeholder="搜索页面标题或实体 ID…" value="${escapeHtml(wikiView.q)}"><button class="chip ${scope ? "" : "active"}" data-wiki-scope="">全部</button>${scopes}</div>
+      ${reason ? `<div class="notice-block"><b>为什么是空的</b><p>${escapeHtml(reason)}</p><button class="button subtle" type="button" id="wiki-open-routing">去链路与图谱开启</button></div>` : ""}
+      <div class="memory-body"><div class="wiki-admin-layout"><article class="data-panel"><div class="panel-title"><h3>已发布页面</h3><p>按实体页面倒序浏览，页面内容来自 Markdown 发布目录。</p></div><div class="wiki-page-list">${pages || emptyState(data.available ? "暂无 Wiki 页面" : "Wiki 未启用", data.available ? "启用 Wiki 并完成一次提炼发布后，页面会出现在这里。" : "先在链路与图谱里开启 Wiki。")}</div></article><article class="data-panel" id="wiki-admin-detail">${data.pages.length ? emptyState("选择一个 Wiki 页面", "右侧会显示实际 Markdown 提炼出的实体内容。") : ""}</article></div></div></section>`;
+    bindPageButtons();
+    document.querySelectorAll("[data-wiki-scope]").forEach((button) => { button.onclick = () => renderWikiAdmin(button.dataset.wikiScope); });
+    const routingLink = $("#wiki-open-routing");
+    if (routingLink) routingLink.onclick = () => activateSection("routing");
+    $("#wiki-search").oninput = (event) => {
+      wikiView.q = event.currentTarget.value.trim().toLowerCase();
+      document.querySelectorAll("[data-wiki-search]").forEach((button) => {
+        button.classList.toggle("hidden", Boolean(wikiView.q) && !button.dataset.wikiSearch.includes(wikiView.q));
+      });
+    };
   } catch (error) { content.innerHTML = `<section class="memory-workspace">${emptyState("Wiki 管理不可用", error.message)}</section>`; }
 }
 
@@ -969,7 +1307,7 @@ async function renderDashboard(tab = "overview") {
       const skillRows = Object.entries(overview.skill_counts || {}).sort((a, b) => b[1] - a[1]).slice(0, 10);
       const toolRows = Object.entries(overview.tool_counts || {}).sort((a, b) => b[1] - a[1]).slice(0, 10);
       const toolOutcomes = Object.entries(overview.tool_outcomes || {}).sort((a, b) => b[1] - a[1]);
-      const frequencyList = (rows, empty) => rows.length ? rows.map(([name, count]) => `<li><span>${escapeHtml(name)}</span><strong>${count} 次</strong></li>`).join("") : `<li class="muted">${escapeHtml(empty)}</li>`;
+      const frequencyList = (rows, empty) => rows.length ? rows.map(([name, count]) => `<li><span>${escapeHtml(outcomeLabel(name))}</span><strong>${count} 次</strong></li>`).join("") : `<li class="muted">${escapeHtml(empty)}</li>`;
       body += `<div class="overview-grid"><article class="data-panel"><div class="panel-title"><h3>Skill 触发频率</h3><p>${overview.skill_turns ?? 0} 个消息触发了 Skill；重复选中按实际次数统计。</p></div><ul class="frequency-list">${frequencyList(skillRows, "当前时间范围没有 Skill 记录")}</ul></article><article class="data-panel"><div class="panel-title"><h3>工具调用频率</h3><p>${overview.tool_calls ?? 0} 次调用 · ${toolOutcomes.map(([name, count]) => `${escapeHtml(name)} ${count}`).join(" · ") || "暂无结果"}</p></div><ul class="frequency-list">${frequencyList(toolRows, "当前时间范围没有工具调用")}</ul></article></div>`;
       const rows = (await api("/api/dashboard/traces?hours=24&limit=8")).data.items || [];
       body += `<article class="data-panel"><div class="panel-title"><h3>最近消息</h3><p>每条记录包含准入、技能、模型调用和发送结果</p></div><div class="table-scroll"><table><thead><tr><th>时间</th><th>会话</th><th>结果</th><th>模型调用</th><th>耗时</th></tr></thead><tbody>${rows.map((row) => `<tr><td>${escapeHtml(formatTime(row.created_at))}</td><td>${escapeHtml(row.scope)}</td><td>${statusBadge(row.outcome)}</td><td>${row.steps.filter((step) => step.stage === "model").length}</td><td>${row.duration_ms ?? "—"} ms</td></tr>`).join("") || `<tr><td colspan="5">${emptyState("暂无运行记录", "新版本处理消息后，从这里开始显示。")}</td></tr>`}</tbody></table></div></article>`;
@@ -980,7 +1318,7 @@ async function renderDashboard(tab = "overview") {
       const graph = (await api("/api/dashboard/wiki?limit=200")).data;
       body += `<article class="data-panel"><div class="panel-title"><h3>Wiki 实体关联</h3><p>${graph.available ? "只显示 Markdown 发布页的显式链接，不用相似度伪造边。" : "Wiki 读取器尚未装配，图谱保持未启用。"}</p></div>${graph.nodes?.length ? `<div class="wiki-node-list">${graph.nodes.map((node) => `<button class="memory-tab" data-wiki-id="${escapeHtml(node.id)}">${escapeHtml(node.title)} <small>${escapeHtml(node.kind)}</small></button>`).join("")}</div><p class="muted">${graph.nodes.length} 个实体 · ${graph.links.length} 条链接 · ${graph.dangling_links || 0} 条链接目标不在当前视图</p>` : emptyState(graph.available ? "暂无 Wiki 实体" : "Wiki 未启用", "装配 Wiki 读取器并发布 Markdown 后，这里会显示真实实体链接。")}</article>`;
     }
-    content.innerHTML = `<section class="memory-workspace"><div class="memory-toolbar"><div><p class="eyebrow">OBSERVABILITY</p><h2>运行看板</h2><p class="muted">实际程序记录 · 缺失指标保持未知</p></div></div><div class="memory-tabs">${tabsHtml}</div><div class="memory-body">${body}</div></section>`;
+    content.innerHTML = `<section class="memory-workspace"><div class="memory-toolbar"><div><h2>运行看板</h2><p class="muted">实际程序记录 · 缺失指标保持未知</p></div></div><div class="memory-tabs">${tabsHtml}</div><div class="memory-body">${body}</div></section>`;
     document.querySelectorAll("[data-dashboard-tab]").forEach((button) => { button.onclick = () => renderDashboard(button.dataset.dashboardTab); });
   } catch (error) { content.innerHTML = emptyState("运行数据暂不可用", error.message); }
 }
@@ -1003,13 +1341,413 @@ async function renderDatabase(table = "") {
     const selectedMeta = schema.tables?.find((item) => item.name === selected);
     const tabs = (schema.tables || []).map((item) => `<button class="memory-tab ${item.name === selected ? "active" : ""}" data-db-table="${escapeHtml(item.name)}">${escapeHtml(item.name)} <small>${item.row_count}</small></button>`).join("");
     let rows = selected ? (await api(`/api/database/tables/${encodeURIComponent(selected)}?limit=100`)).data : null;
-    content.innerHTML = `<section class="memory-workspace"><div class="memory-toolbar"><div><p class="eyebrow">SQLITE / OWNER READ MODEL</p><h2>数据存储</h2><p class="muted">真实 SQLite 结构与只读查询；写操作继续通过任务、配置和审核业务界面完成。</p></div><span class="data-badge">${schema.tables?.length || 0} 张表</span></div><div class="memory-tabs">${tabs || `<span class="muted">没有可展示的业务表</span>`}</div><div class="memory-body"><div class="overview-grid"><article class="data-panel"><div class="panel-title"><h3>${escapeHtml(selected || "未选择表")}</h3><p>${selectedMeta ? `${selectedMeta.columns.length} 个字段 · ${selectedMeta.row_count} 行` : "选择一张表查看实际数据"}</p></div>${rows ? databaseResultTable(rows) : emptyState("没有可展示的表", "数据库尚未创建业务表。")}</article><article class="data-panel database-query"><div class="panel-title"><h3>只读 SQL</h3><p>仅允许单条 SELECT，最多返回 200 行。</p></div><form id="database-query-form"><textarea name="sql" rows="7" placeholder="SELECT scope, COUNT(*) AS count FROM messages GROUP BY scope ORDER BY count DESC"></textarea><div class="database-query-actions"><label>上限 <input name="limit" type="number" min="1" max="200" value="100"></label><button class="button primary" type="submit">执行查询</button></div></form><div id="database-query-result"></div></article></div></div></section>`;
+    content.innerHTML = `<section class="memory-workspace"><div class="memory-toolbar"><div><h2>数据存储</h2><p class="muted">真实 SQLite 结构与只读查询；写操作继续通过任务、配置和审核业务界面完成。</p></div><span class="data-badge">${schema.tables?.length || 0} 张表</span></div><div class="memory-tabs">${tabs || `<span class="muted">没有可展示的业务表</span>`}</div><div class="memory-body"><div class="overview-grid"><article class="data-panel"><div class="panel-title"><h3>${escapeHtml(selected || "未选择表")}</h3><p>${selectedMeta ? `${selectedMeta.columns.length} 个字段 · ${selectedMeta.row_count} 行` : "选择一张表查看实际数据"}</p></div>${rows ? databaseResultTable(rows) : emptyState("没有可展示的表", "数据库尚未创建业务表。")}</article><article class="data-panel database-query"><div class="panel-title"><h3>只读 SQL</h3><p>仅允许单条 SELECT，最多返回 200 行。</p></div><form id="database-query-form"><textarea name="sql" rows="7" placeholder="SELECT scope, COUNT(*) AS count FROM messages GROUP BY scope ORDER BY count DESC"></textarea><div class="database-query-actions"><label>上限 <input name="limit" type="number" min="1" max="200" value="100"></label><button class="button primary" type="submit">执行查询</button></div></form><div id="database-query-result"></div></article></div></div></section>`;
     document.querySelectorAll("[data-db-table]").forEach((button) => { button.onclick = () => renderDatabase(button.dataset.dbTable); });
     $("#database-query-form").onsubmit = async (event) => { event.preventDefault(); const form = event.currentTarget; const result = $("#database-query-result"); result.textContent = "查询中…"; try { const payload = Object.fromEntries(new FormData(form)); payload.limit = Number(payload.limit); result.innerHTML = databaseResultTable((await api("/api/database/query", { method: "POST", body: JSON.stringify(payload) })).data); } catch (error) { result.innerHTML = `<p class="error">${escapeHtml(error.message)}</p>`; } };
   } catch (error) { content.innerHTML = `<section class="memory-workspace">${emptyState("数据库页面加载失败", error.message || "数据库服务尚未就绪")}</section>`; }
 }
 
+/* Live operations monitor ------------------------------------------------ */
+/* Polls the projection the process owns. Every number has a named source; a
+   source that is not bound renders as 未接入 instead of zero. */
+const TURN_PAGE = 12, LOG_PAGE = 20, CALL_PAGE = 15;
+
+let monitorView = { minutes: 15, timer: null, paused: false, level: "", q: "", scope: "", updatedAt: 0, turnOffset: 0, logOffset: 0 };
+
+function stopMonitor() {
+  if (monitorView.timer) { clearInterval(monitorView.timer); monitorView.timer = null; }
+}
+
+function healthTone(status) {
+  return status === "down" ? "down" : status === "degraded" ? "degraded" : "ok";
+}
+
+function healthText(status) {
+  return status === "down" ? "不可用" : status === "degraded" ? "降级运行" : "运行正常";
+}
+
+/* A real chart: axes, gridlines and hover targets. Built as SVG markup because
+   the console's CSP forbids inline style attributes. */
+function areaChart(points) {
+  const width = 640, height = 190, left = 34, right = 10, top = 14, bottom = 26;
+  const plotW = width - left - right, plotH = height - top - bottom;
+  // A flat series would otherwise sit exactly on the top gridline and read as
+  // a full-height block; keep at least one unit of headroom.
+  const peak = Math.max(0, ...points.map((point) => point.turns));
+  const max = Math.max(2, peak);
+  const stepX = plotW / Math.max(1, points.length - 1);
+  const x = (index) => left + index * stepX;
+  const y = (value) => top + plotH * (1 - value / max);
+  const coords = points.map((point, index) => [x(index), y(point.turns)]);
+  const line = coords.map(([px, py]) => `${px.toFixed(1)},${py.toFixed(1)}`).join(" ");
+  const area = `M${left},${top + plotH} L${line.split(" ").join(" L")} L${(left + (points.length - 1) * stepX).toFixed(1)},${top + plotH} Z`;
+  const grid = [0, 0.5, 1].map((ratio) => {
+    const gy = top + plotH * (1 - ratio);
+    return `<line x1="${left}" y1="${gy.toFixed(1)}" x2="${width - right}" y2="${gy.toFixed(1)}" stroke="#e6eef8" stroke-width="1"/><text x="${left - 6}" y="${(gy + 3).toFixed(1)}" text-anchor="end" font-size="9" fill="#8496ab">${Math.round(max * ratio)}</text>`;
+  }).join("");
+  const dots = points.map((point, index) => point.errors
+    ? `<circle cx="${x(index).toFixed(1)}" cy="${y(point.turns).toFixed(1)}" r="3" fill="#d33b62"><title>${escapeHtml(formatTime(point.at))} · ${point.turns} 条 · 失败 ${point.errors}</title></circle>`
+    : "").join("");
+  const label = (index, anchor) => `<text x="${x(index).toFixed(1)}" y="${height - 8}" text-anchor="${anchor}" font-size="9" fill="#8496ab">${escapeHtml((formatTime(points[index].at) || "").slice(11, 16))}</text>`;
+  const empty = points.every((point) => !point.turns)
+    ? `<text x="${left + plotW / 2}" y="${top + plotH / 2}" text-anchor="middle" font-size="11" fill="#9aabbf">这段时间没有消息</text>`
+    : "";
+  return `<svg class="area-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="每分钟消息量">
+    ${grid}
+    <path d="${area}" fill="rgba(23,105,224,.12)" stroke="none"/>
+    <polyline points="${line}" fill="none" stroke="#1769e0" stroke-width="1.8" stroke-linejoin="round"/>
+    ${dots}${empty}
+    ${label(0, "start")}${label(Math.floor((points.length - 1) / 2), "middle")}${label(points.length - 1, "end")}
+  </svg>`;
+}
+
+
+/* Paged, never scrolled. A clipped last row inside a scroll box hides how much
+   data there is and is the single ugliest thing a table can do. */
+function pager(data, key) {
+  const pages = data.pages || 1;
+  if (!data.total) return "";
+  const offset = data.offset || 0;
+  const limit = Math.max(1, data.limit || 1);
+  const page = Math.floor(offset / limit) + 1;
+  const from = offset + 1;
+  const to = Math.min(data.total, offset + (data.items || []).length);
+  return `<div class="pager"><span class="muted small">${from}–${to} / 共 ${data.total} 条</span><span class="pager-gap"></span><button class="button subtle mini" type="button" data-pager="${key}" data-page="${page - 1}" ${page <= 1 ? "disabled" : ""}>上一页</button><span class="small pager-count">${page} / ${pages}</span><button class="button subtle mini" type="button" data-pager="${key}" data-page="${page + 1}" ${page >= pages ? "disabled" : ""}>下一页</button></div>`;
+}
+
+function bindPager(reset) {
+  document.querySelectorAll("[data-pager]").forEach((button) => {
+    button.onclick = () => {
+      const page = Number(button.dataset.page);
+      if (!Number.isFinite(page) || page < 1) return;
+      reset(button.dataset.pager, (page - 1) * (button.dataset.pager === "turns" ? TURN_PAGE : button.dataset.pager === "logs" ? LOG_PAGE : CALL_PAGE));
+    };
+  });
+}
+
+function turnRows(turns) {
+  if (!turns.items.length) return `<tr><td colspan="5">${emptyState("没有消息记录", "最近 24 小时这个进程没有处理过消息。")}</td></tr>`;
+  return turns.items.map((row) => {
+    const tools = row.tools.length ? row.tools.slice(0, 3).map((tool) => `<span class="trig">${escapeHtml(tool)}</span>`).join("") : `<span class="muted">—</span>`;
+    return `<tr><td class="mono">${escapeHtml(formatTime(row.at))}</td><td>${escapeHtml(row.scope)}</td><td>${statusBadge(row.outcome)}</td><td>${row.duration_ms == null ? "—" : `${row.duration_ms} ms`}</td><td><span class="trig-row">${tools}</span></td></tr>`;
+  }).join("");
+}
+
+function scopeRows(scopes) {
+  if (!scopes.items.length) return `<tr><td colspan="4">${emptyState("没有会话数据", "Trace 里还没有会话范围。")}</td></tr>`;
+  const max = Math.max(1, ...scopes.items.map((row) => row.turns));
+  return scopes.items.map((row) => `<tr><td>${escapeHtml(row.scope)}</td><td class="num">${row.turns}</td><td class="num">${row.errors}</td><td><span class="bar-track"><span class="bar-fill w${Math.max(1, Math.round((row.turns / max) * 10))}${row.errors ? " bad" : ""}"></span></span></td></tr>`).join("");
+}
+
+
+/* Views animate in once, on mount. The live board polls every five seconds;
+   replaying the entrance animation on each poll is what made it flash. */
+const mountedViews = new Set();
+
+function mountView(content, key) {
+  if (mountedViews.has(key)) return;
+  mountedViews.add(key);
+  content.firstElementChild?.classList.add("entering");
+}
+
+function silentText(seconds) {
+  if (seconds == null) return "无记录";
+  return seconds < 120 ? `${seconds} 秒前` : `${Math.round(seconds / 60)} 分钟前`;
+}
+
+function uptimeText(seconds) {
+  if (seconds == null) return "未知";
+  return seconds > 3600 ? `${(seconds / 3600).toFixed(1)} 小时` : `${Math.round(seconds / 60)} 分钟`;
+}
+
+/* Only the clock fields are rewritten on a poll; everything else keeps its DOM
+   node so the board never flashes and the scroll position survives. */
+function updateClocks(live) {
+  document.querySelectorAll("[data-clock]").forEach((node) => {
+    const kind = node.dataset.clock;
+    if (kind === "uptime") node.textContent = uptimeText(live.uptime_seconds);
+    else if (kind === "silent") node.textContent = silentText(live.silent_seconds);
+    else if (kind === "updated") node.textContent = `最后更新 ${formatTime(live.now).slice(11)}`;
+  });
+}
+
+function monitorSignature(live, alerts, series, logs, turns, scopes) {
+  const { now, uptime_seconds, silent_seconds, last_turn_at, ...structural } = live;
+  return JSON.stringify([structural, alerts.items, series.points, logs.items, logs.total, turns.items, turns.total, turns.offset, scopes.items]);
+}
+
+function monitorShell(live, alerts, series, logs, turns, scopes) {
+  const onebot = live.onebot;
+  const scheduler = live.scheduler;
+  const errorRate = live.error_ratio == null ? "未知" : `${(live.error_ratio * 100).toFixed(1)}%`;
+  const total = series.points.reduce((sum, point) => sum + point.turns, 0);
+  const failed = series.points.reduce((sum, point) => sum + point.errors, 0);
+  const kpis = `<div class="stat-strip">
+    <div><span>窗口消息</span><b>${live.turns}</b><small>最近 ${live.window_minutes} 分钟</small></div>
+    <div><span>已回复</span><b>${live.replies}</b><small>失败 ${live.errors} 轮</small></div>
+    <div><span>失败率</span><b>${errorRate}</b><small>${live.errors}/${live.turns}</small></div>
+    <div><span>端到端 P95</span><b>${live.latency_p95_ms == null ? "未知" : `${live.latency_p95_ms} ms`}</b><small>窗口内已完成轮次</small></div>
+    <div><span>最后一条消息</span><b data-clock="silent">${silentText(live.silent_seconds)}</b><small>${live.last_turn_at ? formatTime(live.last_turn_at) : "还没有 Trace"}</small></div>
+    <div><span>进程运行</span><b data-clock="uptime">${uptimeText(live.uptime_seconds)}</b><small>模型 ${escapeHtml(live.model.name || "未配置")}</small></div>
+  </div>`;
+  const inbound = onebot ? `<dl class="fact-grid compact">
+      <div><dt>连接</dt><dd>${onebot.connected ? "已连接" : "未连接"}</dd></div>
+      <div><dt>入站接受</dt><dd>${onebot.accepted}</dd></div>
+      <div><dt>已处理</dt><dd>${onebot.completed}</dd></div>
+      <div><dt>处理失败</dt><dd>${onebot.failed}</dd></div>
+      <div><dt>丢弃帧</dt><dd>${onebot.dropped}</dd></div>
+      <div><dt>并发通道</dt><dd>${onebot.lanes == null ? "未知" : onebot.lanes}</dd></div>
+      <div><dt>在途请求</dt><dd>${onebot.pending}</dd></div>
+    </dl>` : `<p class="muted">OneBot 网关未接入：当前控制台没有随 Bot 运行，连接与入站计数无法读取。</p>`;
+  const scheduled = scheduler ? `<dl class="fact-grid compact">
+      <div><dt>进行中</dt><dd>${scheduler.running}</dd></div>
+      <div><dt>近 7 日失败</dt><dd>${scheduler.failed_7d}</dd></div>
+      <div><dt>采样记录</dt><dd>${scheduler.runs_sampled}</dd></div>
+    </dl>` : `<p class="muted">调度器未接入。</p>`;
+  const alertRows = alerts.items.length ? alerts.items.map((item) => `<li class="alert-row ${escapeHtml(item.level)}"><span>${escapeHtml(item.level)}</span><div><b>${escapeHtml(item.title)}</b><small>${escapeHtml(item.detail)}</small></div></li>`).join("") : `<li class="muted">没有触发告警规则。</li>`;
+  const levelChip = (id, label) => `<button class="chip ${monitorView.level === id ? "active" : ""}" data-log-level="${id}">${label}</button>`;
+  const logRows = logs.available && logs.items.length
+    ? logs.items.map((item) => `<tr><td class="mono">${escapeHtml(formatTime(item.at))}</td><td><span class="data-badge log-${escapeHtml(String(item.level).toLowerCase())}">${escapeHtml(item.level)}</span></td><td class="mono">${escapeHtml(item.logger)}</td><td>${escapeHtml(item.message)}</td></tr>`).join("")
+    : `<tr><td colspan="4">${emptyState(logs.available ? "没有匹配的日志" : "日志未接入", logs.available ? "换个级别或关键字再试。" : "随 Bot 启动控制台后会显示进程日志。")}</td></tr>`;
+  return `<section class="memory-workspace" data-monitor-root>
+    <div class="memory-toolbar"><div><h2>线上监控</h2><p class="muted">连接计数来自网关，消息指标来自 Trace，日志来自进程环形缓冲。${monitorView.paused ? "已暂停刷新。" : "每 5 秒刷新。"}</p></div>
+      <div class="monitor-actions">
+        <span class="live-dot${monitorView.paused ? " paused" : ""}"></span><span class="muted">${monitorView.paused ? "已暂停" : "实时"}</span>
+        <select id="monitor-window"><option value="5" ${monitorView.minutes === 5 ? "selected" : ""}>5 分钟</option><option value="15" ${monitorView.minutes === 15 ? "selected" : ""}>15 分钟</option><option value="60" ${monitorView.minutes === 60 ? "selected" : ""}>60 分钟</option></select>
+        <button id="monitor-pause" class="button subtle" type="button">${monitorView.paused ? "继续" : "暂停"}</button>
+        <button id="monitor-refresh" class="button subtle" type="button">刷新</button>
+      </div></div>
+    <div class="health-banner ${healthTone(live.health.status)}"><div><b>${healthText(live.health.status)}</b><p>${live.health.reasons.map(escapeHtml).join("；")}</p></div><span class="data-badge" data-clock="updated">最后更新 ${escapeHtml(formatTime(live.now).slice(11))}</span></div>
+    ${kpis}
+    <div class="overview-grid wide-left">
+      <article class="data-panel"><div class="panel-title"><h3>吞吐（最近 60 分钟）</h3><p>每分钟消息数，红点是该分钟出现过失败轮次。</p></div>${areaChart(series.points)}<p class="muted small">合计 ${total} 条 · 失败 ${failed} 条 · 峰值 ${Math.max(0, ...series.points.map((point) => point.turns))} 条/分钟</p></article>
+      <article class="data-panel"><div class="panel-title"><h3>会话分布（24 小时）</h3><p>哪个群或私聊通道在占用处理能力。</p></div><div class="table-scroll"><table class="tight"><thead><tr><th>会话</th><th class="num">轮次</th><th class="num">失败</th><th>占比</th></tr></thead><tbody>${scopeRows(scopes)}</tbody></table></div></article>
+    </div>
+    <div class="overview-grid">
+      <article class="data-panel"><div class="panel-title"><h3>告警</h3><p>规则命中即显示，不做静默聚合。</p></div><ul class="alert-list">${alertRows}</ul></article>
+      <article class="data-panel"><div class="panel-title"><h3>OneBot 网关与调度</h3><p>掉线时入站消息全部丢失，这是最优先的告警。</p></div>${inbound}${scheduled}</article>
+    </div>
+    <article class="data-panel"><div class="panel-title"><h3>最近消息</h3><p>最新 12 轮，含每轮真正执行过的工具。点击会话可只看该会话。</p></div>
+      ${monitorView.scope ? `<div class="filter-row"><button class="chip active" id="monitor-clear-scope">只看 ${escapeHtml(monitorView.scope)} ✕</button></div>` : ""}
+      <div class="table-scroll"><table class="tight"><thead><tr><th>时间</th><th>会话</th><th>结果</th><th>耗时</th><th>工具</th></tr></thead><tbody id="monitor-turns">${turnRows(turns)}</tbody></table></div>${pager(turns, "turns")}</article>
+    <article class="data-panel"><div class="panel-title"><h3>进程日志</h3><p>最多 500 条环形缓冲，不写入磁盘。${logs.available ? `当前缓冲里有 ${logs.levels.join(" / ") || "0"} 级别。` : ""}</p></div>
+      <div class="filter-row">${levelChip("", "全部")}${logs.levels.map((level) => levelChip(level, level)).join("")}<input id="monitor-log-q" type="search" placeholder="按内容或来源过滤…" value="${escapeHtml(monitorView.q)}"></div>
+      <div class="table-scroll"><table class="tight"><thead><tr><th>时间</th><th>级别</th><th>来源</th><th>内容</th></tr></thead><tbody>${logRows}</tbody></table></div>${pager(logs, "logs")}</article>
+  </section>`;
+}
+
+async function renderMonitor() {
+  stopMonitor();
+  document.querySelectorAll(".nav-item").forEach((item) => item.classList.toggle("active", item.dataset.target === "monitor"));
+  $(".search").classList.add("hidden"); $("#save").classList.add("hidden");
+  history.replaceState(null, "", "#monitor");
+  const content = $("#content");
+  content.innerHTML = `<section class="memory-workspace loading-state">正在读取运行状态…</section>`;
+  monitorView.signature = "";
+  const paint = async () => {
+    try {
+      const scope = monitorView.scope ? `&scope=${encodeURIComponent(monitorView.scope)}` : "";
+      const [live, alerts, series, logs, turns, scopes] = await Promise.all([
+        api(`/api/monitor/live?minutes=${monitorView.minutes}`),
+        api(`/api/monitor/alerts?minutes=${monitorView.minutes}`),
+        api("/api/monitor/series?minutes=60"),
+        api(`/api/monitor/logs?limit=${LOG_PAGE}&offset=${monitorView.logOffset}&level=${encodeURIComponent(monitorView.level)}&q=${encodeURIComponent(monitorView.q)}`),
+        api(`/api/monitor/turns?limit=${TURN_PAGE}&offset=${monitorView.turnOffset}${scope}`),
+        api("/api/monitor/scopes?hours=24"),
+      ]);
+      monitorView.updatedAt = Date.now();
+      const signature = monitorSignature(live.data, alerts.data, series.data, logs.data, turns.data, scopes.data);
+      if (signature === monitorView.signature) {
+        // Nothing structural changed — refresh the clocks and leave the DOM
+        // alone. Replacing it every five seconds is what caused the flashing.
+        updateClocks(live.data);
+        return;
+      }
+      monitorView.signature = signature;
+      const scrollY = window.scrollY;
+      const focused = document.activeElement;
+      const focusId = focused && focused.id ? focused.id : "";
+      const caret = focused && typeof focused.selectionStart === "number"
+        ? [focused.selectionStart, focused.selectionEnd] : null;
+      content.innerHTML = monitorShell(live.data, alerts.data, series.data, logs.data, turns.data, scopes.data);
+      mountView(content, "monitor");
+      window.scrollTo({ top: scrollY });
+      if (focusId) {
+        const restored = document.getElementById(focusId);
+        if (restored) {
+          restored.focus({ preventScroll: true });
+          if (caret && typeof restored.setSelectionRange === "function") {
+            try { restored.setSelectionRange(caret[0], caret[1]); } catch { /* not a text field */ }
+          }
+        }
+      }
+      const windowSelect = $("#monitor-window");
+      if (windowSelect) windowSelect.onchange = () => { monitorView.minutes = Number(windowSelect.value); monitorView.turnOffset = 0; paint(); };
+      const refresh = $("#monitor-refresh");
+      if (refresh) refresh.onclick = () => paint();
+      const pause = $("#monitor-pause");
+      if (pause) pause.onclick = () => {
+        monitorView.paused = !monitorView.paused;
+        if (monitorView.paused) stopMonitor();
+        else startPolling(paint);
+        paint();
+      };
+      document.querySelectorAll("[data-log-level]").forEach((button) => {
+        button.onclick = () => { monitorView.level = button.dataset.logLevel; monitorView.logOffset = 0; paint(); };
+      });
+      const logQuery = $("#monitor-log-q");
+      if (logQuery) {
+        logQuery.onkeydown = (event) => { if (event.key === "Enter") { monitorView.q = event.currentTarget.value.trim(); monitorView.logOffset = 0; paint(); } };
+      }
+      const clearScope = $("#monitor-clear-scope");
+      if (clearScope) clearScope.onclick = () => { monitorView.scope = ""; monitorView.turnOffset = 0; paint(); };
+      bindPager((key, offset) => {
+        if (key === "turns") monitorView.turnOffset = offset;
+        else monitorView.logOffset = offset;
+        paint();
+      });
+      document.querySelectorAll("#monitor-turns tr").forEach((row) => {
+        const cell = row.children[1];
+        if (!cell) return;
+        const scopeName = cell.textContent.trim();
+        cell.onclick = () => { monitorView.scope = scopeName; monitorView.turnOffset = 0; paint(); };
+        cell.classList.add("clickable");
+      });
+    } catch (error) {
+      content.innerHTML = `<section class="memory-workspace">${emptyState("监控不可用", error.message || "服务尚未就绪")}</section>`;
+    }
+  };
+  await paint();
+  if (!monitorView.paused) startPolling(paint);
+}
+
+function startPolling(paint) {
+  stopMonitor();
+  monitorView.timer = setInterval(() => {
+    if (!document.querySelector("[data-monitor-root]")) { stopMonitor(); return; }
+    paint();
+  }, 5000);
+}
+
+/* Tool call console ------------------------------------------------------ */
+const OUTCOME_LABELS = { completed: "完成", sent: "已发送", error: "失败", failed: "失败", timeout: "超时", running: "进行中", unknown: "未知" };
+
+function outcomeLabel(name) {
+  return OUTCOME_LABELS[name] || name;
+}
+
+let toolsView = { hours: 24, tool: "", offset: 0 };
+
+function toolRows(rows) {
+  if (!rows.length) return `<tr><td colspan="6">${emptyState("没有工具调用", "当前时间范围里模型没有请求任何工具。")}</td></tr>`;
+  return rows.map((row) => `<tr class="tool-row" data-tool-name="${escapeHtml(row.tool)}"><td><b>${escapeHtml(row.tool)}</b></td><td>${row.calls}</td><td>${row.completed}</td><td>${row.failed + row.unknown}</td><td>${row.success_rate == null ? "—" : `${(row.success_rate * 100).toFixed(0)}%`}</td><td>${row.last_at ? escapeHtml(formatTime(row.last_at)) : "—"}</td></tr>`).join("");
+}
+
+async function renderTools() {
+  document.querySelectorAll(".nav-item").forEach((item) => item.classList.toggle("active", item.dataset.target === "tools"));
+  $(".search").classList.add("hidden"); $("#save").classList.add("hidden");
+  history.replaceState(null, "", "#tools");
+  const content = $("#content");
+  content.innerHTML = `<section class="memory-workspace loading-state">正在读取工具调用记录…</section>`;
+  try {
+    const [overview, calls] = await Promise.all([
+      api(`/api/tools/overview?hours=${toolsView.hours}${toolsView.tool ? `&tool=${encodeURIComponent(toolsView.tool)}` : ""}`),
+      api(`/api/tools/calls?hours=${toolsView.hours}&limit=${CALL_PAGE}&offset=${toolsView.offset}${toolsView.tool ? `&tool=${encodeURIComponent(toolsView.tool)}` : ""}`),
+    ]);
+    const data = overview.data;
+    const success = data.tools.reduce((sum, row) => sum + row.completed, 0);
+    const failed = data.tools.reduce((sum, row) => sum + row.failed + row.unknown, 0);
+    const callRows = calls.data.items.length ? calls.data.items.map((item) => `<tr><td>${escapeHtml(formatTime(item.at))}</td><td class="mono">${escapeHtml(item.scope)}</td><td><b>${escapeHtml(item.tool)}</b></td><td>${statusBadge(item.outcome)}</td><td>${escapeHtml(item.error_kind || "—")}</td><td>${item.duration_ms == null ? "未记录" : `${item.duration_ms} ms`}</td></tr>`).join("") : `<tr><td colspan="6">${emptyState("没有调用明细", "工具调用会随消息 Trace 一起记录。")}</td></tr>`;
+    content.innerHTML = `<section class="memory-workspace">
+      <div class="memory-toolbar"><div><h2>工具调用</h2><p class="muted">一次调用写入 running 与终态两条 Trace，这里按终态计数，不会翻倍。</p></div>
+        <div class="monitor-actions">${toolsView.tool ? `<button id="tool-clear" class="button subtle" type="button">清除筛选：${escapeHtml(toolsView.tool)}</button>` : ""}<select id="tool-hours"><option value="1" ${toolsView.hours === 1 ? "selected" : ""}>最近 1 小时</option><option value="24" ${toolsView.hours === 24 ? "selected" : ""}>最近 24 小时</option><option value="168" ${toolsView.hours === 168 ? "selected" : ""}>最近 7 天</option></select></div></div>
+      <div class="metric-grid"><article class="metric-card"><span>调用次数</span><strong>${data.total_calls}</strong><small>${data.traces_scanned} 条 Trace 内</small></article><article class="metric-card"><span>成功</span><strong>${success}</strong><small>终态 completed</small></article><article class="metric-card"><span>失败/未知</span><strong>${failed}</strong><small>包含异常结束</small></article><article class="metric-card"><span>在途未结束</span><strong>${data.inflight}</strong><small>只有 running 没有终态</small></article></div>
+      <div class="overview-grid">
+        <article class="data-panel"><div class="panel-title"><h3>按工具汇总</h3><p>点击一行只看该工具的调用明细。${data.truncated ? "已按扫描上限截断。" : ""}</p></div><div class="table-scroll"><table><thead><tr><th>工具</th><th>次数</th><th>成功</th><th>失败</th><th>成功率</th><th>最近一次</th></tr></thead><tbody>${toolRows(data.tools)}</tbody></table></div></article>
+        <article class="data-panel"><div class="panel-title"><h3>结果分布</h3><p>没有终态的工具调用不计入成功。</p></div><ul class="frequency-list">${Object.entries(data.outcomes).map(([name, count]) => `<li><span>${escapeHtml(outcomeLabel(name))}</span><strong>${count} 次</strong></li>`).join("") || `<li class="muted">当前时间范围没有工具调用</li>`}</ul></article>
+      </div>
+      <article class="data-panel"><div class="panel-title"><h3>最近调用明细</h3><p>工具步本身不记录耗时，因此这里显示“未记录”而不是借用整轮耗时。</p></div><div class="table-scroll"><table><thead><tr><th>时间</th><th>会话</th><th>工具</th><th>结果</th><th>错误类型</th><th>工具耗时</th></tr></thead><tbody>${callRows}</tbody></table></div>${pager(calls.data, "calls")}</article>
+    </section>`;
+    $("#tool-hours").onchange = (event) => { toolsView.hours = Number(event.currentTarget.value); toolsView.offset = 0; renderTools(); };
+    document.querySelectorAll("[data-tool-name]").forEach((row) => { row.onclick = () => { toolsView.tool = row.dataset.toolName; toolsView.offset = 0; renderTools(); }; });
+    const clear = $("#tool-clear");
+    if (clear) clear.onclick = () => { toolsView.tool = ""; toolsView.offset = 0; renderTools(); };
+    bindPager((key, offset) => { toolsView.offset = offset; renderTools(); });
+    mountView(content, "tools");
+  } catch (error) { content.innerHTML = `<section class="memory-workspace">${emptyState("工具调用不可用", error.message || "请随 Bot 启动控制台")}</section>`; }
+}
+
+/* Routing board ---------------------------------------------------------- */
+async function applyRoute(changes, message) {
+  try {
+    await api("/api/routes", { method: "PUT", body: JSON.stringify({ changes }) });
+    toast(`${message}，重启 Bot 后生效`);
+    renderRouting();
+  } catch (error) { toast(error.message || "保存失败", true); }
+}
+
+async function renderRouting() {
+  document.querySelectorAll(".nav-item").forEach((item) => item.classList.toggle("active", item.dataset.target === "routing"));
+  $(".search").classList.add("hidden"); $("#save").classList.add("hidden");
+  history.replaceState(null, "", "#routing");
+  const content = $("#content");
+  content.innerHTML = `<section class="memory-workspace loading-state">正在读取链路配置…</section>`;
+  try {
+    const data = (await api("/api/routes/overview")).data;
+    const graph = data.graph;
+    const pipeline = data.pipeline.map((stage) => `<li class="${stage.enabled ? "on" : "off"}"><span>${escapeHtml(stage.label)}</span><small>${escapeHtml(stage.detail)}</small></li>`).join("");
+    const links = data.llm.map((link) => `<article class="link-card"><div class="record-meta"><b>${escapeHtml(link.label)}</b><span class="data-badge ${link.configured ? "status-active" : ""}">${link.configured ? "已配置" : "未配置"}</span></div><h3>${escapeHtml(link.model || "—")}</h3><p class="mono">${escapeHtml(link.base_url || "未单独配置地址")}</p><small>${escapeHtml(link.note)}</small></article>`).join("");
+    const modes = graph.modes.map((mode) => `<button class="mode-button ${graph.mode === mode.id ? "active" : ""}" data-mode="${escapeHtml(mode.id)}"><b>${escapeHtml(mode.id)}</b><small>${escapeHtml(mode.label)}</small></button>`).join("");
+    const artifacts = data.artifacts.items.length ? data.artifacts.items.map((item) => {
+      const manifest = item.manifest || {};
+      const current = item.path === graph.snapshot;
+      return `<li class="${current ? "current" : ""}"><div><b>${escapeHtml(item.name)}</b><small>${escapeHtml(item.path)} · ${escapeHtml(formatTime(item.modified_at))}</small><p class="muted">${manifest.status ? `状态 ${escapeHtml(String(manifest.status))}` : "无 manifest"}${manifest.proposals == null ? "" : ` · 样本 ${manifest.proposals}`}${manifest.missing_cases == null ? "" : ` · 缺失 ${manifest.missing_cases}`}</p></div><button class="button subtle" data-artifact="${escapeHtml(item.path)}" ${current ? "disabled" : ""}>${current ? "当前使用" : "设为当前"}</button></li>`;
+    }).join("") : `<li class="muted">${data.artifacts.exists ? "派生目录里没有可用的图谱产物。" : "没有 data/private/derived 目录。"}</li>`;
+    content.innerHTML = `<section class="memory-workspace">
+      <div class="memory-toolbar"><div><h2>链路与图谱</h2><p class="muted">这里写的是 Bot 启动时读取的 .env，保存后必须重启才生效。</p></div><span class="data-badge">${graph.effective === "off" ? "图谱路由关闭" : `图谱路由 ${escapeHtml(graph.effective)}`}</span></div>
+      <article class="data-panel"><div class="panel-title"><h3>一轮消息的链路</h3><p>顺序与运行时一致，灰色表示该环节当前关闭。</p></div><ol class="pipeline">${pipeline}</ol></article>
+      <div class="overview-grid">
+        <article class="data-panel"><div class="panel-title"><h3>模型链路</h3><p>每条链路的模型独立配置，未配置的环节会跳过。</p></div><div class="link-grid">${links}</div></article>
+        <article class="data-panel"><div class="panel-title"><h3>行为路由</h3><p>${escapeHtml(graph.reason)}</p></div><div class="mode-row">${modes}</div><label class="field-label" for="graph-path">图谱快照路径</label><input id="graph-path" value="${escapeHtml(graph.snapshot)}" placeholder="data/private/derived/.../graph.json"><label class="field-label" for="calibration-path">校准文件（可选）</label><input id="calibration-path" value="${escapeHtml(graph.calibration)}" placeholder="留空表示不做先验校准"><div class="route-actions"><button id="route-save" class="button primary" type="button">保存路径</button><button id="route-probe" class="button subtle" type="button">验证快照可用性</button></div><p id="route-probe-result" class="muted"></p>
+          <div class="switch-row"><span>记忆实体图谱</span><label class="switch"><input id="memory-graph" type="checkbox" ${data.memory_graph ? "checked" : ""}><span></span></label></div>
+          <div class="switch-row"><span>LM Wiki（蒸馏产物）</span><label class="switch"><input id="wiki-switch" type="checkbox" ${data.wiki.enabled ? "checked" : ""}><span></span></label></div>
+          <p class="muted">Wiki 目录 ${escapeHtml(data.wiki.root || "未配置")} · ${data.wiki.root_exists ? "目录存在" : "目录不存在"}</p>
+        </article>
+      </div>
+      <article class="data-panel"><div class="panel-title"><h3>可用图谱产物</h3><p>来自 ${escapeHtml(data.artifacts.root)}，按修改时间倒序。</p></div><ul class="artifact-list">${artifacts}</ul></article>
+    </section>`;
+    document.querySelectorAll("[data-mode]").forEach((button) => { button.onclick = () => applyRoute({ BOT_BEHAVIOR_MODE: button.dataset.mode }, `行为路由已切换为 ${button.dataset.mode}`); });
+    document.querySelectorAll("[data-artifact]").forEach((button) => { button.onclick = () => applyRoute({ BOT_BEHAVIOR_GRAPH_PATH: button.dataset.artifact }, "图谱快照已更新"); });
+    $("#route-save").onclick = () => applyRoute({ BOT_BEHAVIOR_GRAPH_PATH: $("#graph-path").value.trim(), BOT_BEHAVIOR_CALIBRATION_PATH: $("#calibration-path").value.trim() }, "图谱路径已保存");
+    $("#route-probe").onclick = async () => {
+      const target = $("#route-probe-result");
+      target.textContent = "正在按运行时的方式加载快照…";
+      try { const result = (await api("/api/routes/probe", { method: "POST", body: "{}" })).data; target.textContent = result.detail; target.className = result.ok ? "probe-ok" : "probe-bad"; }
+      catch (error) { target.textContent = error.message; target.className = "probe-bad"; }
+    };
+    $("#memory-graph").onchange = (event) => applyRoute({ BOT_MEMORY_GRAPH_ENABLED: event.currentTarget.checked ? "true" : "false" }, "记忆图谱开关已保存");
+    $("#wiki-switch").onchange = (event) => applyRoute({ BOT_WIKI_ENABLED: event.currentTarget.checked ? "true" : "false" }, "Wiki 开关已保存");
+    mountView(content, "routing");
+  } catch (error) { content.innerHTML = `<section class="memory-workspace">${emptyState("链路配置不可用", error.message || "读取 .env 失败")}</section>`; }
+}
+
 function activateSection(id) {
+  stopMonitor();
+  if (id === "monitor") {
+    renderMonitor();
+    $("#search").value = "";
+    return;
+  }
+  if (id === "tools") {
+    renderTools();
+    $("#search").value = "";
+    return;
+  }
+  if (id === "routing") {
+    renderRouting();
+    $("#search").value = "";
+    return;
+  }
   if (id === "wiki-admin") {
     renderWikiAdmin();
     $("#search").value = "";
@@ -1069,7 +1807,7 @@ function render(data) {
   original = {};
   Object.entries(data.values).forEach(([key, value]) => { original[key] = value.value; });
   const modules = data.sections.map((section) => `<button class="nav-item" data-target="${section.id}"><span class="nav-glyph">${glyphs[section.id] || "·"}</span><span>${escapeHtml(section.label)}</span></button>`).join("");
-  $("#nav").innerHTML = `${modules}<div class="nav-divider"></div><button class="nav-item" data-target="skills"><span class="nav-glyph">${glyphs.skills}</span><span>Skill 管理</span></button><button class="nav-item" data-target="wiki-admin"><span class="nav-glyph">${glyphs.wikiadmin}</span><span>Wiki 管理</span></button><button class="nav-item" data-target="database"><span class="nav-glyph">${glyphs.database}</span><span>数据存储</span></button><button class="nav-item" data-target="dashboard"><span class="nav-glyph">${glyphs.dashboard}</span><span>运行看板</span></button><div class="nav-divider"></div><button class="nav-item" data-target="memory"><span class="nav-glyph">${glyphs.memory}</span><span>记忆中心</span></button><button class="nav-item" data-target="schedules"><span class="nav-glyph">${glyphs.schedules}</span><span>任务中心</span></button><button class="nav-item" data-target="experiments"><span class="nav-glyph">${glyphs.experiments}</span><span>实验看板</span></button><button class="nav-item" data-target="guide"><span class="nav-glyph">${glyphs.guide}</span><span>使用指南</span></button>`;
+  $("#nav").innerHTML = `${modules}<div class="nav-divider"></div><button class="nav-item" data-target="monitor"><span class="nav-glyph">${glyphs.monitor}</span><span>线上监控</span></button><button class="nav-item" data-target="tools"><span class="nav-glyph">${glyphs.tools}</span><span>工具调用</span></button><button class="nav-item" data-target="dashboard"><span class="nav-glyph">${glyphs.dashboard}</span><span>运行看板</span></button><button class="nav-item" data-target="skills"><span class="nav-glyph">${glyphs.skills}</span><span>Skill 管理</span></button><button class="nav-item" data-target="wiki-admin"><span class="nav-glyph">${glyphs.wikiadmin}</span><span>Wiki 管理</span></button><button class="nav-item" data-target="database"><span class="nav-glyph">${glyphs.database}</span><span>数据存储</span></button><button class="nav-item" data-target="routing"><span class="nav-glyph">${glyphs.routing}</span><span>链路与图谱</span></button><div class="nav-divider"></div><button class="nav-item" data-target="memory"><span class="nav-glyph">${glyphs.memory}</span><span>记忆中心</span></button><button class="nav-item" data-target="schedules"><span class="nav-glyph">${glyphs.schedules}</span><span>任务中心</span></button><button class="nav-item" data-target="experiments"><span class="nav-glyph">${glyphs.experiments}</span><span>实验看板</span></button><button class="nav-item" data-target="guide"><span class="nav-glyph">${glyphs.guide}</span><span>使用指南</span></button>`;
   document.querySelectorAll(".nav-item").forEach((button) => {
     button.onclick = () => activateSection(button.dataset.target);
   });
