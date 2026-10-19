@@ -49,10 +49,21 @@ def test_unknown_mode_value_is_normalised_to_off(tmp_path):
     assert overview["graph"]["mode"] == "off"
 
 
-def test_wiki_switch_reports_the_directory_it_would_read(tmp_path):
-    overview = project(tmp_path, BOT_WIKI_ENABLED="true", BOT_WIKI_ROOT="data/wiki").overview()
+def test_wiki_is_reported_as_always_on_because_it_replaced_memory_extraction(tmp_path):
+    overview = project(tmp_path, BOT_WIKI_ENABLED="false", BOT_WIKI_ROOT="data/wiki").overview()
 
-    assert overview["wiki"] == {"enabled": True, "root": "data/wiki", "root_exists": False}
+    assert overview["wiki"]["enabled"] is True
+    assert overview["wiki"]["always_on"] is True
+    assert overview["wiki"]["root"] == "data/wiki"
+    assert overview["wiki"]["root_exists"] is False
+    assert "黑话提取" in overview["wiki"]["replaces"]
+
+
+def test_the_knowledge_graph_is_marked_experimental_and_not_switchable(tmp_path):
+    overview = project(tmp_path, BOT_BEHAVIOR_MODE="graph").overview()
+
+    assert overview["graph"]["experimental"] is True
+    assert overview["graph"]["available"] is False
 
 
 def test_artifacts_summarise_real_manifests_and_count_missing_cases(tmp_path):

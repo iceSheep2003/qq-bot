@@ -84,7 +84,7 @@ function formatTime(value) {
 }
 
 function statusBadge(status) {
-  const labels = { active: "有效", candidate: "候选", accepted_as_report: "已接纳的说法", accepted: "已接纳", disputed: "有争议", withdrawn: "已撤回", observed: "已观察", unknown: "未确认", retired: "已停用", archived: "归档", expired: "过期", superseded: "已替代", succeeded: "成功", failed: "失败", running: "进行中", approved: "已审核", rejected: "已拒绝", completed: "完成", error: "失败", timeout: "超时" };
+  const labels = { active: "有效", candidate: "候选", accepted_as_report: "已接纳的说法", accepted: "已接纳", disputed: "有争议", withdrawn: "已撤回", observed: "已观察", unknown: "未确认", retired: "已停用", archived: "归档", expired: "过期", superseded: "已替代", succeeded: "成功", failed: "失败", running: "进行中", approved: "已审核", rejected: "已拒绝", completed: "完成", error: "失败", timeout: "超时", sent: "已发送", skipped: "跳过", dropped: "丢弃" };
   return `<span class="data-badge status-${escapeHtml(status || "unknown")}">${escapeHtml(labels[status] || status || "未知")}</span>`;
 }
 
@@ -989,9 +989,8 @@ function skillRow(row) {
       ? `<span class="mini-tag">${row.audiences.map(escapeHtml).join("/")}</span>` : "",
   ].join("");
   const search = `${row.name} ${row.description} ${row.triggers.join(" ")}`.toLowerCase();
-  const toggle = row.state === "unavailable" || row.state === "broken"
-    ? `<button class="button subtle mini" type="button" disabled title="${escapeHtml(row.reason)}">—</button>`
-    : `<button class="button subtle mini" type="button" data-skill-toggle="${escapeHtml(row.name)}" data-next="${row.state === "enabled" ? "false" : "true"}">${row.state === "enabled" ? "停用" : "启用"}</button>`;
+  const locked = row.state === "unavailable" || row.state === "broken";
+  const toggle = `<k-switch data-skill-toggle="${escapeHtml(row.name)}" ${row.state === "enabled" ? "checked" : ""} ${locked ? "disabled" : ""} title="${escapeHtml(row.reason || (row.state === "enabled" ? "停用这个 Skill" : "启用这个 Skill"))}"></k-switch>`;
   return `<tr class="skill-row${active}" data-skill-row="${escapeHtml(row.name)}" data-skill-search="${escapeHtml(search)}" data-skill-state="${row.state}">
     <td><div class="skill-name"><b>${escapeHtml(row.name)}</b><small>${escapeHtml(row.description || "（没有描述）")}</small><div class="mini-tags">${tags}</div></div></td>
     <td>${skillStatePill(row)}</td>
@@ -1189,23 +1188,20 @@ async function renderSkills() {
     });
     document.querySelectorAll("[data-skill-row]").forEach((row) => {
       row.onclick = (event) => {
-        if (event.target.closest("[data-skill-toggle]")) return;
+        if (event.target.closest("k-switch,[data-skill-toggle]")) return;
         openSkill(row.dataset.skillRow);
       };
     });
-    document.querySelectorAll("[data-skill-toggle]").forEach((button) => {
-      button.onclick = async (event) => {
-        event.stopPropagation();
-        button.disabled = true;
+    document.querySelectorAll("k-switch[data-skill-toggle]").forEach((node) => {
+      node.addEventListener("k-toggle", async (event) => {
         try {
-          const { data } = await api(`/api/skills/admin/${encodeURIComponent(button.dataset.skillToggle)}/enabled`, { method: "POST", body: JSON.stringify({ enabled: button.dataset.next === "true" }) });
+          const { data } = await api(`/api/skills/admin/${encodeURIComponent(node.dataset.skillToggle)}/enabled`, { method: "POST", body: JSON.stringify({ enabled: event.detail.checked }) });
           toast(data.runtime_effect);
-          await renderSkills();
         } catch (error) {
           toast(error.message, true);
-          button.disabled = false;
         }
-      };
+        await renderSkills();
+      });
     });
     $("#skill-new").onclick = () => openSkill("", "create");
     $("#skill-import").onclick = () => $("#skill-file").click();
@@ -1253,9 +1249,9 @@ async function renderWikiAdmin(scope = wikiView.scope) {
     if (!data.available || !data.pages.length) {
       try {
         const routes = (await api("/api/routes/overview")).data;
-        reason = data.available
-          ? `Wiki 已启用，但目录 ${routes.wiki.root || "未配置"} ${routes.wiki.root_exists ? "里还没有提炼发布的页面" : "不存在"}。`
-          : `Wiki 当前未启用（BOT_WIKI_ENABLED=${routes.wiki.enabled}）。开启后需要重启 Bot，并完成一次提炼发布。`;
+        reason = routes.wiki.root_exists
+          ? `目录 ${routes.wiki.root} 里还没有发布的页面。先跑一次投影：.venv/bin/python -m tools.wiki_bootstrap --from-corpus --write`
+          : `Wiki 目录 ${routes.wiki.root || "未配置"} 不存在。Wiki 是记忆主干、常开，不需要开关；先跑一次投影把语料落成页面。`;
       } catch (error) { reason = "无法读取 Wiki 开关状态。"; }
     }
     const scopes = (data.scopes || []).map((item) => `<button class="chip ${scope === item ? "active" : ""}" data-wiki-scope="${escapeHtml(item)}">${escapeHtml(item)}</button>`).join("");
@@ -1278,7 +1274,7 @@ async function renderWikiAdmin(scope = wikiView.scope) {
     };
     content.innerHTML = `<section class="memory-workspace"><div class="memory-toolbar"><div><h2>Wiki 管理</h2><p class="muted">管理已提炼发布的群、人物和私聊实体，不重新构造图谱。</p></div><span class="data-badge">${data.available ? `${data.total} 个页面` : "未启用"}</span></div>
       <div class="filter-row"><input id="wiki-search" type="search" placeholder="搜索页面标题或实体 ID…" value="${escapeHtml(wikiView.q)}"><button class="chip ${scope ? "" : "active"}" data-wiki-scope="">全部</button>${scopes}</div>
-      ${reason ? `<div class="notice-block"><b>为什么是空的</b><p>${escapeHtml(reason)}</p><button class="button subtle" type="button" id="wiki-open-routing">去链路与图谱开启</button></div>` : ""}
+      ${reason ? `<div class="notice-block"><b>为什么是空的</b><p>${escapeHtml(reason)}</p></div>` : ""}
       <div class="memory-body"><div class="wiki-admin-layout"><article class="data-panel"><div class="panel-title"><h3>已发布页面</h3><p>按实体页面倒序浏览，页面内容来自 Markdown 发布目录。</p></div><div class="wiki-page-list">${pages || emptyState(data.available ? "暂无 Wiki 页面" : "Wiki 未启用", data.available ? "启用 Wiki 并完成一次提炼发布后，页面会出现在这里。" : "先在链路与图谱里开启 Wiki。")}</div></article><article class="data-panel" id="wiki-admin-detail">${data.pages.length ? emptyState("选择一个 Wiki 页面", "右侧会显示实际 Markdown 提炼出的实体内容。") : ""}</article></div></div></section>`;
     bindPageButtons();
     document.querySelectorAll("[data-wiki-scope]").forEach((button) => { button.onclick = () => renderWikiAdmin(button.dataset.wikiScope); });
@@ -1405,23 +1401,13 @@ function areaChart(points) {
 /* Paged, never scrolled. A clipped last row inside a scroll box hides how much
    data there is and is the single ugliest thing a table can do. */
 function pager(data, key) {
-  const pages = data.pages || 1;
   if (!data.total) return "";
-  const offset = data.offset || 0;
-  const limit = Math.max(1, data.limit || 1);
-  const page = Math.floor(offset / limit) + 1;
-  const from = offset + 1;
-  const to = Math.min(data.total, offset + (data.items || []).length);
-  return `<div class="pager"><span class="muted small">${from}–${to} / 共 ${data.total} 条</span><span class="pager-gap"></span><button class="button subtle mini" type="button" data-pager="${key}" data-page="${page - 1}" ${page <= 1 ? "disabled" : ""}>上一页</button><span class="small pager-count">${page} / ${pages}</span><button class="button subtle mini" type="button" data-pager="${key}" data-page="${page + 1}" ${page >= pages ? "disabled" : ""}>下一页</button></div>`;
+  return `<k-pager total="${data.total}" offset="${data.offset || 0}" limit="${data.limit || 1}" pages="${data.pages || 1}" data-pager-key="${key}"></k-pager>`;
 }
 
 function bindPager(reset) {
-  document.querySelectorAll("[data-pager]").forEach((button) => {
-    button.onclick = () => {
-      const page = Number(button.dataset.page);
-      if (!Number.isFinite(page) || page < 1) return;
-      reset(button.dataset.pager, (page - 1) * (button.dataset.pager === "turns" ? TURN_PAGE : button.dataset.pager === "logs" ? LOG_PAGE : CALL_PAGE));
-    };
+  document.querySelectorAll("k-pager").forEach((node) => {
+    node.addEventListener("k-page", (event) => reset(node.dataset.pagerKey, event.detail.offset));
   });
 }
 
@@ -1429,8 +1415,165 @@ function turnRows(turns) {
   if (!turns.items.length) return `<tr><td colspan="5">${emptyState("没有消息记录", "最近 24 小时这个进程没有处理过消息。")}</td></tr>`;
   return turns.items.map((row) => {
     const tools = row.tools.length ? row.tools.slice(0, 3).map((tool) => `<span class="trig">${escapeHtml(tool)}</span>`).join("") : `<span class="muted">—</span>`;
-    return `<tr><td class="mono">${escapeHtml(formatTime(row.at))}</td><td>${escapeHtml(row.scope)}</td><td>${statusBadge(row.outcome)}</td><td>${row.duration_ms == null ? "—" : `${row.duration_ms} ms`}</td><td><span class="trig-row">${tools}</span></td></tr>`;
+    return `<tr class="trace-row" data-trace-id="${escapeHtml(String(row.id))}" tabindex="0"><td class="mono">${escapeHtml(formatTime(row.at))}</td><td>${escapeHtml(row.scope)}</td><td>${statusBadge(row.outcome)}</td><td class="num">${row.duration_ms == null ? "—" : `${row.duration_ms} ms`}</td><td><span class="trig-row">${tools}</span></td></tr>`;
   }).join("");
+}
+
+/* Trace drill-down, laid out like an observability trace viewer: a tree of
+   steps on the left with a waterfall bar on the same row, and an inspector on
+   the right that follows the selection. A flat list makes you scroll to compare
+   two steps; aligned rows let you compare them by eye. */
+const TRACE_TYPES = {
+  context: { label: "上下文", tone: "ctx" },
+  memory: { label: "记忆", tone: "ctx" },
+  route: { label: "路由", tone: "ctx" },
+  plan: { label: "计划", tone: "ctx" },
+  model: { label: "模型", tone: "model" },
+  tool: { label: "工具", tone: "tool" },
+  send: { label: "投递", tone: "send" },
+  delivery: { label: "投递", tone: "send" },
+};
+
+function traceGroups(data) {
+  const steps = data.timeline;
+  const total = Math.max(data.duration_ms || 0, ...steps.map((step) => step.at_ms || 0), 1);
+  const groups = [];
+  steps.forEach((step, index) => {
+    const key = TRACE_TYPES[step.stage]?.label || step.label;
+    let group = groups.find((item) => item.key === key);
+    if (!group) {
+      group = { key, tone: TRACE_TYPES[step.stage]?.tone || "ctx", steps: [] };
+      groups.push(group);
+    }
+    const start = step.at_ms == null ? 0 : step.at_ms;
+    const next = index + 1 < steps.length ? steps[index + 1].at_ms : null;
+    const end = next == null ? total : Math.max(next, start);
+    group.steps.push({ ...step, index, start, end, span: end - start });
+  });
+  return { groups, total };
+}
+
+function traceBar(step, total) {
+  const left = (step.start / total) * 100;
+  const width = Math.max(0.8, ((step.end - step.start) / total) * 100);
+  const bad = ["error", "failed", "timeout"].includes(step.outcome);
+  const fill = bad ? "#b3261e" : "";
+  return `<svg class="trace-bar" viewBox="0 0 100 8" preserveAspectRatio="none" aria-hidden="true"><rect x="${left.toFixed(2)}" y="1" width="${width.toFixed(2)}" height="6" rx="1.5" class="${bad ? "bad" : "ok"}"${fill ? ` fill="${fill}"` : ""}></rect></svg>`;
+}
+
+function traceAxis(total) {
+  return `<div class="trace-axis">${[0, 0.25, 0.5, 0.75, 1].map((ratio) => `<span>${Math.round(total * ratio)} ms</span>`).join("")}</div>`;
+}
+
+function traceRow(step, total) {
+  const badge = step.outcome && step.outcome !== "running" ? statusBadge(step.outcome) : "";
+  return `<li class="trace-node"><button type="button" data-step="${step.index}" class="trace-node-btn"><span class="trace-type ${TRACE_TYPES[step.stage]?.tone || "ctx"}"></span><span class="trace-node-name">${escapeHtml(step.label)}${badge}</span>${traceBar(step, total)}<span class="trace-node-ms">${step.span} ms</span></button></li>`;
+}
+
+function traceTree(data) {
+  const { groups, total } = traceGroups(data);
+  const body = groups.map((group) => {
+    const span = group.steps.reduce((sum, step) => sum + step.span, 0);
+    const first = group.steps[0];
+    const last = group.steps[group.steps.length - 1];
+    const ghost = traceBar({ start: first.start, end: last.end, outcome: "" }, total).replace('class="trace-bar"', 'class="trace-bar ghost"');
+    return `<details class="trace-group" open><summary><span class="trace-caret"></span><span class="trace-type ${group.tone}"></span><span class="trace-group-label"><b>${escapeHtml(group.key)}</b><span class="trace-count">${group.steps.length}</span></span>${ghost}<span class="trace-node-ms">${span} ms</span></summary><ul>${group.steps.map((step) => traceRow(step, total)).join("")}</ul></details>`;
+  }).join("");
+  return `<div class="trace-tree">${traceAxis(total)}${body}</div>`;
+}
+
+function traceInspector(step) {
+  if (!step) {
+    return `<k-empty title="选择一个步骤" detail="左侧每一行都可以点开，这里显示该步骤的全部字段。"></k-empty>`;
+  }
+  const fields = step.fields.length
+    ? `<dl class="trace-kv">${step.fields.map((field) => `<div><dt>${escapeHtml(field.label)}</dt><dd>${escapeHtml(String(field.value))}</dd></div>`).join("")}</dl>`
+    : `<p class="muted small">这一步没有附加字段。</p>`;
+  return `<header class="trace-insp-head"><span class="trace-type ${TRACE_TYPES[step.stage]?.tone || "ctx"}"></span><b>${escapeHtml(step.label)}</b><span class="trace-at">+${step.at_ms ?? 0} ms</span>${step.outcome && step.outcome !== "running" ? statusBadge(step.outcome) : ""}</header>
+    ${fields}
+    <details class="raw-box"><summary>这一步的原始数据</summary><pre>${escapeHtml(JSON.stringify(step.raw, null, 2))}</pre></details>`;
+}
+
+function traceInjected(data) {
+  const item = data.injected || {};
+  const chips = [
+    ["命中技能", (item.skills || []).join(" · ")],
+    ["注入 Wiki", (item.wiki_pages || []).join(" · ")],
+    ["Wiki 读取", item.wiki_mode],
+    ["记忆条数", item.memory_count || ""],
+    ["可用工具", item.tools_offered || ""],
+    ["行为路由", item.route],
+    ["准入", item.allowed === false ? "被拦截" : ""],
+  ].filter(([, value]) => value !== "" && value != null);
+  if (!chips.length) return "";
+  return `<section class="trace-block"><h3>本轮注入</h3><p class="muted small">模型这一轮实际拿到的东西，取自 context / model / route 步骤的记录。</p><div class="trace-chips">${chips.map(([label, value]) => `<span class="trace-chip"><i>${label}</i>${escapeHtml(String(value))}</span>`).join("")}</div></section>`;
+}
+
+function traceDetail(data) {
+  const inputs = data.timeline.reduce((sum, step) => sum + (Number(step.fields.find((f) => f.key === "prompt_tokens")?.value) || 0), 0);
+  const outputs = data.timeline.reduce((sum, step) => sum + (Number(step.fields.find((f) => f.key === "completion_tokens")?.value) || 0), 0);
+  const toolCalls = data.timeline.filter((step) => step.stage === "tool" && step.outcome !== "running").length;
+  const kpi = (label, value) => `<div><span>${label}</span><b>${value}</b></div>`;
+  const body = data.timeline.length
+    ? `<div class="trace-split"><section class="trace-left">${traceTree(data)}</section><aside class="trace-right" id="trace-inspector">${traceInspector(null)}</aside></div>`
+    : `<k-empty title="这条轨迹没有步骤" detail="运行时没有为这一轮记录 stage 数据。"></k-empty>`;
+  return `<section class="trace-page">
+      <header class="trace-hero">
+        <div class="trace-who"><b>${escapeHtml(data.scope)}</b><small>${escapeHtml(formatTime(data.at))}${data.event_id ? ` · ${escapeHtml(data.event_id)}` : ""}${data.origin ? ` · ${escapeHtml(data.origin)}` : ""}</small></div>
+        <div class="trace-kpis">
+          ${kpi("结果", statusBadge(data.outcome))}
+          ${kpi("总耗时", data.duration_ms == null ? "未记录" : `${data.duration_ms} ms`)}
+          ${kpi("步骤", data.step_count)}
+          ${kpi("工具调用", toolCalls)}
+          ${kpi("输入 tokens", inputs || "—")}
+          ${kpi("输出 tokens", outputs || "—")}
+        </div>
+      </header>
+      <div class="trace-actions"><button class="button subtle mini" type="button" id="trace-only-scope">只看 ${escapeHtml(data.scope)}</button></div>
+      ${traceInjected(data)}
+      ${body}
+      <details class="raw-box"><summary>整条轨迹的原始数据</summary><pre>${escapeHtml(JSON.stringify(data.raw, null, 2))}</pre></details>
+    </section>`;
+}
+
+function bindTrace(data) {
+  const steps = data.timeline.map((step, index) => ({ ...step, index }));
+  const inspector = document.getElementById("trace-inspector");
+  if (!inspector) return;
+  const select = (index) => {
+    document.querySelectorAll(".trace-node-btn").forEach((node) => node.classList.toggle("active", Number(node.dataset.step) === index));
+    inspector.innerHTML = traceInspector(steps[index]);
+  };
+  document.querySelectorAll(".trace-node-btn").forEach((node) => {
+    node.onclick = () => select(Number(node.dataset.step));
+  });
+  select(0);
+}
+
+async function openTrace(id) {
+  let modal = document.getElementById("trace-modal");
+  if (!modal) {
+    modal = document.createElement("k-modal");
+    modal.id = "trace-modal";
+    modal.setAttribute("title", "轨迹详情");
+    document.body.appendChild(modal);
+  }
+  modal.open("轨迹详情");
+  modal.setContent(`<div class="loading-state">正在读取轨迹…</div>`);
+  try {
+    const { data } = await api(`/api/monitor/traces/${encodeURIComponent(id)}`);
+    modal.setContent(traceDetail(data));
+    bindTrace(data);
+    const only = document.getElementById("trace-only-scope");
+    if (only) only.onclick = () => {
+      monitorView.scope = data.scope;
+      monitorView.turnOffset = 0;
+      modal.close();
+      renderMonitor();
+    };
+  } catch (error) {
+    modal.setContent(`<k-empty title="读不到这条轨迹" detail="${escapeHtml(error.message)}"></k-empty>`);
+  }
 }
 
 function scopeRows(scopes) {
@@ -1606,12 +1749,14 @@ async function renderMonitor() {
         else monitorView.logOffset = offset;
         paint();
       });
-      document.querySelectorAll("#monitor-turns tr").forEach((row) => {
-        const cell = row.children[1];
-        if (!cell) return;
-        const scopeName = cell.textContent.trim();
-        cell.onclick = () => { monitorView.scope = scopeName; monitorView.turnOffset = 0; paint(); };
-        cell.classList.add("clickable");
+      document.querySelectorAll("#monitor-turns tr[data-trace-id]").forEach((row) => {
+        row.onclick = () => openTrace(row.dataset.traceId);
+        row.onkeydown = (event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            openTrace(row.dataset.traceId);
+          }
+        };
       });
     } catch (error) {
       content.innerHTML = `<section class="memory-workspace">${emptyState("监控不可用", error.message || "服务尚未就绪")}</section>`;
@@ -1697,21 +1842,21 @@ async function renderRouting() {
     const graph = data.graph;
     const pipeline = data.pipeline.map((stage) => `<li class="${stage.enabled ? "on" : "off"}"><span>${escapeHtml(stage.label)}</span><small>${escapeHtml(stage.detail)}</small></li>`).join("");
     const links = data.llm.map((link) => `<article class="link-card"><div class="record-meta"><b>${escapeHtml(link.label)}</b><span class="data-badge ${link.configured ? "status-active" : ""}">${link.configured ? "已配置" : "未配置"}</span></div><h3>${escapeHtml(link.model || "—")}</h3><p class="mono">${escapeHtml(link.base_url || "未单独配置地址")}</p><small>${escapeHtml(link.note)}</small></article>`).join("");
-    const modes = graph.modes.map((mode) => `<button class="mode-button ${graph.mode === mode.id ? "active" : ""}" data-mode="${escapeHtml(mode.id)}"><b>${escapeHtml(mode.id)}</b><small>${escapeHtml(mode.label)}</small></button>`).join("");
+    const modes = graph.modes.map((mode) => `<button class="mode-button ${graph.mode === mode.id ? "active" : ""}" data-mode="${escapeHtml(mode.id)}" disabled><b>${escapeHtml(mode.id)}</b><small>${escapeHtml(mode.label)}</small></button>`).join("");
     const artifacts = data.artifacts.items.length ? data.artifacts.items.map((item) => {
       const manifest = item.manifest || {};
       const current = item.path === graph.snapshot;
       return `<li class="${current ? "current" : ""}"><div><b>${escapeHtml(item.name)}</b><small>${escapeHtml(item.path)} · ${escapeHtml(formatTime(item.modified_at))}</small><p class="muted">${manifest.status ? `状态 ${escapeHtml(String(manifest.status))}` : "无 manifest"}${manifest.proposals == null ? "" : ` · 样本 ${manifest.proposals}`}${manifest.missing_cases == null ? "" : ` · 缺失 ${manifest.missing_cases}`}</p></div><button class="button subtle" data-artifact="${escapeHtml(item.path)}" ${current ? "disabled" : ""}>${current ? "当前使用" : "设为当前"}</button></li>`;
     }).join("") : `<li class="muted">${data.artifacts.exists ? "派生目录里没有可用的图谱产物。" : "没有 data/private/derived 目录。"}</li>`;
     content.innerHTML = `<section class="memory-workspace">
-      <div class="memory-toolbar"><div><h2>链路与图谱</h2><p class="muted">这里写的是 Bot 启动时读取的 .env，保存后必须重启才生效。</p></div><span class="data-badge">${graph.effective === "off" ? "图谱路由关闭" : `图谱路由 ${escapeHtml(graph.effective)}`}</span></div>
+      <div class="memory-toolbar"><div><h2>链路与图谱</h2><p class="muted">这里写的是 Bot 启动时读取的 .env，保存后必须重启才生效。</p></div><span class="data-badge">ontology 实验 · 本版本不启用</span></div>
       <article class="data-panel"><div class="panel-title"><h3>一轮消息的链路</h3><p>顺序与运行时一致，灰色表示该环节当前关闭。</p></div><ol class="pipeline">${pipeline}</ol></article>
       <div class="overview-grid">
         <article class="data-panel"><div class="panel-title"><h3>模型链路</h3><p>每条链路的模型独立配置，未配置的环节会跳过。</p></div><div class="link-grid">${links}</div></article>
-        <article class="data-panel"><div class="panel-title"><h3>行为路由</h3><p>${escapeHtml(graph.reason)}</p></div><div class="mode-row">${modes}</div><label class="field-label" for="graph-path">图谱快照路径</label><input id="graph-path" value="${escapeHtml(graph.snapshot)}" placeholder="data/private/derived/.../graph.json"><label class="field-label" for="calibration-path">校准文件（可选）</label><input id="calibration-path" value="${escapeHtml(graph.calibration)}" placeholder="留空表示不做先验校准"><div class="route-actions"><button id="route-save" class="button primary" type="button">保存路径</button><button id="route-probe" class="button subtle" type="button">验证快照可用性</button></div><p id="route-probe-result" class="muted"></p>
-          <div class="switch-row"><span>记忆实体图谱</span><label class="switch"><input id="memory-graph" type="checkbox" ${data.memory_graph ? "checked" : ""}><span></span></label></div>
-          <div class="switch-row"><span>LM Wiki（蒸馏产物）</span><label class="switch"><input id="wiki-switch" type="checkbox" ${data.wiki.enabled ? "checked" : ""}><span></span></label></div>
-          <p class="muted">Wiki 目录 ${escapeHtml(data.wiki.root || "未配置")} · ${data.wiki.root_exists ? "目录存在" : "目录不存在"}</p>
+        <article class="data-panel"><div class="panel-title"><h3>行为路由 · ontology 实验</h3><p>知识图谱路由属于 ontology 实验，本版本不启用，下面的模式与路径仅作记录。</p></div><div class="notice-block subtle"><b>为什么是灰的</b><p>图谱写好了但还没进主线。当前回复完全由模型决定（<code>off</code>），这里的按钮不会写回 .env。</p></div><div class="mode-row">${modes}</div><label class="field-label" for="graph-path">图谱快照路径</label><input id="graph-path" value="${escapeHtml(graph.snapshot)}" placeholder="data/private/derived/.../graph.json"><label class="field-label" for="calibration-path">校准文件（可选）</label><input id="calibration-path" value="${escapeHtml(graph.calibration)}" placeholder="留空表示不做先验校准"><div class="route-actions"><button id="route-save" class="button primary" type="button">保存路径</button><button id="route-probe" class="button subtle" type="button">验证快照可用性</button></div><p id="route-probe-result" class="muted"></p>
+          <div class="switch-row"><span>记忆实体图谱 · ontology 实验</span><span class="state-pill muted">本版本不启用</span></div>
+          <div class="switch-row"><span>LM Wiki（记忆主干）</span><span class="state-pill ok">常开</span></div>
+          <p class="muted">Wiki 已取代黑话提取和长期记忆条目，不再作为开关；目录 ${escapeHtml(data.wiki.root || "未配置")} · ${data.wiki.root_exists ? "目录存在" : "目录不存在"}</p>
         </article>
       </div>
       <article class="data-panel"><div class="panel-title"><h3>可用图谱产物</h3><p>来自 ${escapeHtml(data.artifacts.root)}，按修改时间倒序。</p></div><ul class="artifact-list">${artifacts}</ul></article>
@@ -1725,8 +1870,6 @@ async function renderRouting() {
       try { const result = (await api("/api/routes/probe", { method: "POST", body: "{}" })).data; target.textContent = result.detail; target.className = result.ok ? "probe-ok" : "probe-bad"; }
       catch (error) { target.textContent = error.message; target.className = "probe-bad"; }
     };
-    $("#memory-graph").onchange = (event) => applyRoute({ BOT_MEMORY_GRAPH_ENABLED: event.currentTarget.checked ? "true" : "false" }, "记忆图谱开关已保存");
-    $("#wiki-switch").onchange = (event) => applyRoute({ BOT_WIKI_ENABLED: event.currentTarget.checked ? "true" : "false" }, "Wiki 开关已保存");
     mountView(content, "routing");
   } catch (error) { content.innerHTML = `<section class="memory-workspace">${emptyState("链路配置不可用", error.message || "读取 .env 失败")}</section>`; }
 }

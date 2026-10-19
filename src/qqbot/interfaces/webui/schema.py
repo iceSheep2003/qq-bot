@@ -27,7 +27,7 @@ SECTIONS = (
     ("connection", "连接与模型", "模型 API、NapCat 与允许接入的群"),
     ("conversation", "对话决策", "何时回复、上下文与成本控制"),
     ("personality", "记忆与人格", "长期记忆、关系、情绪和表达风格"),
-    ("routing", "知识图谱与链路", "行为图谱路由、Wiki 开关和多模型链路"),
+    ("routing", "ontology 实验（本版本不启用）", "知识图谱路由与校准；本版本固定关闭，仅保留配置记录"),
     ("proactive", "主动发言", "接话、免打扰和定时任务的公共策略"),
     ("moderation", "群管理", "管理员授权、入群审核、欢迎和头衔"),
     ("media", "媒体与频道", "表情包、语音及 QQ 官方频道"),
@@ -75,7 +75,7 @@ SETTINGS = (
     S("BOT_SLANG_ENABLED", "personality", "群黑话学习", "boolean"),
     S("BOT_SLANG_ALLOW_IMITATION", "personality", "允许模仿已审核黑话", "boolean"),
 
-    S("BOT_BEHAVIOR_MODE", "routing", "行为路由模式", "select", options=("off", "hint", "graph"), help="off 由模型独立决策；hint 只补充参考；graph 由图谱定调，模型负责表达。保存后需重启。"),
+    S("BOT_BEHAVIOR_MODE", "routing", "行为路由模式", "select", options=("off", "hint", "graph"), help="ontology 实验，本版本固定 off：图谱尚未进主线，改这里不会影响回复。"),
     S("BOT_BEHAVIOR_GRAPH_PATH", "routing", "行为图谱快照路径", help="留空即关闭图谱路由，即使模式选了 hint/graph"),
     S("BOT_BEHAVIOR_CALIBRATION_PATH", "routing", "图谱校准文件路径"),
     S("BOT_MEMORY_GRAPH_ENABLED", "routing", "启用记忆实体图谱", "boolean", help="每段新对话多两次模型调用，默认关闭"),

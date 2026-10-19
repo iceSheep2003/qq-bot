@@ -146,6 +146,11 @@ class RouteConsoleQuery:
             "llm": self._llm(values),
             "pipeline": self._pipeline(values, effective, exists),
             "graph": {
+                # Knowledge-graph routing is an experiment that this release
+                # does not turn on. The board still reports what the .env says,
+                # but it must not offer it as a working switch.
+                "experimental": True,
+                "available": False,
                 "mode": mode,
                 "mode_label": MODE_LABELS[mode],
                 "modes": [{"id": item, "label": MODE_LABELS[item]} for item in MODES],
@@ -157,9 +162,14 @@ class RouteConsoleQuery:
                 "reason": reason,
             },
             "wiki": {
-                "enabled": values.get("BOT_WIKI_ENABLED", "").lower() == "true",
+                # The distilled Wiki is the memory backbone now: it replaces the
+                # slang and memory extraction paths, so it is not a feature that
+                # gets switched on and off per deployment.
+                "always_on": True,
+                "enabled": True,
                 "root": wiki_root,
                 "root_exists": bool(wiki_resolved and wiki_resolved.is_dir()),
+                "replaces": ["黑话提取", "长期记忆条目", "主题归纳"],
             },
             "memory_graph": values.get("BOT_MEMORY_GRAPH_ENABLED", "").lower() == "true",
             "artifacts": self.artifacts(limit=12),

@@ -14,6 +14,91 @@ import time
 # Alerts are ordered by severity so the console can sort without guessing.
 LEVELS = ("critical", "warning", "info")
 
+#: Step stages as the runtime names them, in the order a turn walks them.
+STAGE_LABELS = {
+    "guard": "准入",
+    "admission": "准入",
+    "context": "上下文",
+    "memory": "记忆",
+    "route": "行为路由",
+    "plan": "计划",
+    "model": "模型",
+    "tool": "工具",
+    "send": "投递",
+    "delivery": "投递",
+    "observation": "观察",
+}
+
+#: What an operator actually reads in a step. Anything not listed still shows
+#: up under its own key, so a new field is never silently dropped.
+STEP_FIELDS = (
+    ("model", "模型"),
+    ("skills", "命中技能"),
+    ("memory_count", "记忆条数"),
+    ("wiki_pages", "注入 Wiki"),
+    ("wiki_mode", "Wiki 读取"),
+    ("route", "行为路由"),
+    ("allowed", "准入结论"),
+    ("tools_offered", "可用工具"),
+    ("prompt_tokens", "输入 tokens"),
+    ("completion_tokens", "输出 tokens"),
+    ("cached_tokens", "缓存命中"),
+    ("cache_write_tokens", "缓存写入"),
+    ("queue_ms", "排队耗时"),
+    ("attempts", "重试次数"),
+    ("prefix_hash", "前缀指纹"),
+    ("tool", "工具"),
+    ("channels", "投递通道"),
+    ("error_kind", "错误类型"),
+    ("lane", "并发通道"),
+    ("reason", "原因"),
+)
+KNOWN_STEP_KEYS = frozenset({"stage", "at_ms", "outcome", *[key for key, _ in STEP_FIELDS]})
+
+
+def _injected(timeline):
+    """What actually went into the prompt, pulled out of the step fields.
+
+    The trace already records these; a flat field list makes you hunt for them
+    across steps, so the page also answers "what did the model get" directly.
+    """
+    picked = {"skills": [], "wiki_pages": [], "memory_count": 0, "wiki_mode": "", "tools_offered": 0, "route": "", "allowed": None}
+    for step in timeline:
+        for field in step["fields"]:
+            key = field["key"]
+            if key in ("skills", "wiki_pages"):
+                values = str(field["value"]).split("、")
+                picked[key] = list(dict.fromkeys([*picked[key], *[item for item in values if item]]))
+            elif key in ("memory_count", "tools_offered"):
+                picked[key] = max(picked[key], int(field["value"]) if isinstance(field["value"], int) else 0)
+            elif key in ("wiki_mode", "route"):
+                picked[key] = picked[key] or str(field["value"])
+            elif key == "allowed":
+                picked[key] = field["value"]
+    return picked
+
+
+def _step_fields(step):
+    """Label the fields an operator reads, then surface the rest by key."""
+    fields = []
+    for key, label in STEP_FIELDS:
+        value = step.get(key)
+        if value in (None, "", [], {}):
+            continue
+        if isinstance(value, (list, tuple)):
+            value = "、".join(str(item) for item in value)
+        fields.append({"key": key, "label": label, "value": value})
+    extras = 0
+    for key in sorted(step):
+        if key in KNOWN_STEP_KEYS or extras >= 6:
+            continue
+        value = step[key]
+        if isinstance(value, (dict, list, tuple)) or value in (None, ""):
+            continue
+        fields.append({"key": key, "label": key, "value": value})
+        extras += 1
+    return fields
+
 
 def _page(rows, limit, offset, **extra):
     """Slice a list into one page and describe the whole set.
@@ -305,6 +390,55 @@ class MonitorQuery:
             items.append(row)
         items.sort(key=lambda row: (-row["turns"], row["scope"]))
         return {"items": items[:12], "total": len(items), "hours": hours}
+
+    def trace(self, trace_id):
+        """One turn, unfolded into the steps it actually walked.
+
+        The raw payload is returned too: the timeline is a reading aid, and an
+        operator chasing an odd value should be able to see the untouched row.
+        """
+        if self.traces is None:
+            return None
+        try:
+            raw = self.traces.detail(int(trace_id))
+        except (TypeError, ValueError, AttributeError, OSError):
+            return None
+        if not raw:
+            return None
+        steps = raw.get("steps") or ()
+        timeline = []
+        for index, step in enumerate(steps):
+            stage = str(step.get("stage") or "unknown")
+            label = STAGE_LABELS.get(stage, stage)
+            # A tool call writes two steps: start and finish. Without the
+            # suffix the timeline reads as two identical calls.
+            if str(step.get("outcome") or "") == "running":
+                label = f"{label}（开始）"
+            timeline.append(
+                {
+                    "index": index + 1,
+                    "stage": stage,
+                    "label": label,
+                    "at_ms": step.get("at_ms"),
+                    "outcome": str(step.get("outcome") or ""),
+                    "fields": _step_fields(step),
+                    # The untouched step, for the inspector's raw view.
+                    "raw": step,
+                }
+            )
+        return {
+            "id": raw.get("id"),
+            "scope": str(raw.get("scope") or "未知"),
+            "at": raw.get("created_at"),
+            "outcome": str(raw.get("outcome") or "unknown"),
+            "duration_ms": raw.get("duration_ms"),
+            "event_id": raw.get("event_id"),
+            "origin": raw.get("origin"),
+            "step_count": len(steps),
+            "injected": _injected(timeline),
+            "timeline": timeline,
+            "raw": raw,
+        }
 
     def tail(self, limit=20, level=None, q=None, offset=0):
         limit = max(1, min(500, int(limit)))

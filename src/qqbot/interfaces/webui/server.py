@@ -245,6 +245,9 @@ class WebUIServer:
                 if path == "/app.js":
                     self._asset("app.js", "text/javascript; charset=utf-8")
                     return
+                if path == "/components.js":
+                    self._asset("components.js", "text/javascript; charset=utf-8")
+                    return
                 dashboard_assets = {
                     "/dashboard.js": ("dashboard.js", "text/javascript; charset=utf-8"),
                     "/dashboard.css": ("dashboard.css", "text/css; charset=utf-8"),
@@ -393,6 +396,11 @@ class WebUIServer:
                             )
                         elif path == "/api/monitor/scopes":
                             data = monitor.scopes(int(query.get("hours", ["24"])[0]))
+                        elif path.startswith("/api/monitor/traces/"):
+                            data = monitor.trace(path.rsplit("/", 1)[1])
+                            if data is None:
+                                self._json(HTTPStatus.NOT_FOUND, {"error": "轨迹不存在或已过期"})
+                                return
                         else:
                             self._json(HTTPStatus.NOT_FOUND, {"error": "not found"})
                             return

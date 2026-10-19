@@ -1020,7 +1020,7 @@
           {
             "name": "Monitor cases",
             "path": "tests",
-            "min": 31
+            "min": 38
           },
           {
             "name": "Success rate",
@@ -1090,12 +1090,12 @@
           {
             "name": "Statements",
             "path": "statements",
-            "min": 700
+            "min": 740
           },
           {
             "name": "Branches",
             "path": "branches",
-            "min": 250
+            "min": 270
           }
         ]
       },
@@ -1145,7 +1145,7 @@
           {
             "name": "Cases",
             "path": "tests",
-            "min": 434
+            "min": 441
           },
           {
             "name": "Success rate",

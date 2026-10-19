@@ -399,3 +399,139 @@ def test_log_pages_do_not_repeat_entries():
     assert {item["message"] for item in first["items"]}.isdisjoint(
         {item["message"] for item in second["items"]}
     )
+
+
+class TraceSource(Traces):
+    """A trace store whose ``detail`` returns a fixed payload when asked."""
+
+    def __init__(self, rows, payload=None):
+        super().__init__(rows)
+        self.rows_by_id = {row["id"]: row for row in rows}
+        self._payload = payload
+
+    def detail(self, trace_id):
+        if self._payload is not None:
+            return self._payload
+        return self.rows_by_id.get(trace_id)
+
+
+def traced():
+    return TraceSource([
+        {
+            "id": 7,
+            "scope": "groups/100200",
+            "created_at": NOW - 30,
+            "outcome": "sent",
+            "duration_ms": 640,
+            "event_id": "e7",
+            "origin": "message",
+            "steps": [
+                {"stage": "context", "at_ms": 12, "skills": ["group-chat"], "memory_count": 6},
+                {"stage": "model", "at_ms": 120, "model": "deepseek-flash", "prompt_tokens": 2400, "completion_tokens": 180},
+                {"stage": "tool", "at_ms": 200, "tool": "group_search", "outcome": "completed"},
+                {"stage": "send", "at_ms": 610, "outcome": "sent"},
+            ],
+        }
+    ])
+
+
+def test_trace_unfolds_the_steps_in_the_order_the_turn_walked_them():
+    data = monitor(traces=traced()).trace(7)
+
+    assert data["scope"] == "groups/100200"
+    assert data["step_count"] == 4
+    assert [step["label"] for step in data["timeline"]] == ["上下文", "模型", "工具", "投递"]
+    assert [step["at_ms"] for step in data["timeline"]] == [12, 120, 200, 610]
+
+
+def test_trace_labels_the_fields_an_operator_reads():
+    timeline = monitor(traces=traced()).trace(7)["timeline"]
+
+    context = {field["label"]: field["value"] for field in timeline[0]["fields"]}
+    model = {field["label"]: field["value"] for field in timeline[1]["fields"]}
+
+    assert context["命中技能"] == "group-chat"
+    assert context["记忆条数"] == 6
+    assert model["模型"] == "deepseek-flash"
+    assert model["输入 tokens"] == 2400
+
+
+def test_trace_surfaces_unknown_fields_instead_of_dropping_them():
+    source = TraceSource([], payload={
+        "id": 9, "scope": "groups/1", "created_at": NOW, "outcome": "sent",
+        "steps": [{"stage": "model", "at_ms": 5, "latency_bucket": "fast"}],
+    })
+
+    fields = monitor(traces=source).trace(9)["timeline"][0]["fields"]
+
+    assert {"key": "latency_bucket", "label": "latency_bucket", "value": "fast"} in fields
+
+
+def test_an_unknown_stage_keeps_its_own_name():
+    source = TraceSource([], payload={
+        "id": 3, "scope": "groups/1", "created_at": NOW, "outcome": "sent",
+        "steps": [{"stage": "rerank", "at_ms": 1}],
+    })
+
+    assert monitor(traces=source).trace(3)["timeline"][0]["label"] == "rerank"
+
+
+def test_trace_reports_missing_ids_and_unbound_sources_as_none():
+    assert monitor(traces=traced()).trace(404) is None
+    assert monitor(traces=traced()).trace("not-a-number") is None
+    assert monitor(traces=None).trace(7) is None
+
+
+def test_trace_keeps_the_raw_payload_for_anyone_chasing_an_odd_value():
+    raw = monitor(traces=traced()).trace(7)["raw"]
+
+    assert raw["event_id"] == "e7"
+    assert raw["steps"][1]["model"] == "deepseek-flash"
+
+
+def test_a_tool_start_is_labelled_so_it_does_not_read_as_a_second_call():
+    source = TraceSource([], payload={
+        "id": 11, "scope": "groups/1", "created_at": NOW, "outcome": "sent",
+        "steps": [
+            {"stage": "tool", "at_ms": 10, "tool": "search", "outcome": "running"},
+            {"stage": "tool", "at_ms": 40, "tool": "search", "outcome": "completed"},
+        ],
+    })
+
+    labels = [step["label"] for step in monitor(traces=source).trace(11)["timeline"]]
+
+    assert labels == ["工具（开始）", "工具"]
+
+
+def test_trace_summarises_what_was_injected_into_the_prompt():
+    source = TraceSource([], payload={
+        "id": 21, "scope": "groups/1", "created_at": NOW, "outcome": "sent",
+        "steps": [
+            {"stage": "context", "at_ms": 10, "skills": ["group-chat", "meme"], "memory_count": 6,
+             "wiki_pages": ["groups-1", "people-42"], "wiki_mode": "topic"},
+            {"stage": "route", "at_ms": 20, "route": "hint"},
+            {"stage": "model", "at_ms": 30, "tools_offered": 4},
+        ],
+    })
+
+    injected = monitor(traces=source).trace(21)["injected"]
+
+    assert injected["skills"] == ["group-chat", "meme"]
+    assert injected["wiki_pages"] == ["groups-1", "people-42"]
+    assert injected["wiki_mode"] == "topic"
+    assert injected["memory_count"] == 6
+    assert injected["tools_offered"] == 4
+    assert injected["route"] == "hint"
+
+
+def test_injected_summary_is_empty_for_a_turn_without_context_records():
+    source = TraceSource([], payload={
+        "id": 22, "scope": "groups/1", "created_at": NOW, "outcome": "sent",
+        "steps": [{"stage": "delivery", "at_ms": 5, "outcome": "sent"}],
+    })
+
+    injected = monitor(traces=source).trace(22)["injected"]
+
+    assert injected["skills"] == []
+    assert injected["wiki_pages"] == []
+    assert injected["memory_count"] == 0
