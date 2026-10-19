@@ -31,6 +31,15 @@ class SceneRoutes:
 
 
 def _route(raw, settings=None):
+    """The extension point for an ontology-backed decider.
+
+    Today the only implementation is the model-alone route (`LlmDecision`).
+    A future ontology/graph decider plugs in here: return an object with
+    `decide(query) -> BehaviorDecision | None` (see `contracts/ports.py`) and
+    the orchestrator picks it up without changes to the reply pipeline. Keep
+    the contract optional — a missing or failing decider must fall back to
+    `LlmDecision`, never block a reply.
+    """
     mode = raw.strip().lower()
     if mode not in MODES or mode == "off":
         return LlmDecision()
